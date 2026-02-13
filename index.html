@@ -3,122 +3,148 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Subir y Validar Imagen</title>
+<title>image ManAsger</title>
 
 <style>
 body {
     font-family: Arial, sans-serif;
-    background-color: #f4f4f4;
+    background: #f4f4f4;
     text-align: center;
-    padding: 40px;
+    padding: 30px;
 }
 
 .container {
     background: white;
     padding: 20px;
     border-radius: 10px;
-    width: 400px;
+    width: 90%;
+    max-width: 900px;
     margin: auto;
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
 }
 
-img {
-    max-width: 100%;
-    margin-top: 15px;
+.preview-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.card {
+    background: #fafafa;
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+}
+
+.card img {
+    width: 100%;
     border-radius: 5px;
 }
 
-button {
-    margin-top: 15px;
-    padding: 10px 15px;
-    border: none;
-    background-color: #007BFF;
-    color: white;
-    cursor: pointer;
-    border-radius: 5px;
-}
-
-button:hover {
-    background-color: #0056b3;
-}
-
-#mensaje {
-    margin-top: 10px;
+.mensaje {
+    font-size: 14px;
     font-weight: bold;
+    margin-top: 5px;
 }
 
-.baja-calidad {
+.baja {
     color: red;
 }
 
-.alta-calidad {
+.alta {
     color: green;
+}
+
+button {
+    margin-top: 5px;
+    padding: 5px 8px;
+    border: none;
+    background: #007BFF;
+    color: white;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+button:hover {
+    background: #0056b3;
 }
 </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Subir Imagen</h2>
-    <input type="file" id="imagenInput" accept="image/*">
+    <h2>Subir hasta 20 Imágenes</h2>
+    <input type="file" id="inputImagenes" accept="image/*" multiple>
     
-    <div id="mensaje"></div>
-    
-    <img id="preview" src="" alt="" style="display:none;">
-    
-    <button id="descargarBtn" style="display:none;">Descargar Imagen</button>
+    <div class="preview-container" id="previewContainer"></div>
 </div>
 
 <script>
-const input = document.getElementById("imagenInput");
-const preview = document.getElementById("preview");
-const mensaje = document.getElementById("mensaje");
-const descargarBtn = document.getElementById("descargarBtn");
+const input = document.getElementById("inputImagenes");
+const container = document.getElementById("previewContainer");
 
-let imagenURL = "";
+input.addEventListener("change", function() {
 
-input.addEventListener("change", function(event) {
-    const archivo = event.target.files[0];
-    if (!archivo) return;
+    container.innerHTML = "";
 
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        imagenURL = e.target.result;
-        preview.src = imagenURL;
-        preview.style.display = "block";
-        descargarBtn.style.display = "inline-block";
+    const archivos = Array.from(this.files);
 
-        const img = new Image();
-        img.src = imagenURL;
+    if (archivos.length > 20) {
+        alert("Solo puedes subir máximo 20 imágenes.");
+        return;
+    }
 
-        img.onload = function() {
-            const ancho = img.width;
-            const alto = img.height;
+    archivos.forEach(archivo => {
 
-            // Criterio de baja calidad (menor a 800x600)
-            if (ancho < 800 || alto < 600) {
-                mensaje.textContent = `⚠ Imagen de baja calidad (${ancho}x${alto})`;
-                mensaje.className = "baja-calidad";
-            } else {
-                mensaje.textContent = `✔ Imagen de buena calidad (${ancho}x${alto})`;
-                mensaje.className = "alta-calidad";
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+
+            const img = new Image();
+            img.src = e.target.result;
+
+            img.onload = function() {
+
+                const card = document.createElement("div");
+                card.className = "card";
+
+                const imagen = document.createElement("img");
+                imagen.src = img.src;
+
+                const mensaje = document.createElement("div");
+                mensaje.className = "mensaje";
+
+                // Criterio de baja calidad
+                if (img.width < 800 || img.height < 600) {
+                    mensaje.textContent = `Baja calidad (${img.width}x${img.height})`;
+                    mensaje.classList.add("baja");
+                } else {
+                    mensaje.textContent = `Buena calidad (${img.width}x${img.height})`;
+                    mensaje.classList.add("alta");
+                }
+
+                const boton = document.createElement("button");
+                boton.textContent = "Descargar";
+                boton.onclick = function() {
+                    const link = document.createElement("a");
+                    link.href = img.src;
+                    link.download = archivo.name;
+                    link.click();
+                };
+
+                card.appendChild(imagen);
+                card.appendChild(mensaje);
+                card.appendChild(boton);
+
+                container.appendChild(card);
             }
-        }
-    };
+        };
 
-    reader.readAsDataURL(archivo);
-});
-
-descargarBtn.addEventListener("click", function() {
-    const enlace = document.createElement("a");
-    enlace.href = imagenURL;
-    enlace.download = "imagen_descargada.png";
-    enlace.click();
+        reader.readAsDataURL(archivo);
+    });
 });
 </script>
 
 </body>
 </html>
-
-
-  
