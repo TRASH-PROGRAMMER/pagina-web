@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Manager</title>
+
+<style>
+ h2{
+  color:darkblue;
+ }
+ body{
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: #f4f4f4;
+  text-align:center;
+  padding:40px ;
+ }
+ .container{
+  background: white;
+  padding: 20px; ;
+  border-radius: 10px;
+  color: gray;
+  width: 400px;
+  margin: auto ;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1) ;
+ }
+ imag{
+  max-width:100%;
+  margin-top: 15px;
+  border-radius: 5px;
+ }
+ button{
+  margin-top: 15px;
+  padding: 10px 15px;
+  border: none;
+  background-color:#007BFF;
+  color: white;
+  cursor: pointer;
+  border-radius: 5px;
+ }
+ button:hover{
+  background-color: #0056b3;
+
+ }
+ #mensaje {
+    margin-top: 10px;
+    font-weight: bold;
+}
+
+.baja-calidad {
+    color: red;
+}
+
+.alta-calidad {
+    color: green;
+}
+</style>
+
+</head>
+<body>
+<div class="container">
+  <h2>subir inagen</h2>
+  <input type ="file" id="imageninput">
+  <div id="mensaje"></div>
+  <img  id ="visualizar" src="" alt="" style="display: none;">
+  <button id="descargarbtn">descargar imagen</button>
+  </div>
+
+  <script>
+    const input = document.getElementById("imageninput");
+    const preview = document.getElementById("visualizar");
+    const mensaje = document.getElementById("mensaje");
+    const descargarBtn = document.getElementById("descargarBtn");
+    let url = " ";
+
+    input.addEventListener("change",function(event){
+      const archivo = event.target.files[0];
+      if (!archivo) return;
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+        imagenURL = e.target.result;
+        preview.src = imagenURL;
+        preview.style.display = "block";
+        descargarBtn.style.display = "inline-block";
+        const img = new Image();
+        img.src = imagenURL;
+        img.onload = function() {
+            const ancho = img.width;
+            const alto = img.height;
+
+            // Criterio de baja calidad (menor a 800x600)
+            if (ancho < 800 || alto < 600) {
+                mensaje.textContent = `⚠ Imagen de baja calidad (${ancho}x${alto})`;
+                mensaje.className = "baja-calidad";
+            } else {
+                mensaje.textContent = `✔ Imagen de buena calidad (${ancho}x${alto})`;
+                mensaje.className = "alta-calidad";
+            }
+        }
+    };
+    })
+
+
+
+  </script>
+</body> 
+</html>
+
+  
