@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>image ManAsger</title>
+<title>image Manager</title>
 
 <style>
 body {
@@ -69,16 +69,49 @@ button {
 button:hover {
     background: #0056b3;
 }
+.titulo {
+    color: #333;
+    background-color: rgb(241, 205, 161);
+    margin-bottom: 10px;
+    font: 1em sans-serif;
+}
+.text1 {
+    color: #555;
+    margin-bottom: 20px;
+    font: 0.9em sans-serif;
+}
+html, body {
+    height: 100%;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.container {
+    flex: 1; 
+}
+
+footer {
+    background: #222;
+    color: white;
+    text-align: center;
+    padding: 15px;
+}
+</style>
+
 </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Subir hasta 20 Imágenes</h2>
+    <h1 class="tiutlo">image Manager</h1>
+    <p class=" tex1">CARGA DE ARCHIVOS FOTOGRÁFICOS EN SEGUNDOS</p>
+    <h2>Subir hasta 20+ de Imágenes</h2>
     <input type="file" id="inputImagenes" accept="image/*" multiple>
     
     <div class="preview-container" id="previewContainer"></div>
 </div>
+<footer>&copy; 2026 Todos los derechos reservados</footer>
 
 <script>
 const input = document.getElementById("inputImagenes");
@@ -132,10 +165,19 @@ input.addEventListener("change", function() {
                     link.download = archivo.name;
                     link.click();
                 };
+                const botonEliminar = document.createElement("button");
+                botonEliminar.textContent = "Eliminar";
+                botonEliminar.style.backgroundColor = "#dc3545";
+                botonEliminar.style.marginLeft = "5px";
+                botonEliminar.onclick = function() {
+                    container.removeChild(card);
+                };
+
 
                 card.appendChild(imagen);
                 card.appendChild(mensaje);
                 card.appendChild(boton);
+                card.appendChild(botonEliminar);
 
                 container.appendChild(card);
             }
