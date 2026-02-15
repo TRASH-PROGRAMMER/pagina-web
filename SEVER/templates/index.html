@@ -106,7 +106,7 @@ footer {
 <div class="container">
     <h1 class="tiutlo">Image Manager</h1>
     <p class=" tex1">CARGA DE ARCHIVOS FOTOGRÁFICOS EN SEGUNDOS</p>
-    <h2>Subir hasta 20+ de Imágenes</h2>
+    <h2>Subir 50+ de Imágenes</h2> 
     <input type="file" id="inputImagenes" accept="image/*" multiple>
     
     <div class="preview-container" id="previewContainer"></div>
@@ -114,37 +114,39 @@ footer {
 <footer>&copy; 2026 Todos los derechos reservados</footer>
 
 <script>
-const input = document.getElementById("inputImagenes");
-const container = document.getElementById("previewContainer");
 
+const input = document.getElementById("inputImagenes");//selecciona el input
+const container = document.getElementById("previewContainer");//selecciona el container donde se mostrarán las imágenes
+//agrega un evento al input para cuando se seleccione un archivo
 input.addEventListener("change", function() {
-
+//limpia el container
     container.innerHTML = "";
-
+//selecciona los archivos seleccionados y los convierte en un array
     const archivos = Array.from(this.files);
-
-    if (archivos.length > 20) {
-        alert("Solo puedes subir máximo 20 imágenes.");
+//comprueba si el array tiene más de 50 imágenes
+    if (archivos.length > 50) {
+        alert("Solo puedes subir máximo 50 imágenes.");
         return;
     }
-
+//recorre el array de archivos
     archivos.forEach(archivo => {
-
+//crea un nuevo objeto FileReader para leer el archivo seleccionado
         const reader = new FileReader();
-
+//agrega un evento al reader para cuando se cargue el archivo
         reader.onload = function(e) {
-
+//crea un nuevo objeto Image para mostrar la imagen cargada
             const img = new Image();
+            //carga la imagen con el resultado del reader
             img.src = e.target.result;
-
+//agrega un evento al objeto Image para cuando se cargue la imagen
             img.onload = function() {
-
+//crea un nuevo objeto HTMLDivElement para mostrar la imagen y el mensaje de calidad
                 const card = document.createElement("div");
                 card.className = "card";
-
+//crea un nuevo objeto HTMLImageElement para mostrar la imagen cargada
                 const imagen = document.createElement("img");
                 imagen.src = img.src;
-
+//crea un nuevo objeto HTMLDivElement para mostrar el mensaje de calidad
                 const mensaje = document.createElement("div");
                 mensaje.className = "mensaje";
 
@@ -156,15 +158,19 @@ input.addEventListener("change", function() {
                     mensaje.textContent = `Buena calidad (${img.width}x${img.height})`;
                     mensaje.classList.add("alta");
                 }
-
+//crea un nuevo objeto HTMLButtonElement para descargar la imagen
                 const boton = document.createElement("button");
                 boton.textContent = "Descargar";
+                //agrega un evento al botón para descargar la imagen cuando se haga click
                 boton.onclick = function() {
+                    //crea un nuevo objeto HTMLAnchorElement para descargar la imagen
                     const link = document.createElement("a");
+                    //establece el href de la imagen y el nombre del archivo para descargar
                     link.href = img.src;
                     link.download = archivo.name;
                     link.click();
                 };
+                //crea un nuevo objeto HTMLButtonElement para eliminar la imagen
                 const botonEliminar = document.createElement("button");
                 botonEliminar.textContent = "Eliminar";
                 botonEliminar.style.backgroundColor = "#dc3545";
@@ -173,7 +179,7 @@ input.addEventListener("change", function() {
                     container.removeChild(card);
                 };
 
-
+//agrega el contenido de la imagen, mensaje de calidad, botón de descargar y botón de eliminar al contenedor
                 card.appendChild(imagen);
                 card.appendChild(mensaje);
                 card.appendChild(boton);
@@ -182,7 +188,7 @@ input.addEventListener("change", function() {
                 container.appendChild(card);
             }
         };
-
+//lee el archivo seleccionado como un string de base64
         reader.readAsDataURL(archivo);
     });
 });
