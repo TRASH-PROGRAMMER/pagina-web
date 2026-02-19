@@ -4,195 +4,46 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>image Manager</title>
-
-<style>
-body {
-    font-family: Arial, sans-serif;
-    background: #f4f4f4;
-    text-align: center;
-    padding: 30px;
-}
-
-.container {
-    background: white;
-    padding: 20px;
-    border-radius: 10px;
-    width: 90%;
-    max-width: 900px;
-    margin: auto;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
-}
-
-.preview-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 15px;
-    margin-top: 20px;
-}
-
-.card {
-    background: #fafafa;
-    padding: 10px;
-    border-radius: 8px;
-    box-shadow: 0 0 5px rgba(0,0,0,0.1);
-}
-
-.card img {
-    width: 100%;
-    border-radius: 5px;
-}
-
-.mensaje {
-    font-size: 14px;
-    font-weight: bold;
-    margin-top: 5px;
-}
-
-.baja {
-    color: red;
-}
-
-.alta {
-    color: green;
-}
-
-button {
-    margin-top: 5px;
-    padding: 5px 8px;
-    border: none;
-    background: #007BFF;
-    color: white;
-    cursor: pointer;
-    border-radius: 4px;
-}
-
-button:hover {
-    background: #0056b3;
-}
-.titulo {
-    color: #333;
-    background-color: rgb(241, 205, 161);
-    margin-bottom: 10px;
-    font: 1em sans-serif;
-}
-.text1 {
-    color: #555;
-    margin-bottom: 20px;
-    font: 0.9em sans-serif;
-}
-html, body {
-    height: 100%;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-}
-
-.container {
-    flex: 1; 
-}
-
-footer {
-    background: #222;
-    color: white;
-    text-align: center;
-    padding: 15px;
-}
-</style>
-
-</style>
+<link rel="stylesheet" href="style/style.css" />
 </head>
 <body>
-
 <div class="container">
-    <h1 class="tiutlo">Image Manager</h1>
-    <p class=" tex1">CARGA DE ARCHIVOS FOTOGRÁFICOS EN SEGUNDOS</p>
+    <h1 class="titulo"><b>Image Manager </b></h1>
+    <p class=" text1">CARGA DE ARCHIVOS FOTOGRÁFICOS EN SEGUNDOS</p>
     <h2>Subir 50+ de Imágenes</h2> 
     <input type="file" id="inputImagenes" accept="image/*" multiple>
-    
+
+    <label for="tamaño" class="tamaños-fotos"><h2>Elije los tamaños:</h2></label>
+    <select id="tamaño" multiple>
+        <option value="TAMAÑO1">Instax(5x8cm)</option>
+        <option value="TAMAÑO2">Polaroid(8x8cm)</option>
+        <option value="TAMAÑO3">10x10cm</option>
+        <option value="TAMAÑO4">10x15cm(4R)</option>
+        <option value="TAMAÑO5">13x18cm(5R)</option>
+        <option value="TAMAÑO6">15x15</option>
+        <option value="TAMAÑO7">15x21cm(6R)</option>
+        <option value="TAMAÑO8">20x20cm</option>
+        <option value="TAMAÑO9">20x25cm(8R)</option>
+        <option value="TAMAÑO10">20x30cm</option>
+    </select>
+    <form>
+     <h2>Elije el tipo de papel:</h2>
+      <input type="radio" id="papel1" name="papel" value="papel1">
+      <label  for=" tipo_de_papel"> Papel Fotográfico Brillante</label><br>
+        <input type="radio" id="papel2" name="papel" value="papel2">
+        <label for=" tipo_de_papel"> Papel Fotográfico Mate
+         </label></form>
+    </label>  
     <div class="preview-container" id="previewContainer"></div>
+    <div class="progress-container" id="progressContainer">
+        <div class="progress-bar" id="progressBar">0%</div>
+        <button id="cancelButton">Cancelar</button>
+        <button id="retryButton">Reintentar</button>
+        <div id="errorMessage" class="error-message"></div>
+        <div id="successMessage" class="success-message"></div> 
+    </div>
 </div>
 <footer>&copy; 2026 Todos los derechos reservados</footer>
-
-<script>
-
-const input = document.getElementById("inputImagenes");//selecciona el input
-const container = document.getElementById("previewContainer");//selecciona el container donde se mostrarán las imágenes
-//agrega un evento al input para cuando se seleccione un archivo
-input.addEventListener("change", function() {
-//limpia el container
-    container.innerHTML = "";
-//selecciona los archivos seleccionados y los convierte en un array
-    const archivos = Array.from(this.files);
-//comprueba si el array tiene más de 50 imágenes
-    if (archivos.length > 50) {
-        alert("Solo puedes subir máximo 50 imágenes.");
-        return;
-    }
-//recorre el array de archivos
-    archivos.forEach(archivo => {
-//crea un nuevo objeto FileReader para leer el archivo seleccionado
-        const reader = new FileReader();
-//agrega un evento al reader para cuando se cargue el archivo
-        reader.onload = function(e) {
-//crea un nuevo objeto Image para mostrar la imagen cargada
-            const img = new Image();
-            //carga la imagen con el resultado del reader
-            img.src = e.target.result;
-//agrega un evento al objeto Image para cuando se cargue la imagen
-            img.onload = function() {
-//crea un nuevo objeto HTMLDivElement para mostrar la imagen y el mensaje de calidad
-                const card = document.createElement("div");
-                card.className = "card";
-//crea un nuevo objeto HTMLImageElement para mostrar la imagen cargada
-                const imagen = document.createElement("img");
-                imagen.src = img.src;
-//crea un nuevo objeto HTMLDivElement para mostrar el mensaje de calidad
-                const mensaje = document.createElement("div");
-                mensaje.className = "mensaje";
-
-                // Criterio de baja calidad
-                if (img.width < 800 || img.height < 600) {
-                    mensaje.textContent = `Baja calidad (${img.width}x${img.height})`;
-                    mensaje.classList.add("baja");
-                } else {
-                    mensaje.textContent = `Buena calidad (${img.width}x${img.height})`;
-                    mensaje.classList.add("alta");
-                }
-//crea un nuevo objeto HTMLButtonElement para descargar la imagen
-                const boton = document.createElement("button");
-                boton.textContent = "Descargar";
-                //agrega un evento al botón para descargar la imagen cuando se haga click
-                boton.onclick = function() {
-                    //crea un nuevo objeto HTMLAnchorElement para descargar la imagen
-                    const link = document.createElement("a");
-                    //establece el href de la imagen y el nombre del archivo para descargar
-                    link.href = img.src;
-                    link.download = archivo.name;
-                    link.click();
-                };
-                //crea un nuevo objeto HTMLButtonElement para eliminar la imagen
-                const botonEliminar = document.createElement("button");
-                botonEliminar.textContent = "Eliminar";
-                botonEliminar.style.backgroundColor = "#dc3545";
-                botonEliminar.style.marginLeft = "5px";
-                botonEliminar.onclick = function() {
-                    container.removeChild(card);
-                };
-
-//agrega el contenido de la imagen, mensaje de calidad, botón de descargar y botón de eliminar al contenedor
-                card.appendChild(imagen);
-                card.appendChild(mensaje);
-                card.appendChild(boton);
-                card.appendChild(botonEliminar);
-
-                container.appendChild(card);
-            }
-        };
-//lee el archivo seleccionado como un string de base64
-        reader.readAsDataURL(archivo);
-    });
-});
-</script>
-
+<script src="script/main.js"></script>
 </body>
 </html>
