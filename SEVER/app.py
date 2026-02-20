@@ -13,4 +13,4 @@ def admin():
 print("El programa está funcionando")
 # inicia la aplicación Flask en modo de depuración
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000)
