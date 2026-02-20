@@ -8,12 +8,37 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style/style.css') }}" />
 </head>
 <body>
-<div class="container">
+  <header class="container">
+<div>
     <h1 class="titulo"><b>Image Manager </b></h1>
     <p class=" text1">CARGA DE ARCHIVOS FOTOGRÁFICOS EN SEGUNDOS</p>
     <h2>Subir 50+ de Imágenes</h2> 
     <input type="file" id="inputImagenes" accept="image/*" multiple>
-
+</div>
+</header>
+<div class="container-datos">
+    <form action ="#" method="post" class = "formulario_datos_personales " id="formDatos" > 
+        <h2>datos personales </h2>
+        <label for="nombre" class = "nombre-text">
+            <h2>Nombres:</h2>
+        </label>  
+            <input type="text" id="nombre" name="nombre" placeholder="nombres">
+        <label for="apellido" class = "apellido-text">
+            <h2>Apellidos:</h2>
+        </label>
+            <input type="text" id="apellido" name="apellido" placeholder="apellidos">
+        <label for="correo" class = "correo-text">
+            <h2> Correo:</h2>
+        </label>
+         <input type="email" id="correo" name="correo" placeholder="correo">
+        <label for="telefono" class = "telefono-text">
+                <h2>Telefono:</h2> 
+        </label>
+        <input type="tel" id="telefono" name="telefono" placeholder="telefono">
+             <input type="submit" value="Enviar" class="enviar-button">
+    </form>
+</div>
+<main>
     <label for="tamaño" class="tamaños-fotos"><h2>Elije los tamaños:</h2></label>
     <select id="tamaño" multiple>
         <option value="TAMAÑO1">Instax(5x8cm)</option>
@@ -27,14 +52,21 @@
         <option value="TAMAÑO9">20x25cm(8R)</option>
         <option value="TAMAÑO10">20x30cm</option>
     </select>
-    <form>
-     <h2>Elije el tipo de papel:</h2>
-      <input type="radio" id="papel1" name="papel" value="papel1">
-      <label  for=" tipo_de_papel"> Papel Fotográfico Brillante</label><br>
-        <input type="radio" id="papel2" name="papel" value="papel2">
-        <label for=" tipo_de_papel"> Papel Fotográfico Mate
-         </label></form>
-    </label>  
+
+    <form action="#" method="post" class="tipo_de_papel">
+
+        <h2 class="text-tipo-papel">Elige el tipo de papel:</h2>
+    
+        <div class="opciones-papel">
+            <input type="radio" id="papel1" name="papel" value="brillante">
+            <label for="papel1">Papel Fotográfico Brillante</label>
+    
+            <input type="radio" id="papel2" name="papel" value="mate">
+            <label for="papel2">Papel Fotográfico Mate</label>
+        </div>
+    
+    </form>
+
     <div class="preview-container" id="previewContainer"></div>
     <div class="progress-container" id="progressContainer">
         <div class="progress-track">
@@ -47,9 +79,12 @@
         <div id="errorMessage" class="error-message"></div>
         <div id="successMessage" class="success-message"></div> 
     </div>
-</div>
+
+</main>
 <footer>&copy; 2026 Todos los derechos reservados</footer>
 <script src="../static/script/main.js"></script>
+<script src="../static/script/db.js"></script>
+
 <script src="{{ url_for('static', filename='script/main.js') }}"></script>
 </body>
 </html>
