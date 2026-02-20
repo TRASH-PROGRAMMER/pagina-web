@@ -31,6 +31,7 @@ html, body {
     font-weight: 700;
     background: linear-gradient(90deg, #007BFF, #00c6ff);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
     margin-bottom: 10px;
     text-align: center;
@@ -113,6 +114,13 @@ input[type="file"]:hover {
     color: #2e7d32;
 }
 
+/* ===== BUTTON GROUP ===== */
+.btn-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
 /* ===== BUTTONS ===== */
 button {
     margin-top: 8px;
@@ -142,12 +150,22 @@ button:nth-child(4) {
 /* ===== PROGRESS ===== */
 .progress-container {
     width: 100%;
+    margin-top: 30px;
+}
+
+.progress-track {
+    width: 100%;
     background-color: #eee;
     border-radius: 30px;
-    margin-top: 30px;
     overflow: hidden;
     height: 24px;
     box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.progress-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
 }
 
 .progress-bar {

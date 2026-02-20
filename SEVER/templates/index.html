@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>image Manager</title>
-<link rel="stylesheet" href="style/style.css" />
+<link rel="stylesheet" href="../static/style/style.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='style/style.css') }}" />
 </head>
 <body>
 <div class="container">
@@ -36,14 +37,19 @@
     </label>  
     <div class="preview-container" id="previewContainer"></div>
     <div class="progress-container" id="progressContainer">
-        <div class="progress-bar" id="progressBar">0%</div>
-        <button id="cancelButton">Cancelar</button>
-        <button id="retryButton">Reintentar</button>
+        <div class="progress-track">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+        <div class="progress-buttons">
+            <button id="cancelButton">Cancelar</button>
+            <button id="retryButton">Reintentar</button>
+        </div>
         <div id="errorMessage" class="error-message"></div>
         <div id="successMessage" class="success-message"></div> 
     </div>
 </div>
 <footer>&copy; 2026 Todos los derechos reservados</footer>
-<script src="script/main.js"></script>
+<script src="../static/script/main.js"></script>
+<script src="{{ url_for('static', filename='script/main.js') }}"></script>
 </body>
 </html>
