@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>image Manager</title>
-<link rel="stylesheet" href="style/style.css" />
+<link rel="stylesheet" href="../static/style/style.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='style/style.css') }}" />
 </head>
 <body>
 <div class="container">
@@ -48,6 +49,7 @@
     </div>
 </div>
 <footer>&copy; 2026 Todos los derechos reservados</footer>
-<script src="script/main.js"></script>
+<script src="../static/script/main.js"></script>
+<script src="{{ url_for('static', filename='script/main.js') }}"></script>
 </body>
 </html>
