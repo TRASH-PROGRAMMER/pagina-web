@@ -1,49 +1,61 @@
-// Validación de campos al enviar el formulario
+import { guardarCliente } from "./db.js";
 
 const form = document.getElementById("formDatos");
+const btnEnviar = document.querySelector(".enviar-button");
+
 const nameInput = document.getElementById("nombre");
 const apellidoInput = document.getElementById("apellido");
 const correoInput = document.getElementById("correo");
 const telefonoInput = document.getElementById("telefono");
 
-const erroresDiv = document.createElement("div");
-erroresDiv.style.color = "red";
-form.prepend(erroresDiv);
+btnEnviar.disabled = true;
 
-form.addEventListener("submit", function(e) {
-    e.preventDefault();
+// 🔹 Validación
+function validarFormulario() {
 
-    let errores = [];
-
-    if (nameInput.value.trim() === "") {
-        errores.push("El nombre es obligatorio.");
-    }
-
-    if (apellidoInput.value.trim() === "") {
-        errores.push("El apellido es obligatorio.");
-    }
+    const nombreValido = nameInput.value.trim() !== "";
+    const apellidoValido = apellidoInput.value.trim() !== "";
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(correoInput.value.trim())) {
-        errores.push("El correo no es válido.");
-    }
+    const correoValido = emailRegex.test(correoInput.value.trim());
 
     const phoneRegex = /^\d{7,15}$/;
-    if (!phoneRegex.test(telefonoInput.value.trim())) {
-        errores.push("El teléfono debe contener solo números y tener entre 7 y 15 dígitos.");
+    const telefonoValido = phoneRegex.test(telefonoInput.value.trim());
+
+    const esValido = nombreValido && apellidoValido && correoValido && telefonoValido;
+
+    btnEnviar.disabled = !esValido;
+
+    return esValido;
+}
+
+// Validación en tiempo real
+[nameInput, apellidoInput, correoInput, telefonoInput].forEach(input => {
+    input.addEventListener("input", validarFormulario);
+});
+
+// 🔹 Submit
+form.addEventListener("submit", async function(e) {
+    e.preventDefault();
+
+    if (!validarFormulario()) return;
+
+    const datos = {
+        nombre: nameInput.value.trim(),
+        apellido: apellidoInput.value.trim(),
+        correo: correoInput.value.trim(),
+        telefono: telefonoInput.value.trim(),
+        fechaRegistro: new Date().toLocaleString()
+    };
+
+    try {
+        await guardarCliente(datos);
+
+        alert("Datos guardados correctamente ✅");
+        form.reset();
+        btnEnviar.disabled = true;
+
+    } catch (error) {
+        console.error("Error al guardar:", error);
     }
-
-    if (errores.length > 0) {
-        erroresDiv.innerHTML = errores.map(err => `<p>${err}</p>`).join("");
-        return;
-    }
-
-    erroresDiv.innerHTML = "";
-
-    // Aquí puedes llamar tu función para guardar datos en IndexedDB o enviar formulario
-    // Por ejemplo:
-    // guardarDatos();
-
-    // Si quieres enviar el formulario al servidor sin validación adicional, puedes usar:
-    // form.submit();
 });
