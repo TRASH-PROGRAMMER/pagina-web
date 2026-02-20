@@ -36,9 +36,13 @@
     </label>  
     <div class="preview-container" id="previewContainer"></div>
     <div class="progress-container" id="progressContainer">
-        <div class="progress-bar" id="progressBar">0%</div>
-        <button id="cancelButton">Cancelar</button>
-        <button id="retryButton">Reintentar</button>
+        <div class="progress-track">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+        <div class="progress-buttons">
+            <button id="cancelButton">Cancelar</button>
+            <button id="retryButton">Reintentar</button>
+        </div>
         <div id="errorMessage" class="error-message"></div>
         <div id="successMessage" class="success-message"></div> 
     </div>
