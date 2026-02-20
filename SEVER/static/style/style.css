@@ -1,9 +1,11 @@
 /* ===== RESET & BASE ===== */
+
 * {
     box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
     height: 100%;
     margin: 0;
     font-family: 'Segoe UI', system-ui, sans-serif;
@@ -12,20 +14,26 @@ html, body {
     flex-direction: column;
 }
 
+
 /* ===== CONTAINER ===== */
-.container {
+
+.container,
+main,
+.container-datos {
     background: white;
     padding: 30px;
     border-radius: 16px;
     width: 95%;
     max-width: 1000px;
     margin: 40px auto;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
     flex: 1;
     transition: 0.3s ease;
 }
 
+
 /* ===== TITLES ===== */
+
 .titulo {
     font-size: 32px;
     font-weight: 700;
@@ -45,33 +53,40 @@ html, body {
     text-align: center;
 }
 
-h2{
+h2 {
     font-size: 22px;
     color: #333;
     margin-bottom: 15px;
     text-align: center;
 }
+
+
 /* ===== INPUT ===== */
-input[type="file"],select {
+
+input[type="file"],
+select {
     padding: 30px;
     width: 80%;
     max-width: 420px;
-    margin: 60px auto 0 auto; /* centrado horizontal */
+    margin: 60px auto 0 auto;
+    /* centrado horizontal */
     border: 2px dashed #007BFF;
     border-radius: 10px;
     background: #f0f8ff;
     cursor: pointer;
     transition: 0.3s;
-    display: block; /* necesario para margin auto */
+    display: block;
+    /* necesario para margin auto */
 }
-
 
 input[type="file"]:hover {
     background: #e6f2ff;
     border-color: #0056b3;
 }
 
+
 /* ===== GRID ===== */
+
 .preview-container {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -79,18 +94,20 @@ input[type="file"]:hover {
     margin-top: 30px;
 }
 
+
 /* ===== CARD ===== */
+
 .card {
     background: white;
     padding: 12px;
     border-radius: 14px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .card:hover {
     transform: translateY(-6px);
-    box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
 }
 
 .card img {
@@ -99,7 +116,9 @@ input[type="file"]:hover {
     object-fit: cover;
 }
 
+
 /* ===== MESSAGE ===== */
+
 .mensaje {
     font-size: 14px;
     font-weight: 600;
@@ -114,14 +133,18 @@ input[type="file"]:hover {
     color: #2e7d32;
 }
 
+
 /* ===== BUTTON GROUP ===== */
+
 .btn-group {
     display: flex;
     gap: 8px;
     margin-top: 8px;
 }
 
+
 /* ===== BUTTONS ===== */
+
 button {
     margin-top: 8px;
     padding: 8px 12px;
@@ -147,7 +170,9 @@ button:nth-child(4) {
     background: linear-gradient(90deg, #dc3545, #a71d7a);
 }
 
+
 /* ===== PROGRESS ===== */
+
 .progress-container {
     width: 100%;
     margin-top: 30px;
@@ -159,7 +184,7 @@ button:nth-child(4) {
     border-radius: 30px;
     overflow: hidden;
     height: 24px;
-    box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 .progress-buttons {
@@ -180,7 +205,9 @@ button:nth-child(4) {
     transition: width 0.4s ease-in-out;
 }
 
+
 /* ===== MESSAGES ===== */
+
 .error-message {
     color: #e53935;
     font-weight: 600;
@@ -193,7 +220,9 @@ button:nth-child(4) {
     margin-top: 15px;
 }
 
+
 /* ===== FOOTER ===== */
+
 footer {
     background: #111;
     color: #aaa;
@@ -202,7 +231,9 @@ footer {
     font-size: 14px;
 }
 
+
 /* ===== BOTONES DE CONTROL ===== */
+
 #cancelButton,
 #retryButton {
     padding: 10px 18px;
@@ -215,7 +246,9 @@ footer {
     transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
+
 /* Botón Cancelar */
+
 #cancelButton {
     background: linear-gradient(90deg, #dc3545, #a71d2a);
     color: white;
@@ -230,7 +263,9 @@ footer {
     transform: scale(0.95);
 }
 
+
 /* Botón Reintentar */
+
 #retryButton {
     background: linear-gradient(90deg, #007BFF, #0056b3);
     color: white;
@@ -253,4 +288,90 @@ footer {
     font-weight: 600;
     color: white;
     line-height: 10px;
+}
+
+.formulario_datos_personales {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.formulario_datos_personales label {
+    font-weight: 600;
+    color: #333;
+}
+
+.formulario_datos_personales input {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.formulario_datos_personales input:focus {
+    border-color: #007BFF;
+    outline: none;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+}
+
+.enviar-button {
+    padding: 10px 18px;
+    background: linear-gradient(90deg, #007BFF, #0056b3);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.enviar-button:hover {
+    transform: scale(1.05);
+    opacity: 0.9;
+}
+
+.enviar-button:active {
+    transform: scale(0.98);
+}
+
+.enviar-button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.tipo_de_papel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.text-tipo-papel {
+    text-align: center;
+    width: 100%;
+    font-weight: 700;
+    color: #000;
+}
+
+.opciones-papel {
+    display: flex;
+    gap: 30px;
+    align-items: center;
+}
+
+.opcion-papel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.opcion-papel:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
 }
