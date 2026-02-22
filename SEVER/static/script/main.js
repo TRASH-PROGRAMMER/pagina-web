@@ -1,4 +1,4 @@
-import db from "./db.js"; // Variables globales
+// Variables globales
 const input = document.getElementById("inputImagenes");
 const container = document.getElementById("previewContainer");
 const progressBar = document.getElementById("progressBar");

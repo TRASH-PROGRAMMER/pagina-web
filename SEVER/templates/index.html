@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>image Manager</title>
-<link rel="stylesheet" href="../static/style/style.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='style/style.css') }}" />
 </head>
 <body>
@@ -83,9 +82,7 @@
 
 </main>
 <footer>&copy; 2026 Todos los derechos reservados</footer>
-<script src="../static/script/main.js"></script>
-<script src="../static/script/db.js"></script>
-<script src="../static/script/formulario_clientes.js"></script>
-<script src="{{ url_for('static', filename='script/main.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='script/main.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='script/formulario_clientes.js') }}"></script>
 </body>
 </html>
