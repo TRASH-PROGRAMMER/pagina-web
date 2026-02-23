@@ -2,7 +2,7 @@ import { guardarCliente } from './db.js';
 
 const form = document.getElementById("formDatos");
 const btnEnviar = document.querySelector(".enviar-button");
-
+const errorMessage = document.getElementById("mensajeError");
 const nameInput = document.getElementById("nombre");
 const apellidoInput = document.getElementById("apellido");
 const correoInput = document.getElementById("correo");
@@ -25,7 +25,7 @@ function validarFormulario() {
     const esValido = nombreValido && apellidoValido && correoValido && telefonoValido;
 
     btnEnviar.disabled = !esValido;
-
+    errorMessage.textContent = esValido ? "" : "Por favor, completa todos los campos correctamente.";
     return esValido;
 }
 

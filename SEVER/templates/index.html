@@ -14,6 +14,18 @@
     <h2>Subir 50+ de Imágenes</h2> 
     <input type="file" id="inputImagenes" accept="image/*" multiple>
 </div>
+<div class="preview-container" id="previewContainer"></div>
+    <div class="progress-container" id="progressContainer">
+        <div class="progress-track">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+        <div class="progress-buttons">
+            <button id="cancelButton">Cancelar</button>
+            <button id="retryButton">Reintentar</button>
+        </div>
+        <div id="errorMessage" class="error-message"></div>
+        <div id="successMessage" class="success-message"></div> 
+    </div>
 </header>
 <div class="container-datos">
     <form action ="#" method="post" class = "formulario_datos_personales " id="formDatos" > 
@@ -35,6 +47,7 @@
         </label>
         <input type="tel" id="telefono" name="telefono" placeholder="telefono">
              <input type="submit" value="Enviar" class="enviar-button">
+             <div id= "mensajeError" class="mensaje-error"></div>
     </form>
 </div>
 <main>
@@ -66,24 +79,18 @@
     
     </form>
 
-    <div class="preview-container" id="previewContainer"></div>
-    <div class="progress-container" id="progressContainer">
-        <div class="progress-track">
-            <div class="progress-bar" id="progressBar">0%</div>
-        </div>
-        <div class="progress-buttons">
-            <button id="cancelButton">Cancelar</button>
-            <button id="retryButton">Reintentar</button>
-        </div>
-        <div id="errorMessage" class="error-message"></div>
-        <div id="successMessage" class="success-message"></div> 
-    </div>
-    <!---<button id="EnviarfotosButton" class="enviar-fotos">Enviar fotos</button>-->
+    
+  
 
 </main>
-<footer>&copy; 2026 Todos los derechos reservados</footer>
-<script  src="../static/script/main.js"></script>
-<script  type="module" src="../static/script/db.js"></script>
-<script type="module"  src="../static/script/formulario_clientes.js"></script>
+
+<footer>&copy; 2026 Todos los derechos reservados
+    <a class ="direccion" href="https://www.google.com/maps/place/Manta+Color/data=!4m2!3m1!1s0x0:0x91e1a40e9dd4f55b?sa=X&ved=1t:2428&ictx=111">Dirección: C. 13, Manta
+
+    </a>
+</footer>
+<script   src="../static/script/main.js"></script>
+<script   type ="module" src="../static/script/db.js"></script>
+<script   type ="module" src="../static/script/formulario_clientes.js"></script>
 </body>
 </html>

@@ -326,6 +326,8 @@ footer {
     cursor: pointer;
     transition: transform 0.2s ease, opacity 0.2s ease;
 }
+
+
 /*
 .enviar-button:hover {
     transform: scale(1.05);
@@ -380,4 +382,12 @@ footer {
     background: #999;
     cursor: not-allowed;
     box-shadow: none;
+}
+
+.direccion {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 20px;
+    color: white;
 }

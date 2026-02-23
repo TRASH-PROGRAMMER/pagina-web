@@ -1,14 +1,252 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>image Manager</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Image Manager</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../static/style/admin.css">
 </head>
 <body>
-     <h1>Admin</h1>
-     <p>Esta es la página de administración</p>
-     
-     
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <span>Image Manager</span>
+    <small>Panel de Administración</small>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Principal</div>
+    <a class="nav-item active" href="#">
+      <span class="icon">◈</span> Dashboard
+    </a>
+    <a class="nav-item" href="#">
+      <span class="icon">◻</span> Pedidos
+      <span class="badge warn">4</span>
+    </a>
+    <a class="nav-item" href="#">
+      <span class="icon">◎</span> Clientes
+    </a>
+    <a class="nav-item" href="#">
+      <span class="icon">⬡</span> Imágenes
+      <span class="badge">128</span>
+    </a>
+
+    <div class="nav-section-label">Configuración</div>
+    <a class="nav-item" href="#">
+      <span class="icon">◈</span> Opciones
+    </a>
+    <a class="nav-item" href="index.html">
+      <span class="icon">↩</span> Ir al sitio
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="admin-avatar">
+      <div class="avatar-circle">AD</div>
+      <div>
+        <div style="font-size:13px;color:var(--text);font-weight:500;">Admin</div>
+        <div style="font-size:11px;">admin@imagemanager</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-title">
+      <span>Dashboard</span> / Vista general
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost" onclick="exportCSV()">↓ Exportar CSV</button>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- STATS -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon">📦</div>
+        <div class="stat-label">Pedidos hoy</div>
+        <div class="stat-value" style="color:var(--accent)">24</div>
+        <div class="stat-sub">↑ 12% vs ayer</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🖼️</div>
+        <div class="stat-label">Imágenes cargadas</div>
+        <div class="stat-value" style="color:var(--accent2)">1,284</div>
+        <div class="stat-sub">↑ 38 esta semana</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">👥</div>
+        <div class="stat-label">Clientes activos</div>
+        <div class="stat-value" style="color:var(--accent3)">87</div>
+        <div class="stat-sub">3 nuevos hoy</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-label">Pendientes</div>
+        <div class="stat-value" style="color:var(--warning)">4</div>
+        <div class="stat-sub">Requieren acción</div>
+      </div>
+    </div>
+
+    <!-- ORDERS TABLE -->
+    <div class="table-card">
+      <div class="table-toolbar">
+        <div class="section-title">Pedidos recientes</div>
+        <div class="search-box">
+          <span style="color:var(--muted)">⌕</span>
+          <input type="text" placeholder="Buscar cliente o pedido…" id="searchInput" oninput="filterTable()">
+        </div>
+      </div>
+      <table id="ordersTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Cliente</th>
+            <th>Imágenes</th>
+            <th>Tamaño</th>
+            <th>Papel</th>
+            <th>Estado</th>
+            <th>Fecha</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr>
+            <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#0024</code></td>
+            <td>
+              <div class="client-name">María González</div>
+              <div class="client-email">maria@email.com</div>
+            </td>
+            <td>52</td><td>10x15cm</td><td>Brillante</td>
+            <td><span class="status status-pendiente">Pendiente</span></td>
+            <td style="color:var(--muted);font-size:12px">23 Feb 2026</td>
+            <td>
+              <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
+              <button class="action-btn del" onclick="deleteRow(this)">✕</button>
+            </td>
+          </tr>
+          <tr>
+            <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#0023</code></td>
+            <td>
+              <div class="client-name">Carlos Mendoza</div>
+              <div class="client-email">c.mendoza@gmail.com</div>
+            </td>
+            <td>30</td><td>20x30cm</td><td>Mate</td>
+            <td><span class="status status-procesando">Procesando</span></td>
+            <td style="color:var(--muted);font-size:12px">22 Feb 2026</td>
+            <td>
+              <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
+              <button class="action-btn del" onclick="deleteRow(this)">✕</button>
+            </td>
+          </tr>
+          <tr>
+            <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#0022</code></td>
+            <td>
+              <div class="client-name">Ana Ruiz</div>
+              <div class="client-email">ana.ruiz@hotmail.com</div>
+            </td>
+            <td>80</td><td>Instax 5x8cm</td><td>Brillante</td>
+            <td><span class="status status-entregado">Entregado</span></td>
+            <td style="color:var(--muted);font-size:12px">21 Feb 2026</td>
+            <td>
+              <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
+              <button class="action-btn del" onclick="deleteRow(this)">✕</button>
+            </td>
+          </tr>
+          <tr>
+            <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#0021</code></td>
+            <td>
+              <div class="client-name">Luis Paredes</div>
+              <div class="client-email">luisp@empresa.com</div>
+            </td>
+            <td>15</td><td>Polaroid 8x8cm</td><td>Mate</td>
+            <td><span class="status status-cancelado">Cancelado</span></td>
+            <td style="color:var(--muted);font-size:12px">20 Feb 2026</td>
+            <td>
+              <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
+              <button class="action-btn del" onclick="deleteRow(this)">✕</button>
+            </td>
+          </tr>
+          <tr>
+            <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#0020</code></td>
+            <td>
+              <div class="client-name">Sofia Torres</div>
+              <div class="client-email">sofi.t@gmail.com</div>
+            </td>
+            <td>64</td><td>13x18cm</td><td>Brillante</td>
+            <td><span class="status status-pendiente">Pendiente</span></td>
+            <td style="color:var(--muted);font-size:12px">20 Feb 2026</td>
+            <td>
+              <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
+              <button class="action-btn del" onclick="deleteRow(this)">✕</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- BOTTOM PANELS -->
+    <div class="bottom-grid">
+      <div class="panel">
+        <div class="section-header">
+          <div class="section-title">Pedidos — últimos 7 días</div>
+        </div>
+        <div class="chart-bars">
+          <div class="bar-wrap"><div class="bar" style="height:40%"></div><div class="bar-label">L</div></div>
+          <div class="bar-wrap"><div class="bar" style="height:60%"></div><div class="bar-label">M</div></div>
+          <div class="bar-wrap"><div class="bar" style="height:35%"></div><div class="bar-label">X</div></div>
+          <div class="bar-wrap"><div class="bar" style="height:80%"></div><div class="bar-label">J</div></div>
+          <div class="bar-wrap"><div class="bar" style="height:55%"></div><div class="bar-label">V</div></div>
+          <div class="bar-wrap"><div class="bar" style="height:90%"></div><div class="bar-label">S</div></div>
+          <div class="bar-wrap"><div class="bar" style="height:70%"></div><div class="bar-label">D</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="section-header">
+          <div class="section-title">Últimas subidas</div>
+        </div>
+        <div class="upload-list">
+          <div class="upload-item">
+            <div class="upload-thumb">🌄</div>
+            <div class="upload-info">
+              <div class="upload-name">familia_vacaciones_52imgs.zip</div>
+              <div class="upload-meta">María González · hace 10 min</div>
+            </div>
+            <div class="upload-size">124 MB</div>
+          </div>
+          <div class="upload-item">
+            <div class="upload-thumb">🎞️</div>
+            <div class="upload-info">
+              <div class="upload-name">retrato_sesion_30imgs.zip</div>
+              <div class="upload-meta">Carlos Mendoza · hace 2h</div>
+            </div>
+            <div class="upload-size">87 MB</div>
+          </div>
+          <div class="upload-item">
+            <div class="upload-thumb">📷</div>
+            <div class="upload-info">
+              <div class="upload-name">evento_cumple_80imgs.zip</div>
+              <div class="upload-meta">Ana Ruiz · hace 1 día</div>
+            </div>
+            <div class="upload-size">210 MB</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<script src="admin.js"></script>
 </body>
 </html>
