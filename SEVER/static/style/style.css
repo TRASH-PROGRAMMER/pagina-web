@@ -326,7 +326,7 @@ footer {
     cursor: pointer;
     transition: transform 0.2s ease, opacity 0.2s ease;
 }
-
+/*
 .enviar-button:hover {
     transform: scale(1.05);
     opacity: 0.9;
@@ -340,7 +340,7 @@ footer {
     background: #ccc;
     cursor: not-allowed;
     opacity: 0.6;
-}
+}*/
 
 .tipo_de_papel {
     display: flex;

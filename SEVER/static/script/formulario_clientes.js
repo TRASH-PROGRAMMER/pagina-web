@@ -1,4 +1,4 @@
-import { guardarCliente } from "./db.js";
+import { guardarCliente } from './db.js';
 
 const form = document.getElementById("formDatos");
 const btnEnviar = document.querySelector(".enviar-button");

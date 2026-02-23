@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>image Manager</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style/style.css') }}" />
+<link rel="stylesheet" href="../static/style/style.css" />
 </head>
 <body>
   <header class="container">
@@ -39,7 +39,7 @@
 </div>
 <main>
     <label for="tamaño" class="tamaños-fotos"><h2>Elije los tamaños:</h2></label>
-    <select id="tamaño" multiple>
+    <select id="tamaño" name="tamano[]" multiple>
         <option value="TAMAÑO1">Instax(5x8cm)</option>
         <option value="TAMAÑO2">Polaroid(8x8cm)</option>
         <option value="TAMAÑO3">10x10cm</option>
@@ -78,11 +78,12 @@
         <div id="errorMessage" class="error-message"></div>
         <div id="successMessage" class="success-message"></div> 
     </div>
-    <button id="EnviarfotosButton" class="enviar-fotos">Enviar fotos</button>
+    <!---<button id="EnviarfotosButton" class="enviar-fotos">Enviar fotos</button>-->
 
 </main>
 <footer>&copy; 2026 Todos los derechos reservados</footer>
-<script type="module" src="{{ url_for('static', filename='script/main.js') }}"></script>
-<script type="module" src="{{ url_for('static', filename='script/formulario_clientes.js') }}"></script>
+<script  src="../static/script/main.js"></script>
+<script  type="module" src="../static/script/db.js"></script>
+<script type="module"  src="../static/script/formulario_clientes.js"></script>
 </body>
 </html>
