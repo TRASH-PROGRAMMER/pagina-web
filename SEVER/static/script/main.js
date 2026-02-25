@@ -22,8 +22,8 @@ function procesarArchivos(archivos) {
     // Validación de cantidad de archivos seleccionados
     if (archivos.length === 0) return;
     // Limitar a 50 imágenes
-    if (archivos.length > 50) {
-        alert("Solo puedes subir máximo 50 imágenes.");
+    if (archivos.length > 150) {
+        alert("Solo puedes subir máximo 150 imágenes.");
         return;
     }
     // Limitar a 10MB por imagen

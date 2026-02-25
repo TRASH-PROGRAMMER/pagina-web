@@ -12,6 +12,9 @@ def admin():
     return render_template('admin.html')
 # imprime un mensaje en la consola para indicar que el programa está funcionando
 print("El programa está funcionando")
+@app.route('/empleado')
+def empleado():
+    return render_template('empleado.html')
 # inicia la aplicación Flask en modo de depuración
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000)
+    app.run(debug=True)
