@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>image Manager</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style/style.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/reponsive_index.css') }}" />
 </head>
 <body>
   <header class="container">
@@ -27,6 +28,7 @@
         <div id="successMessage" class="success-message"></div> 
     </div>
 </header>
+ <button  class ="dark-mode-btn">🌓</button>
 <div class="container-datos">
     <form action ="#" method="post" class = "formulario_datos_personales " id="formDatos" > 
         <h2>datos personales </h2>
@@ -89,8 +91,9 @@
 
     </a>
 </footer>
-<script   src="../static/script/main.js"></script>
-<script   type ="module" src="../static/script/db.js"></script>
-<script   type ="module" src="../static/script/formulario_clientes.js"></script>
+<script src="{{ url_for('static', filename='script/main.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='script/db.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='script/formulario_clientes.js') }}"></script>
+<script src="{{ url_for('static', filename='script/dark-mode-index.js') }}"></script>
 </body>
 </html>

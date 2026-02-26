@@ -327,23 +327,6 @@ footer {
     transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-
-/*
-.enviar-button:hover {
-    transform: scale(1.05);
-    opacity: 0.9;
-}
-
-.enviar-button:active {
-    transform: scale(0.98);
-}
-
-.enviar-button:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-    opacity: 0.6;
-}*/
-
 .tipo_de_papel {
     display: flex;
     flex-direction: column;
@@ -390,4 +373,151 @@ footer {
     gap: 15px;
     margin-top: 20px;
     color: white;
+}
+.dark-mode-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    font-size: 20px;
+    border-radius: 50%;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    transition: all 0.2s ease;
+    margin-top: 0;
+}
+
+.dark-mode-btn:hover {
+    background-color: #e8e8f0;
+    color: #6b6b85;
+}
+.dark-mode-btn:active {
+    background-color: #c0c0c8;
+    color: #6b6b85;
+}
+.dark-mode,
+.dark-mode body {
+    background: #121212 !important;
+    background-image: none !important;
+    color: #e8e8f0;
+}
+
+.dark-mode .container,
+.dark-mode main,
+.dark-mode .container-datos {
+    background: #1a1a25;
+    color: white;
+}
+
+.dark-mode .titulo {
+    color: white;
+}
+
+.dark-mode .text1 {
+    color: white;
+}
+.dark-mode h2 {
+    color: white;
+}
+.dark-mode input[type="file"],
+.dark-mode select {
+    background: #1a1a25;
+    color: white;
+
+}
+.dark-mode .card {
+    background: #1a1a25;
+    color: white;
+}
+.dark-mode .mensaje {
+    color: white;
+}
+
+.dark-mode .baja {
+    color: white;
+}
+.dark-mode .alta {
+    color: white;
+}
+.dark-mode button {
+    background: #333;
+    color: white;
+}
+.dark-mode button:nth-child(4) {
+    background: #0056b3;
+}
+.dark-mode .progress-track {
+    background-color: #333;
+}
+
+.dark-mode .progress-buttons {
+    background: #333;
+    color: white;
+}
+
+.dark-mode .progress-bar {
+    background-color: #0056b3;
+    color: white;
+}
+
+.dark-mode .formulario_datos_personales {
+    background: #1a1a25;
+    color: white;
+
+}
+
+.dark-mode .formulario_datos_personales label {
+    color: white;
+
+}
+
+.dark-mode .formulario_datos_personales input {
+    background: #1a1a25;
+    color: white;
+
+}
+
+.dark-mode .formulario_datos_personales input:focus {
+    background: #1a1a25;
+    color: white;
+}   
+
+.dark-mode .enviar-button {
+    background: #333;
+    color: white;
+}   
+
+.dark-mode .enviar-button:hover {
+    background: #0056b3;
+    color: white;
+}   
+
+.dark-mode .enviar-button:active {
+    background: #0056b3;
+    color: white;
+}       
+.dark-mode .direccion {
+    background: #1a1a25;
+    color: white;
+}
+.dark-mode .dark-mode-btn {
+    background-color: #e8e8f0;
+    color: #333;
+}
+.dark-mode .dark-mode-btn:hover {
+    background-color: #c0c0c8;
+    color: #333;
+}
+.dark-mode .dark-mode-btn:active {
+    background-color: #999;
+    color: #333;
+}
+.dark-mode .dark-mode {
+    background-color: #1a1a25;
+    color: #e8e8f0;
 }

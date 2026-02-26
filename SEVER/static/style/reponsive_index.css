@@ -1,0 +1,65 @@
+/* responsive */
+
+ @media (max-width: 768px) {
+    /* Agrupamos selectores que comparten propiedades para limpiar el código */
+    .container,
+    main,
+    .container-datos {
+        width: 100%;
+        padding: 1.25rem; /* 20px aproximado */
+    }
+
+    /* Fuentes más fluidas */
+    .titulo { font-size: 1.5rem; }
+    h2 { font-size: 1.125rem; }
+    
+    .text1, .mensaje, .formulario_datos_personales label, 
+    .formulario_datos_personales input, button {
+        font-size: 0.875rem; /* 14px es más legible que 12px en móvil */
+    }
+
+    .baja, .alta {
+        font-size: 0.75rem; /* 12px */
+    }
+
+    /* Elementos de formulario */
+    input[type="file"],
+    .formulario_datos_personales {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 0.625rem; /* 10px */
+    }
+
+    /* Interactividad */
+    button, .enviar-button {
+        padding: 0.5rem 0.75rem;
+        width: 100%; /* En móviles, los botones grandes son más fáciles de tocar */
+    }
+
+    .btn-group, .progress-buttons, .direccion {
+        gap: 0.5rem;
+    }
+    .btn-group {
+        flex-direction: column;
+    }
+    .dark-mode-btn {
+        top: 12px;
+        bottom: auto;
+        right: 12px;
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+        padding: 0;
+        border-radius: 50%;
+        z-index: 999;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+        
+
+
+
+
+    
+    }
