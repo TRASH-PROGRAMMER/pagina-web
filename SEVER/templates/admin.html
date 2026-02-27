@@ -24,7 +24,7 @@
     </a>
     <a class="nav-item" href="#">
       <span class="icon">◻</span> Pedidos
-      <span class="badge warn">4</span>
+      <span class="badge warn" id="badgePedidos">0</span>
     </a>
     <a class="nav-item" href="#">
       <span class="icon">◎</span> Clientes
@@ -38,7 +38,7 @@
     <a class="nav-item" href="#">
       <span class="icon">◈</span> Opciones
     </a>
-    <a class="nav-item" href="{{ url_for('home') }}"></a>
+    <a class="nav-item" href="{{ url_for('home') }}">
       <span class="icon">↩</span> Ir al sitio
     </a>
   </nav>
@@ -247,6 +247,6 @@
   </div><!-- /content -->
 </div><!-- /main -->
 
-<script src="{{ url_for('static', filename='script/main.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='script/dasbord_admin.js') }}"></script>
 </body>
 </html>

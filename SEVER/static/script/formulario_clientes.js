@@ -1,5 +1,7 @@
 import { guardarCliente } from './db.js';
 
+const clienteChannel = new BroadcastChannel("clientes_channel");
+
 const form = document.getElementById("formDatos");
 const btnEnviar = document.querySelector(".enviar-button");
 const errorMessage = document.getElementById("mensajeError");
@@ -13,8 +15,10 @@ btnEnviar.disabled = true;
 // 🔹 Validación
 function validarFormulario() {
 
-    const nombreValido = nameInput.value.trim() !== "";
-    const apellidoValido = apellidoInput.value.trim() !== "";
+    const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,}$/;
+     const nombreValido = nameRegex.test(nameInput.value.trim());
+    const apellidoRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,}$/;
+       const apellidoValido = apellidoRegex.test(apellidoInput.value.trim());
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const correoValido = emailRegex.test(correoInput.value.trim());
@@ -26,6 +30,7 @@ function validarFormulario() {
 
     btnEnviar.disabled = !esValido;
     errorMessage.textContent = esValido ? "" : "Por favor, completa todos los campos correctamente.";
+    errorMessage.style.color = "red";
     return esValido;
 }
 
@@ -49,7 +54,8 @@ form.addEventListener("submit", async function(e) {
     };
 
     try {
-        await guardarCliente(datos);
+        const clienteGuardado = await guardarCliente(datos);
+        clienteChannel.postMessage({ tipo: "nuevo_cliente", cliente: clienteGuardado });
 
         alert("Datos guardados correctamente ✅");
         form.reset();

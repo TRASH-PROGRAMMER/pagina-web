@@ -1,3 +1,5 @@
+import { initDB } from "./db.js";
+
 // Variables globales
 const input = document.getElementById("inputImagenes");
 const container = document.getElementById("previewContainer");
@@ -139,3 +141,12 @@ retryButton.addEventListener("click", function() {
     }
     procesarArchivos(archivosGlobal);
 });
+
+document.addEventListener("DOMContentLoaded", async () => {
+    await initDB(); // primero inicializa la DB
+    console.log("DB inicializada desde main");
+
+    // 🔥 ahora sí carga el dashboard
+    await import("./dasbord_admin.js");
+});
+
