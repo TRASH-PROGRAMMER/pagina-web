@@ -1,5 +1,3 @@
-import { initDB } from "./db.js";
-
 // Variables globales
 const input = document.getElementById("inputImagenes");
 const container = document.getElementById("previewContainer");
@@ -143,7 +141,6 @@ retryButton.addEventListener("click", function() {
 });
 
 document.addEventListener("DOMContentLoaded", async () => {
-    await initDB(); // primero inicializa la DB
     console.log("DB inicializada desde main");
 
     // 🔥 ahora sí carga el dashboard

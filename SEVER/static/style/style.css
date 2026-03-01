@@ -199,7 +199,7 @@ button:nth-child(4) {
     background: linear-gradient(90deg, #00c853, #64dd17);
     border-radius: 30px;
     text-align: center;
-    color: white;
+    color: black;
     font-size: 13px;
     line-height: 24px;
     transition: width 0.4s ease-in-out;

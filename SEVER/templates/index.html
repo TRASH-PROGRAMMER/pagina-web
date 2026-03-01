@@ -11,8 +11,8 @@
   <header class="container">
 <div>
     <h1 class="titulo"><b>Image Manager </b></h1>
-    <p class=" text1">CARGA DE ARCHIVOS FOTOGRÁFICOS EN SEGUNDOS</p>
-    <h2>Subir hasta 150 imágenes</h2>
+    <p class=" text1">CARGA DE ARCHIVOS FOTOGRÁFICOS EN SEGUNDOS EN PNG ,JPG ,gif</p>
+    <h2>Subir hasta 150 imágenes en segundos</h2>
     <input type="file" id="inputImagenes" accept="image/*" multiple>
 </div>
 <div class="preview-container" id="previewContainer"></div>
@@ -28,31 +28,8 @@
         <div id="successMessage" class="success-message"></div> 
     </div>
 </header>
- <button  class ="dark-mode-btn">🌓</button>
-<div class="container-datos">
-    <form action ="#" method="post" class = "formulario_datos_personales " id="formDatos" > 
-        <h2>datos personales </h2>
-        <label for="nombre" class = "nombre-text">
-            <h2>Nombres:</h2>
-        </label>  
-            <input type="text" id="nombre" name="nombre" placeholder="nombres">
-        <label for="apellido" class = "apellido-text">
-            <h2>Apellidos:</h2>
-        </label>
-            <input type="text" id="apellido" name="apellido" placeholder="apellidos">
-        <label for="correo" class = "correo-text">
-            <h2> Correo:</h2>
-        </label>
-         <input type="email" id="correo" name="correo" placeholder="correo">
-        <label for="telefono" class = "telefono-text">
-                <h2>Telefono:</h2> 
-        </label>
-        <input type="tel" id="telefono" name="telefono" placeholder="telefono">
-             <input type="submit" value="Enviar" class="enviar-button">
-             <div id= "mensajeError" class="mensaje-error"></div>
-    </form>
-</div>
 <main>
+ <button  class ="dark-mode-btn">🌓</button>
     <label for="tamaño" class="tamaños-fotos"><h2>Elije los tamaños:</h2></label>
     <select id="tamaño" name="tamano[]" multiple>
         <option value="TAMAÑO1">Instax(5x8cm)</option>
@@ -80,18 +57,38 @@
         </div>
     
     </form>
+    </main>
 
-    
-  
-
-</main>
+<div class="container-datos">
+    <form action ="#" method="post" class = "formulario_datos_personales " id="formDatos" > 
+        <h2>Datos Personales </h2>
+        <label for="nombre" class = "nombre-text">
+            <h2>Nombres:</h2>
+        </label>  
+            <input type="text" id="nombre" name="nombre" placeholder="nombres">
+        <label for="apellido" class = "apellido-text">
+            <h2>Apellidos:</h2>
+        </label>
+            <input type="text" id="apellido" name="apellido" placeholder="apellidos">
+        <label for="correo" class = "correo-text">
+            <h2> Correo:</h2>
+        </label>
+            <input type="email" id="correo" name="correo" placeholder="correo">
+        <label for="telefono" class = "telefono-text">
+                <h2>Telefono:</h2> 
+        </label>
+        <input type="tel" id="telefono" name="telefono" placeholder="telefono">
+                <input type="submit" value="Enviar" class="enviar-button">
+                <div id= "mensajeError" class="mensaje-error"></div>
+    </form>
+</div>    
 
 <footer>&copy; 2026 Todos los derechos reservados
     <a class ="direccion" href="https://www.google.com/maps/place/Manta+Color/data=!4m2!3m1!1s0x0:0x91e1a40e9dd4f55b?sa=X&ved=1t:2428&ictx=111">Dirección: C. 13, Manta
 
     </a>
 </footer>
-<script   type = "module" src="{{ url_for('static', filename='script/main.js') }}"></script>
+<script type = "module" src="{{ url_for('static', filename='script/main.js') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/db.js') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/formulario_clientes.js') }}"></script>
 <script src="{{ url_for('static', filename='script/dark-mode-index.js') }}"></script>
