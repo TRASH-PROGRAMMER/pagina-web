@@ -9,16 +9,18 @@ const nameInput = document.getElementById("nombre");
 const apellidoInput = document.getElementById("apellido");
 const correoInput = document.getElementById("correo");
 const telefonoInput = document.getElementById("telefono");
+const inputImagenes = document.getElementById("inputImagenes");
+const tamanoSelect = document.getElementById("tamaño");
 
 btnEnviar.disabled = true;
 
-// 🔹 Validación
+// 🔹 Validación completa (datos + fotos + tamaño + papel)
 function validarFormulario() {
 
     const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,}$/;
-     const nombreValido = nameRegex.test(nameInput.value.trim());
+    const nombreValido = nameRegex.test(nameInput.value.trim());
     const apellidoRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,}$/;
-       const apellidoValido = apellidoRegex.test(apellidoInput.value.trim());
+    const apellidoValido = apellidoRegex.test(apellidoInput.value.trim());
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const correoValido = emailRegex.test(correoInput.value.trim());
@@ -26,10 +28,34 @@ function validarFormulario() {
     const phoneRegex = /^\d{7,15}$/;
     const telefonoValido = phoneRegex.test(telefonoInput.value.trim());
 
-    const esValido = nombreValido && apellidoValido && correoValido && telefonoValido;
+    // Validar que haya al menos 1 foto
+    const fotosValidas = inputImagenes.files && inputImagenes.files.length > 0;
+
+    // Validar que se haya seleccionado al menos un tamaño
+    const tamanoValido = tamanoSelect.selectedOptions.length > 0;
+
+    // Validar que se haya elegido tipo de papel
+    const papelSeleccionado = document.querySelector('input[name="papel"]:checked');
+    const papelValido = !!papelSeleccionado;
+
+    const esValido = nombreValido && apellidoValido && correoValido
+                  && telefonoValido && fotosValidas && tamanoValido && papelValido;
 
     btnEnviar.disabled = !esValido;
-    errorMessage.textContent = esValido ? "" : "Por favor, completa todos los campos correctamente.";
+
+    // Mensajes de ayuda
+    if (!fotosValidas && inputImagenes.files.length === 0) {
+        errorMessage.textContent = "Selecciona al menos una foto para imprimir.";
+    } else if (!tamanoValido) {
+        errorMessage.textContent = "Selecciona al menos un tamaño de foto.";
+    } else if (!papelValido) {
+        errorMessage.textContent = "Elige un tipo de papel.";
+    } else if (!esValido) {
+        errorMessage.textContent = "Completa todos los campos correctamente.";
+    } else {
+        errorMessage.textContent = "";
+    }
+
     errorMessage.style.color = "red";
     return esValido;
 }
@@ -38,30 +64,64 @@ function validarFormulario() {
 [nameInput, apellidoInput, correoInput, telefonoInput].forEach(input => {
     input.addEventListener("input", validarFormulario);
 });
+inputImagenes.addEventListener("change", validarFormulario);
+tamanoSelect.addEventListener("change", validarFormulario);
+document.querySelectorAll('input[name="papel"]').forEach(radio => {
+    radio.addEventListener("change", validarFormulario);
+});
 
-// 🔹 Submit
+// 🔹 Submit — envía FormData con fotos + datos + tamaño + papel
 form.addEventListener("submit", async function(e) {
     e.preventDefault();
 
     if (!validarFormulario()) return;
 
-    const datos = {
-        nombre: nameInput.value.trim(),
-        apellido: apellidoInput.value.trim(),
-        correo: correoInput.value.trim(),
-        telefono: telefonoInput.value.trim(),
-        fechaRegistro: new Date().toLocaleString()
-    };
+    btnEnviar.disabled = true;
+    errorMessage.textContent = "Subiendo fotos…";
+    errorMessage.style.color = "#007BFF";
+
+    // Construir FormData
+    const formData = new FormData();
+    formData.append('nombre', nameInput.value.trim());
+    formData.append('apellido', apellidoInput.value.trim());
+    formData.append('correo', correoInput.value.trim());
+    formData.append('telefono', telefonoInput.value.trim());
+    formData.append('fechaRegistro', new Date().toLocaleString());
+
+    // Tamaños seleccionados (texto legible)
+    const tamanosTexto = Array.from(tamanoSelect.selectedOptions)
+                              .map(o => o.text)
+                              .join(', ');
+    formData.append('tamano', tamanosTexto);
+
+    // Papel
+    const papel = document.querySelector('input[name="papel"]:checked').value;
+    formData.append('papel', papel);
+
+    // Fotos
+    for (const foto of inputImagenes.files) {
+        formData.append('fotos', foto);
+    }
 
     try {
-        const clienteGuardado = await guardarCliente(datos);
+        const clienteGuardado = await guardarCliente(formData);
         clienteChannel.postMessage({ tipo: "nuevo_cliente", cliente: clienteGuardado });
 
-        alert("Datos guardados correctamente ✅");
+        errorMessage.textContent = "";
+        alert(`Pedido enviado ✅ — ${clienteGuardado.numFotos} foto(s) subidas`);
         form.reset();
+        // Limpiar selección de tamaño y papel
+        tamanoSelect.selectedIndex = -1;
+        document.querySelectorAll('input[name="papel"]').forEach(r => r.checked = false);
+        // Limpiar previews
+        const previewContainer = document.getElementById("previewContainer");
+        if (previewContainer) previewContainer.innerHTML = "";
         btnEnviar.disabled = true;
 
     } catch (error) {
+        errorMessage.textContent = error.message;
+        errorMessage.style.color = "red";
+        btnEnviar.disabled = false;
         console.error("Error al guardar:", error);
     }
 });

@@ -1,5 +1,3 @@
-import { obtenerClientes, eliminarCliente } from "./db.js";
-
 // ─── BroadcastChannel: escuchar nuevos clientes desde index ─────────────────
 const clienteChannel = new BroadcastChannel("clientes_channel");
 clienteChannel.onmessage = function(event) {
@@ -8,8 +6,6 @@ clienteChannel.onmessage = function(event) {
         actualizarBadge(+1);
     }
 };
-
-// ─── Inicialización ───────────────────────────────────────────────────────────
 
 // ─── Filtrar tabla por búsqueda ───────────────────────────────────────────────
 function filterTable() {
@@ -25,15 +21,18 @@ function filterTable() {
 // ─── Eliminar fila ────────────────────────────────────────────────────────────
 async function deleteRow(btn) {
     const row = btn.closest("tr");
-    if (!row || !confirm("¿Eliminar este cliente?")) return;
+    if (!row || !confirm("¿Eliminar este pedido?")) return;
 
     const id = Number(row.dataset.id);
     try {
-        if (id) await eliminarCliente(id);
+        const res = await fetch(`/api/clientes/${id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Error al eliminar");
         row.remove();
         actualizarBadge(-1);
     } catch (error) {
         console.error("Error al eliminar:", error);
+        alert(error.message);
     }
 }
 
@@ -95,11 +94,55 @@ function actualizarBadge(delta) {
     badge.textContent = Math.max(0, actual + delta);
 }
 
-// ─── Render fila de cliente desde IndexedDB ───────────────────────────────────
+// ─── Ver fotos en modal ───────────────────────────────────────────────────────
+function verFotos(fotosJSON, clienteNombre) {
+    const fotos = JSON.parse(fotosJSON);
+    const modal = document.getElementById("fotoModal");
+    const body  = document.getElementById("fotoModalBody");
+    const title = document.getElementById("fotoModalTitle");
+
+    title.textContent = `Fotos — ${clienteNombre}`;
+    body.innerHTML = "";
+
+    if (fotos.length === 0) {
+        body.innerHTML = '<p style="color:#6b6b85;text-align:center">Sin fotos</p>';
+    } else {
+        fotos.forEach(function(filename) {
+            const div = document.createElement("div");
+            div.className = "foto-thumb";
+            div.innerHTML = `<img src="/api/uploads/${filename}" alt="${filename}" loading="lazy">`;
+            div.onclick = function() {
+                window.open(`/api/uploads/${filename}`, '_blank');
+            };
+            body.appendChild(div);
+        });
+    }
+
+    modal.classList.add("active");
+}
+
+function cerrarModal() {
+    document.getElementById("fotoModal").classList.remove("active");
+}
+
+// Cerrar modal con Escape o clic fuera
+document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape") cerrarModal();
+});
+document.getElementById("fotoModal").addEventListener("click", function(e) {
+    if (e.target === this) cerrarModal();
+});
+
+// ─── Render fila de pedido ────────────────────────────────────────────────────
 function renderClienteRow(cliente) {
     const tbody = document.getElementById("tableBody");
     const tr = document.createElement("tr");
     tr.dataset.id = cliente.id;
+
+    const fotos = cliente.fotos || [];
+    const fotosJSON = JSON.stringify(fotos).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+    const nombreCompleto = `${cliente.nombre} ${cliente.apellido}`;
+    const numFotos = cliente.numFotos || fotos.length || 0;
 
     tr.innerHTML = `
         <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#${String(cliente.id).padStart(4,"0")}</code></td>
@@ -107,9 +150,13 @@ function renderClienteRow(cliente) {
             <div class="client-name">${cliente.nombre} ${cliente.apellido}</div>
             <div class="client-email">${cliente.correo}</div>
         </td>
-        <td>—</td>
-        <td>—</td>
-        <td>—</td>
+        <td>
+            ${numFotos > 0
+                ? `<span class="fotos-link" onclick="verFotos('${fotosJSON}', '${nombreCompleto}')">${numFotos} foto${numFotos > 1 ? 's' : ''}</span>`
+                : '—'}
+        </td>
+        <td>${cliente.tamano || '—'}</td>
+        <td>${cliente.papel || '—'}</td>
         <td><span class="status status-pendiente">Pendiente</span></td>
         <td style="color:var(--muted);font-size:12px">${cliente.fechaRegistro}</td>
         <td>
@@ -120,16 +167,18 @@ function renderClienteRow(cliente) {
     tbody.prepend(tr);
 }
 
-// ─── Cargar clientes de IndexedDB al cargar la página ────────────────────────
+// ─── Cargar pedidos desde la API Flask al cargar la página ───────────────────
 document.addEventListener("DOMContentLoaded", async function() {
     try {
-        const clientes = await obtenerClientes();
+        const res = await fetch("/api/clientes");
+        const clientes = await res.json();
+        const tbody = document.getElementById("tableBody");
+        tbody.innerHTML = "";  // Limpiar filas anteriores
         clientes.forEach(renderClienteRow);
-        // Inicializar badge con el total real
         const badge = getBadge();
         if (badge) badge.textContent = clientes.length;
     } catch (error) {
-        console.error("Error al cargar clientes:", error);
+        console.error("Error al cargar pedidos:", error);
     }
 });
 
@@ -138,3 +187,5 @@ window.filterTable   = filterTable;
 window.deleteRow     = deleteRow;
 window.changeStatus  = changeStatus;
 window.exportCSV     = exportCSV;
+window.verFotos      = verFotos;
+window.cerrarModal   = cerrarModal;

@@ -140,10 +140,3 @@ retryButton.addEventListener("click", function() {
     procesarArchivos(archivosGlobal);
 });
 
-document.addEventListener("DOMContentLoaded", async () => {
-    console.log("DB inicializada desde main");
-
-    // 🔥 ahora sí carga el dashboard
-    await import("./dasbord_admin.js");
-});
-

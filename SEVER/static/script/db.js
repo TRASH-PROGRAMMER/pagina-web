@@ -22,16 +22,20 @@ const dbReady = new Promise((resolve, reject) => {
     };
 });
 
-// ✅ Guardar cliente
-export async function guardarCliente(datos) {
-    const db = await dbReady;
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction("clientes", "readwrite");
-        const store = transaction.objectStore("clientes");
-        const request = store.add(datos);
-        request.onsuccess = () => resolve({ ...datos, id: request.result });
-        request.onerror = (e) => reject(e.target.error);
+// ✅ Guardar cliente + fotos — usa FormData → API Flask → PostgreSQL
+export async function guardarCliente(formData) {
+    const response = await fetch("/api/clientes", {
+        method: "POST",
+        body: formData   // FormData — el navegador pone el Content-Type automáticamente
     });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.error || "Error al guardar cliente");
+    }
+
+    return data.cliente;
 }
 
 // ✅ Eliminar cliente por ID

@@ -120,76 +120,7 @@
           </tr>
         </thead>
         <tbody id="tableBody">
-          <tr>
-            <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#0024</code></td>
-            <td>
-              <div class="client-name">María González</div>
-              <div class="client-email">maria@email.com</div>
-            </td>
-            <td>52</td><td>10x15cm</td><td>Brillante</td>
-            <td><span class="status status-pendiente">Pendiente</span></td>
-            <td style="color:var(--muted);font-size:12px">23 Feb 2026</td>
-            <td>
-              <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
-              <button class="action-btn del" onclick="deleteRow(this)">✕</button>
-            </td>
-          </tr>
-          <tr>
-            <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#0023</code></td>
-            <td>
-              <div class="client-name">Carlos Mendoza</div>
-              <div class="client-email">c.mendoza@gmail.com</div>
-            </td>
-            <td>30</td><td>20x30cm</td><td>Mate</td>
-            <td><span class="status status-procesando">Procesando</span></td>
-            <td style="color:var(--muted);font-size:12px">22 Feb 2026</td>
-            <td>
-              <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
-              <button class="action-btn del" onclick="deleteRow(this)">✕</button>
-            </td>
-          </tr>
-          <tr>
-            <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#0022</code></td>
-            <td>
-              <div class="client-name">Ana Ruiz</div>
-              <div class="client-email">ana.ruiz@hotmail.com</div>
-            </td>
-            <td>80</td><td>Instax 5x8cm</td><td>Brillante</td>
-            <td><span class="status status-entregado">Entregado</span></td>
-            <td style="color:var(--muted);font-size:12px">21 Feb 2026</td>
-            <td>
-              <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
-              <button class="action-btn del" onclick="deleteRow(this)">✕</button>
-            </td>
-          </tr>
-          <tr>
-            <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#0021</code></td>
-            <td>
-              <div class="client-name">Luis Paredes</div>
-              <div class="client-email">luisp@empresa.com</div>
-            </td>
-            <td>15</td><td>Polaroid 8x8cm</td><td>Mate</td>
-            <td><span class="status status-cancelado">Cancelado</span></td>
-            <td style="color:var(--muted);font-size:12px">20 Feb 2026</td>
-            <td>
-              <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
-              <button class="action-btn del" onclick="deleteRow(this)">✕</button>
-            </td>
-          </tr>
-          <tr>
-            <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#0020</code></td>
-            <td>
-              <div class="client-name">Sofia Torres</div>
-              <div class="client-email">sofi.t@gmail.com</div>
-            </td>
-            <td>64</td><td>13x18cm</td><td>Brillante</td>
-            <td><span class="status status-pendiente">Pendiente</span></td>
-            <td style="color:var(--muted);font-size:12px">20 Feb 2026</td>
-            <td>
-              <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
-              <button class="action-btn del" onclick="deleteRow(this)">✕</button>
-            </td>
-          </tr>
+          <!-- Se llena dinámicamente desde la API -->
         </tbody>
       </table>
     </div>
@@ -246,6 +177,88 @@
 
   </div><!-- /content -->
 </div><!-- /main -->
+
+<!-- MODAL PARA VER FOTOS -->
+<div id="fotoModal" class="foto-modal">
+  <div class="foto-modal-content">
+    <div class="foto-modal-header">
+      <h3 id="fotoModalTitle">Fotos del pedido</h3>
+      <button class="foto-modal-close" onclick="cerrarModal()">&times;</button>
+    </div>
+    <div id="fotoModalBody" class="foto-grid"></div>
+  </div>
+</div>
+
+<style>
+  .foto-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.75);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .foto-modal.active { display: flex; }
+  .foto-modal-content {
+    background: #16161e;
+    border: 1px solid #2a2a3a;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 24px;
+  }
+  .foto-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .foto-modal-header h3 {
+    color: #e8e8f0;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+  }
+  .foto-modal-close {
+    background: none;
+    border: none;
+    color: #6b6b85;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: .2s;
+  }
+  .foto-modal-close:hover { background: #2a2a3a; color: #e8e8f0; }
+  .foto-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+  .foto-thumb {
+    border-radius: 8px;
+    overflow: hidden;
+    aspect-ratio: 1;
+    border: 1px solid #2a2a3a;
+    cursor: pointer;
+    transition: transform .2s, border-color .2s;
+  }
+  .foto-thumb:hover { transform: scale(1.04); border-color: #7c6cfc; }
+  .foto-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .fotos-link {
+    color: #7c6cfc;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: 13px;
+  }
+  .fotos-link:hover { color: #9b8fff; }
+</style>
 
 <script type="module" src="{{ url_for('static', filename='script/dasbord_admin.js') }}"></script>
 </body>
