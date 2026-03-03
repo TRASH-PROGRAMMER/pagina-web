@@ -1,11 +1,20 @@
 import sys
 import os
-import uuid
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from flask import Flask, render_template, request, jsonify, send_from_directory
-from werkzeug.utils import secure_filename
+# Cargar variables de entorno desde .ENV
+from dotenv import load_dotenv
+env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.ENV')
+loaded = load_dotenv(env_path)
+print(f"[DEBUG] .ENV path: {os.path.abspath(env_path)}")
+print(f"[DEBUG] .ENV loaded: {loaded}")
+print(f"[DEBUG] CLOUDINARY_API_KEY: {os.environ.get('CLOUDINARY_API_KEY', 'NOT FOUND')}")
+
+from flask import Flask, render_template, request, jsonify
 from db import Cliente, Foto, db
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
 
 # Crea la app Flask
 app = Flask(__name__)
@@ -17,12 +26,15 @@ DB_URL = os.environ.get(
 )
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Carpeta para fotos subidas
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 150 * 10 * 1024 * 1024  # 150 fotos × 10 MB
+
+# Configuración de Cloudinary
+cloudinary.config(
+    cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    api_key=os.environ.get('CLOUDINARY_API_KEY'),
+    api_secret=os.environ.get('CLOUDINARY_API_SECRET'),
+    secure=True
+)
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
@@ -41,6 +53,8 @@ with app.app_context():
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS tamano VARCHAR(200)"))
         conn.execute(db.text(
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS papel VARCHAR(50)"))
+        conn.execute(db.text(
+            "ALTER TABLE fotos ADD COLUMN IF NOT EXISTS public_id VARCHAR(255)"))
         conn.commit()
 
 @app.route('/')
@@ -90,18 +104,29 @@ def crear_clientes():
     db.session.add(nuevo_cliente)
     db.session.flush()  # Obtener el ID antes de guardar fotos
 
-    # Guardar archivos de fotos
+    # Subir fotos a Cloudinary
     fotos_guardadas = []
     for archivo in archivos:
         if archivo and archivo.filename and allowed_file(archivo.filename):
-            nombre_seguro = secure_filename(archivo.filename)
-            nombre_unico = f"{uuid.uuid4().hex[:8]}_{nombre_seguro}"
-            ruta = os.path.join(app.config['UPLOAD_FOLDER'], nombre_unico)
-            archivo.save(ruta)
+            try:
+                resultado = cloudinary.uploader.upload(
+                    archivo,
+                    folder=f"image_manager/cliente_{nuevo_cliente.id}",
+                    resource_type="image"
+                )
+                url_segura = resultado['secure_url']
+                public_id  = resultado['public_id']
 
-            foto = Foto(filename=nombre_unico, cliente_id=nuevo_cliente.id)
-            db.session.add(foto)
-            fotos_guardadas.append(nombre_unico)
+                foto = Foto(
+                    filename=url_segura,
+                    public_id=public_id,
+                    cliente_id=nuevo_cliente.id
+                )
+                db.session.add(foto)
+                fotos_guardadas.append(url_segura)
+            except Exception as e:
+                print(f"Error subiendo a Cloudinary: {e}")
+                continue
 
     db.session.commit()
 
@@ -134,7 +159,7 @@ def obtener_clientes():
         "tamano":         c.tamano or "",
         "papel":          c.papel or "",
         "numFotos":       len(c.fotos),
-        "fotos":          [f.filename for f in c.fotos]
+        "fotos":          [f.filename for f in c.fotos]   # filename = URL de Cloudinary
     } for c in clientes]), 200
 
 @app.route('/api/clientes/<int:id>', methods=['DELETE'])
@@ -142,19 +167,16 @@ def eliminar_cliente(id):
     cliente = Cliente.query.get(id)
     if not cliente:
         return jsonify({"error": "Cliente no encontrado"}), 404
-    # Eliminar archivos de fotos del disco
+    # Eliminar fotos de Cloudinary
     for foto in cliente.fotos:
-        ruta = os.path.join(app.config['UPLOAD_FOLDER'], foto.filename)
-        if os.path.exists(ruta):
-            os.remove(ruta)
+        if foto.public_id:
+            try:
+                cloudinary.uploader.destroy(foto.public_id)
+            except Exception as e:
+                print(f"Error eliminando de Cloudinary: {e}")
     db.session.delete(cliente)
     db.session.commit()
     return jsonify({"mensaje": "Cliente eliminado correctamente"}), 200
-
-
-@app.route('/api/uploads/<filename>')
-def servir_foto(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 
 if __name__ == '__main__':

@@ -107,12 +107,13 @@ function verFotos(fotosJSON, clienteNombre) {
     if (fotos.length === 0) {
         body.innerHTML = '<p style="color:#6b6b85;text-align:center">Sin fotos</p>';
     } else {
-        fotos.forEach(function(filename) {
+        fotos.forEach(function(url) {
             const div = document.createElement("div");
             div.className = "foto-thumb";
-            div.innerHTML = `<img src="/api/uploads/${filename}" alt="${filename}" loading="lazy">`;
+            // Las URLs ya son de Cloudinary (https://res.cloudinary.com/...)
+            div.innerHTML = `<img src="${url}" alt="foto" loading="lazy">`;
             div.onclick = function() {
-                window.open(`/api/uploads/${filename}`, '_blank');
+                window.open(url, '_blank');
             };
             body.appendChild(div);
         });
