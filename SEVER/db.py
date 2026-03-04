@@ -11,6 +11,7 @@ class Cliente(db.Model):
     telefono       = db.Column(db.String(20),  nullable=False)
     fecha_registro = db.Column(db.String(50),  nullable=False)
     tamano         = db.Column(db.String(200), nullable=True)
+    tamano_keys    = db.Column(db.String(200), nullable=True)
     papel          = db.Column(db.String(50),  nullable=True)
     fotos          = db.relationship('Foto', backref='cliente',
                                      cascade='all, delete-orphan', lazy=True)

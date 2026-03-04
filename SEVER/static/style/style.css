@@ -221,6 +221,95 @@ button:nth-child(4) {
 }
 
 
+/* ===== PANEL DE PRECIOS ===== */
+
+.precios-fotos {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.4s ease, opacity 0.3s ease, margin 0.3s ease;
+    margin: 0;
+}
+
+.precios-fotos.visible {
+    max-height: 600px;
+    opacity: 1;
+    margin-top: 24px;
+}
+
+.precios-fotos h3 {
+    font-size: 18px;
+    color: #333;
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.tabla-precios {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.tabla-precios thead th {
+    background: linear-gradient(90deg, #007BFF, #00c6ff);
+    color: #fff;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.03em;
+}
+
+.tabla-precios thead th:first-child {
+    border-radius: 8px 0 0 0;
+}
+
+.tabla-precios thead th:last-child {
+    border-radius: 0 8px 0 0;
+}
+
+.tabla-precios tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #eee;
+    color: #444;
+}
+
+.tabla-precios tbody tr:hover {
+    background: #f0f7ff;
+}
+
+.precio-total-col {
+    font-weight: 600;
+    color: #007BFF;
+}
+
+.tabla-precios tfoot td {
+    padding: 12px;
+    border-top: 2px solid #007BFF;
+}
+
+.total-label {
+    text-align: right;
+    font-weight: 600;
+    font-size: 15px;
+    color: #333;
+}
+
+.total-valor {
+    font-weight: 700;
+    font-size: 18px;
+    color: #007BFF;
+}
+
+.precio-nota {
+    font-size: 12px;
+    color: #888;
+    text-align: center;
+    margin-top: 10px;
+    font-style: italic;
+}
+
+
 /* ===== FOOTER ===== */
 
 footer {

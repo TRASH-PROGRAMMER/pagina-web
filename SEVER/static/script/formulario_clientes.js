@@ -88,11 +88,17 @@ form.addEventListener("submit", async function(e) {
     formData.append('telefono', telefonoInput.value.trim());
     formData.append('fechaRegistro', new Date().toLocaleString());
 
-    // Tamaños seleccionados (texto legible)
+    // Tamaños seleccionados (texto legible + claves para precios)
     const tamanosTexto = Array.from(tamanoSelect.selectedOptions)
                               .map(o => o.text)
                               .join(', ');
     formData.append('tamano', tamanosTexto);
+
+    // Claves de tamaño para cálculo de precios en el backend
+    const tamanosKeys = Array.from(tamanoSelect.selectedOptions)
+                             .map(o => o.value)
+                             .join(',');
+    formData.append('tamano_keys', tamanosKeys);
 
     // Papel
     const papel = document.querySelector('input[name="papel"]:checked').value;
@@ -116,6 +122,12 @@ form.addEventListener("submit", async function(e) {
         // Limpiar previews
         const previewContainer = document.getElementById("previewContainer");
         if (previewContainer) previewContainer.innerHTML = "";
+        // Limpiar panel de precios
+        const preciosPanel = document.getElementById("preciosFotos");
+        if (preciosPanel) {
+            preciosPanel.innerHTML = "";
+            preciosPanel.classList.remove("visible");
+        }
         btnEnviar.disabled = true;
 
     } catch (error) {

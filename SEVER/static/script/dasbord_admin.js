@@ -144,6 +144,7 @@ function renderClienteRow(cliente) {
     const fotosJSON = JSON.stringify(fotos).replace(/'/g, "\\'").replace(/"/g, "&quot;");
     const nombreCompleto = `${cliente.nombre} ${cliente.apellido}`;
     const numFotos = cliente.numFotos || fotos.length || 0;
+    const precio = cliente.precioTotal != null ? `$${Number(cliente.precioTotal).toFixed(2)}` : '—';
 
     tr.innerHTML = `
         <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#${String(cliente.id).padStart(4,"0")}</code></td>
@@ -158,6 +159,7 @@ function renderClienteRow(cliente) {
         </td>
         <td>${cliente.tamano || '—'}</td>
         <td>${cliente.papel || '—'}</td>
+        <td style="color:#22c55e;font-weight:600;font-family:'Space Mono',monospace">${precio}</td>
         <td><span class="status status-pendiente">Pendiente</span></td>
         <td style="color:var(--muted);font-size:12px">${cliente.fechaRegistro}</td>
         <td>

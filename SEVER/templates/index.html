@@ -32,16 +32,16 @@
  <button  class ="dark-mode-btn">🌓</button>
     <label for="tamaño" class="tamaños-fotos"><h2>Elije los tamaños:</h2></label>
     <select id="tamaño" name="tamano[]" multiple>
-        <option value="TAMAÑO1">Instax(5x8cm)</option>
-        <option value="TAMAÑO2">Polaroid(8x8cm)</option>
-        <option value="TAMAÑO3">10x10cm</option>
-        <option value="TAMAÑO4">10x15cm(4R)</option>
-        <option value="TAMAÑO5">13x18cm(5R)</option>
-        <option value="TAMAÑO6">15x15</option>
-        <option value="TAMAÑO7">15x21cm(6R)</option>
-        <option value="TAMAÑO8">20x20cm</option>
-        <option value="TAMAÑO9">20x25cm(8R)</option>
-        <option value="TAMAÑO10">20x30cm</option>
+        <option value="instax">Instax (5x8cm)</option>
+        <option value="polaroid">Polaroid (8x8cm)</option>
+        <option value="10x10">10x10cm</option>
+        <option value="10x15">10x15cm (4R)</option>
+        <option value="13x18">13x18cm (5R)</option>
+        <option value="15x15">15x15cm</option>
+        <option value="15x21">15x21cm (6R)</option>
+        <option value="20x20">20x20cm</option>
+        <option value="20x25">20x25cm (8R)</option>
+        <option value="20x30">20x30cm</option>
     </select>
 
     <form action="#" method="post" class="tipo_de_papel" id="formPapel">
@@ -81,7 +81,7 @@
                 <input type="submit" value="Enviar" class="enviar-button">
                 <div id= "mensajeError" class="mensaje-error"></div>
     </form>
-<div class="precios-fotos" id = "preciosFotos"></div>
+<div class="precios-fotos" id = "preciosFotos"></div> 
    
 </div>    
 
@@ -93,6 +93,7 @@
 <script type = "module" src="{{ url_for('static', filename='script/main.js') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/db.js') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/formulario_clientes.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='script/precios_fotos.js') }}"></script>
 <script src="{{ url_for('static', filename='script/dark-mode-index.js') }}"></script>
 </body>
 </html>
