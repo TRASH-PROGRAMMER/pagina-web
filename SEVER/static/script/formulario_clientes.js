@@ -77,8 +77,8 @@ form.addEventListener("submit", async function(e) {
     if (!validarFormulario()) return;
 
     btnEnviar.disabled = true;
-    errorMessage.textContent = "Subiendo fotos…";
-    errorMessage.style.color = "#007BFF";
+    errorMessage.textContent = "Subiendo fotos…⏳";
+    errorMessage.style.color = "#00ff4c";
 
     // Construir FormData
     const formData = new FormData();
@@ -122,12 +122,11 @@ form.addEventListener("submit", async function(e) {
         // Limpiar previews
         const previewContainer = document.getElementById("previewContainer");
         if (previewContainer) previewContainer.innerHTML = "";
-        // Limpiar panel de precios
-        const preciosPanel = document.getElementById("preciosFotos");
-        if (preciosPanel) {
-            preciosPanel.innerHTML = "";
-            preciosPanel.classList.remove("visible");
-        }
+        // Cerrar/resetear modal factura
+        const facturaOverlay = document.getElementById("facturaOverlay");
+        if (facturaOverlay) facturaOverlay.classList.remove("active");
+        const btnResumen = document.getElementById("btnVerResumen");
+        if (btnResumen) btnResumen.disabled = true;
         btnEnviar.disabled = true;
 
     } catch (error) {

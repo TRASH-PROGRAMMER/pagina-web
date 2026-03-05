@@ -1,79 +1,105 @@
-// ─── Calculadora de precios en tiempo real ────────────────────────────────────
-const preciosContainer = document.getElementById("preciosFotos");
-const tamanoSelect     = document.getElementById("tamaño");
-const inputImagenes    = document.getElementById("inputImagenes");
+// ─── Resumen de precios tipo factura (modal) ──────────────────────────────────
+const tamanoSelect  = document.getElementById("tamaño");
+const inputImagenes = document.getElementById("inputImagenes");
+const btnResumen    = document.getElementById("btnVerResumen");
+const overlay       = document.getElementById("facturaOverlay");
+const closeBtn      = document.getElementById("facturaClose");
+const facturaInfo   = document.getElementById("facturaInfo");
+const facturaBody   = document.getElementById("facturaBody");
 
-// Escuchar cambios en tamaño y fotos para recalcular
-tamanoSelect.addEventListener("change", calcularPrecios);
-inputImagenes.addEventListener("change", calcularPrecios);
+if (!tamanoSelect || !inputImagenes || !btnResumen || !overlay || !facturaInfo || !facturaBody) {
+    console.warn("precios_fotos.js: faltan elementos del DOM, abortando.");
+}
 
-async function calcularPrecios() {
+// Habilitar/deshabilitar botón según selección
+function checkResumenBtn() {
+    const tienesFotos  = inputImagenes && inputImagenes.files && inputImagenes.files.length > 0;
+    const tieneTamano  = tamanoSelect && tamanoSelect.selectedOptions.length > 0;
+    if (btnResumen) btnResumen.disabled = !(tienesFotos && tieneTamano);
+}
+
+if (tamanoSelect) tamanoSelect.addEventListener("change", checkResumenBtn);
+if (inputImagenes) inputImagenes.addEventListener("change", checkResumenBtn);
+
+// Abrir modal
+btnResumen.addEventListener("click", async function () {
     const seleccionados = Array.from(tamanoSelect.selectedOptions);
     const numFotos      = inputImagenes.files ? inputImagenes.files.length : 0;
+    const papelRadio    = document.querySelector('input[name="papel"]:checked');
+    const papel         = papelRadio ? papelRadio.value : "No seleccionado";
 
-    // Si no hay fotos o tamaño seleccionado, ocultar panel
-    if (seleccionados.length === 0 || numFotos === 0) {
-        preciosContainer.innerHTML = "";
-        preciosContainer.classList.remove("visible");
-        return;
-    }
+    if (seleccionados.length === 0 || numFotos === 0) return;
 
+    // Info del pedido
+    const fecha = new Date().toLocaleDateString("es-EC", {
+        day: "2-digit", month: "long", year: "numeric"
+    });
+    facturaInfo.innerHTML = `
+        <div class="factura-info-row">
+            <span>📅 Fecha</span><span>${fecha}</span>
+        </div>
+        <div class="factura-info-row">
+            <span>🖼️ Fotos</span><span>${numFotos} imagen${numFotos > 1 ? "es" : ""}</span>
+        </div>
+        <div class="factura-info-row">
+            <span>📄 Papel</span><span class="factura-papel">${papel}</span>
+        </div>
+    `;
+
+    // Calcular precios
     let filas = "";
     let totalGeneral = 0;
 
     for (const opt of seleccionados) {
-        const tamano   = opt.value;
-        const etiqueta = opt.text;
-
         try {
             const res = await fetch("/api/precios", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ tamano, cantidad: numFotos })
+                body: JSON.stringify({ tamano: opt.value, cantidad: numFotos })
             });
-
             if (!res.ok) continue;
             const data = await res.json();
-
             totalGeneral += data.total;
 
             filas += `
                 <tr>
-                    <td>${etiqueta}</td>
-                    <td>${data.cantidad}</td>
-                    <td>$${data.precio_unitario.toFixed(2)}</td>
-                    <td class="precio-total-col">$${data.total.toFixed(2)}</td>
+                    <td>${opt.text}</td>
+                    <td class="text-center">${data.cantidad}</td>
+                    <td class="text-right">$${data.precio_unitario.toFixed(2)}</td>
+                    <td class="text-right subtotal-col">$${data.total.toFixed(2)}</td>
                 </tr>
             `;
         } catch (err) {
-            console.error("Error obteniendo precio:", err);
+            console.error("Error precio:", err);
         }
     }
 
-    if (filas) {
-        preciosContainer.innerHTML = `
-            <h3>💰 Resumen de precios</h3>
-            <table class="tabla-precios">
-                <thead>
-                    <tr>
-                        <th>Tamaño</th>
-                        <th>Cantidad</th>
-                        <th>Precio c/u</th>
-                        <th>Subtotal</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${filas}
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <td colspan="3" class="total-label">Total estimado</td>
-                        <td class="total-valor">$${totalGeneral.toFixed(2)}</td>
-                    </tr>
-                </tfoot>
-            </table>
-            <p class="precio-nota">* Instax y Polaroid: consultar precio. Los descuentos se aplican automáticamente según cantidad.</p>
-        `;
-        preciosContainer.classList.add("visible");
-    }
-}
+    facturaBody.innerHTML = `
+        <table class="factura-tabla">
+            <thead>
+                <tr>
+                    <th>Tamaño</th>
+                    <th class="text-center">Cant.</th>
+                    <th class="text-right">P/U</th>
+                    <th class="text-right">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>${filas}</tbody>
+        </table>
+        <div class="factura-total">
+            <span>TOTAL ESTIMADO</span>
+            <span class="factura-total-valor">$${totalGeneral.toFixed(2)}</span>
+        </div>
+    `;
+
+    overlay.classList.add("active");
+});
+
+// Cerrar modal
+closeBtn.addEventListener("click", () => overlay.classList.remove("active"));
+overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) overlay.classList.remove("active");
+});
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") overlay.classList.remove("active");
+});
