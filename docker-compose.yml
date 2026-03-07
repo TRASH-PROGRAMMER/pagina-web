@@ -17,5 +17,19 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build: .
+    container_name: ImageManager-App
+    restart: always
+    ports:
+      - "5000:5000"
+    env_file:
+      - .ENV
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:

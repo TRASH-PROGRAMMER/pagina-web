@@ -292,7 +292,7 @@ def obtener_precios():
 
     precio_unitario = PRECIOS[tamano]["precio"]
 
-    # 🔥 Descuentos
+    #  Descuentos
     if tamano == "10x15":
         if 15 <= cantidad <= 24:
             precio_unitario = 0.62
