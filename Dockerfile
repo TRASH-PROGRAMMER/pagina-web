@@ -16,7 +16,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar el código del servidor
 COPY SEVER/ ./SEVER/
-COPY .ENV .ENV
 
 # Exponer puerto (Flask usa 5000 por defecto)
 EXPOSE 5000

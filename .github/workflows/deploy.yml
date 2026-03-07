@@ -1,0 +1,88 @@
+name: Deploy to Server (sin Docker)
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy project files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          source: "requirements.txt,SEVER/"
+          target: /home/${{ secrets.SERVER_USER }}/pagina-web
+          overwrite: true
+
+      - name: Setup and deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            set -e
+            APP_DIR="/home/${{ secrets.SERVER_USER }}/pagina-web"
+            cd "$APP_DIR"
+
+            # ── 1. Instalar PostgreSQL si no existe ──
+            if ! command -v psql &> /dev/null; then
+              sudo apt-get update
+              sudo apt-get install -y postgresql postgresql-contrib
+            fi
+
+            # Asegurar que PostgreSQL esté corriendo
+            sudo service postgresql start
+
+            # Crear usuario y base de datos si no existen
+            sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='${{ secrets.POSTGRES_USER }}'" | grep -q 1 || \
+              sudo -u postgres psql -c "CREATE USER ${{ secrets.POSTGRES_USER }} WITH PASSWORD '${{ secrets.POSTGRES_PASSWORD }}';"
+            sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='${{ secrets.POSTGRES_DB }}'" | grep -q 1 || \
+              sudo -u postgres psql -c "CREATE DATABASE ${{ secrets.POSTGRES_DB }} OWNER ${{ secrets.POSTGRES_USER }};"
+
+            # ── 2. Instalar Python y dependencias ──
+            if ! command -v python3 &> /dev/null; then
+              sudo apt-get update
+              sudo apt-get install -y python3 python3-pip python3-venv
+            fi
+
+            # Crear/actualizar virtualenv
+            python3 -m venv "$APP_DIR/venv"
+            source "$APP_DIR/venv/bin/activate"
+            pip install --upgrade pip
+            pip install -r requirements.txt
+
+            # ── 3. Crear .ENV con secretos ──
+            cat > "$APP_DIR/.ENV" <<EOF
+            CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
+            CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}
+            CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
+            DATABASE_URL=postgresql+psycopg://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.POSTGRES_DB }}
+            EOF
+
+            # Quitar espacios en blanco al inicio de cada línea del .ENV
+            sed -i 's/^[[:space:]]*//' "$APP_DIR/.ENV"
+
+            # ── 4. Detener instancia anterior si existe ──
+            if [ -f "$APP_DIR/flask.pid" ]; then
+              kill $(cat "$APP_DIR/flask.pid") 2>/dev/null || true
+              rm -f "$APP_DIR/flask.pid"
+            fi
+
+            # ── 5. Iniciar Flask en background ──
+            cd "$APP_DIR"
+            source "$APP_DIR/venv/bin/activate"
+            nohup python3 SEVER/app.py > "$APP_DIR/flask.log" 2>&1 &
+            echo $! > "$APP_DIR/flask.pid"
+
+            echo "Deploy completado. Flask corriendo en PID $(cat $APP_DIR/flask.pid)"
