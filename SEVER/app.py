@@ -4,11 +4,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Cargar variables de entorno desde .ENV
 from dotenv import load_dotenv
-env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.ENV')
-loaded = load_dotenv(env_path)
-print(f"[DEBUG] .ENV path: {os.path.abspath(env_path)}")
-print(f"[DEBUG] .ENV loaded: {loaded}")
-print(f"[DEBUG] CLOUDINARY_API_KEY: {os.environ.get('CLOUDINARY_API_KEY', 'NOT FOUND')}")
+for env_candidate in [
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.ENV'),
+    os.path.join(os.getcwd(), '.ENV'),
+    '.ENV',
+]:
+    if os.path.isfile(env_candidate):
+        load_dotenv(env_candidate)
+        break
 
 from flask import Flask, render_template, request, jsonify
 from db import Cliente, Foto, db
@@ -171,7 +174,7 @@ def obtener_clientes():
 
 @app.route('/api/clientes/<int:id>', methods=['DELETE'])
 def eliminar_cliente(id):
-    cliente = Cliente.query.get(id)
+    cliente = db.session.get(Cliente, id)
     if not cliente:
         return jsonify({"error": "Cliente no encontrado"}), 404
     # Eliminar fotos de Cloudinary
