@@ -192,3 +192,166 @@ window.changeStatus  = changeStatus;
 window.exportCSV     = exportCSV;
 window.verFotos      = verFotos;
 window.cerrarModal   = cerrarModal;
+
+// ─── Chart.js: Pedidos últimos 7 días (tiempo real) ──────────────────────────
+let pedidosChart = null;
+
+async function cargarGraficoPedidos() {
+    try {
+        const res = await fetch('/api/pedidos-semana');
+        const data = await res.json();
+
+        const ctx = document.getElementById('pedidosChart');
+        if (!ctx) return;
+
+        const chartData = {
+            labels: data.labels,
+            datasets: [{
+                label: 'Pedidos',
+                data: data.valores,
+                backgroundColor: 'rgba(124, 108, 252, 0.3)',
+                borderColor: '#7c6cfc',
+                borderWidth: 2,
+                borderRadius: 6,
+                hoverBackgroundColor: 'rgba(124, 108, 252, 0.6)',
+            }]
+        };
+
+        const options = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: '#6b6b85', stepSize: 1 },
+                    grid: { color: 'rgba(107,107,133,0.15)' },
+                },
+                x: {
+                    ticks: { color: '#6b6b85' },
+                    grid: { display: false },
+                }
+            }
+        };
+
+        if (pedidosChart) {
+            pedidosChart.data = chartData;
+            pedidosChart.update();
+        } else {
+            pedidosChart = new Chart(ctx, {
+                type: 'bar',
+                data: chartData,
+                options: options
+            });
+        }
+    } catch (err) {
+        console.error('Error cargando gráfico:', err);
+    }
+}
+
+// Cargar al inicio y actualizar cada 30 segundos
+document.addEventListener('DOMContentLoaded', function() {
+    cargarGraficoPedidos();
+    setInterval(cargarGraficoPedidos, 30000);
+});
+
+// ─── Estadísticas en tiempo real ──────────────────────────────────────────────
+async function cargarEstadisticas() {
+    try {
+        const res = await fetch('/api/estadisticas');
+        const d = await res.json();
+
+        const fmt = n => n.toLocaleString('es-MX');
+
+        document.getElementById('statPedidosHoy').textContent = fmt(d.pedidos_hoy);
+        const flecha = d.cambio_pct >= 0 ? '↑' : '↓';
+        document.getElementById('statCambioPct').textContent = `${flecha} ${Math.abs(d.cambio_pct)}% vs ayer`;
+
+        document.getElementById('statTotalFotos').textContent = fmt(d.total_fotos);
+        document.getElementById('statFotosSemana').textContent = `↑ ${fmt(d.fotos_semana)} esta semana`;
+
+        document.getElementById('statClientesActivos').textContent = fmt(d.clientes_activos);
+        document.getElementById('statNuevosHoy').textContent = `${d.nuevos_hoy} nuevo${d.nuevos_hoy !== 1 ? 's' : ''} hoy`;
+
+        document.getElementById('statPendientes').textContent = fmt(d.pendientes);
+    } catch (err) {
+        console.error('Error cargando estadísticas:', err);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    cargarEstadisticas();
+    setInterval(cargarEstadisticas, 30000);
+});
+
+// ─── Últimas subidas (tiempo real) ────────────────────────────────────────────
+function tiempoRelativo(fechaStr) {
+    try {
+        const partes = fechaStr.split(',');
+        const [d, m, y] = partes[0].trim().split('/');
+        const hora = partes[1] ? partes[1].trim() : '00:00:00';
+        const fecha = new Date(+y, +m - 1, +d, ...hora.split(':').map(Number));
+        const diff = Date.now() - fecha.getTime();
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return 'ahora';
+        if (mins < 60) return `hace ${mins} min`;
+        const horas = Math.floor(mins / 60);
+        if (horas < 24) return `hace ${horas}h`;
+        const dias = Math.floor(horas / 24);
+        return `hace ${dias} día${dias > 1 ? 's' : ''}`;
+    } catch {
+        return fechaStr;
+    }
+}
+
+const iconos = ['📷', '🌄', '🎞️', '🖼️', '📸'];
+
+async function cargarUltimasSubidas() {
+    try {
+        const res = await fetch('/api/ultimas-subidas');
+        const subidas = await res.json();
+        const container = document.getElementById('uploadList');
+        if (!container) return;
+
+        if (subidas.length === 0) {
+            container.innerHTML = '<p style="color:var(--muted);text-align:center;font-size:13px">Sin subidas recientes</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        subidas.forEach(function(s, i) {
+            const icono = iconos[i % iconos.length];
+            const div = document.createElement('div');
+            div.className = 'upload-item';
+            div.innerHTML = `
+                <div class="upload-thumb">${icono}</div>
+                <div class="upload-info">
+                    <div class="upload-name">${s.numFotos} foto${s.numFotos > 1 ? 's' : ''}</div>
+                    <div class="upload-meta">${s.cliente} · ${tiempoRelativo(s.fecha)}</div>
+                </div>
+            `;
+            div.style.cursor = 'pointer';
+            div.onclick = function() { window.open(s.url, '_blank'); };
+            container.appendChild(div);
+        });
+    } catch (err) {
+        console.error('Error cargando subidas:', err);
+    }
+}
+
+// Cargar al inicio y actualizar cada 30 segundos
+document.addEventListener('DOMContentLoaded', function() {
+    cargarUltimasSubidas();
+    setInterval(cargarUltimasSubidas, 30000);
+});
+
+// Actualizar gráfico y subidas cuando llega un nuevo pedido por BroadcastChannel
+clienteChannel.addEventListener('message', function(event) {
+    if (event.data?.tipo === 'nuevo_cliente') {
+        cargarGraficoPedidos();
+        cargarUltimasSubidas();
+        cargarEstadisticas();
+    }
+});

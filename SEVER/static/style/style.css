@@ -888,4 +888,23 @@ footer {
     font-style: italic;
     border-top: 1px solid #eee;
 }
+.dark-mode .instrucciones-pedido {
+    background: linear-gradient(135deg, #1a1a25, #22223a);
+    border-left: 4px solid #007BFF;
+    border-radius: 12px;
+    padding: 20px 24px;
+    width: 95%;
+    max-width: 1000px;
+    margin: 20px auto;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
 
+.dark-mode .instrucciones-pedido h3 {
+    color: #66b3ff;
+}
+
+.dark-mode .paso {
+    background: #2a2a3a;
+    color: #e8e8f0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}

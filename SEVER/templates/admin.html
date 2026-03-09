@@ -7,6 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style/admin.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style/resposive_admin.css') }}">
+  
 </head>
 <body>
 
@@ -74,25 +75,25 @@
       <div class="stat-card">
         <div class="stat-icon">📦</div>
         <div class="stat-label">Pedidos hoy</div>
-        <div class="stat-value" style="color:var(--accent)">24</div>
-        <div class="stat-sub">↑ 12% vs ayer</div>
+        <div class="stat-value" id="statPedidosHoy" style="color:var(--accent)">—</div>
+        <div class="stat-sub" id="statCambioPct">Cargando...</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon">🖼️</div>
         <div class="stat-label">Imágenes cargadas</div>
-        <div class="stat-value" style="color:var(--accent2)">1,284</div>
-        <div class="stat-sub">↑ 38 esta semana</div>
+        <div class="stat-value" id="statTotalFotos" style="color:var(--accent2)">—</div>
+        <div class="stat-sub" id="statFotosSemana">Cargando...</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon">👥</div>
         <div class="stat-label">Clientes activos</div>
-        <div class="stat-value" style="color:var(--accent3)">87</div>
-        <div class="stat-sub">3 nuevos hoy</div>
+        <div class="stat-value" id="statClientesActivos" style="color:var(--accent3)">—</div>
+        <div class="stat-sub" id="statNuevosHoy">Cargando...</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon">⏳</div>
         <div class="stat-label">Pendientes</div>
-        <div class="stat-value" style="color:var(--warning)">4</div>
+        <div class="stat-value" id="statPendientes" style="color:var(--warning)">—</div>
         <div class="stat-sub">Requieren acción</div>
       </div>
     </div>
@@ -132,14 +133,8 @@
         <div class="section-header">
           <div class="section-title">Pedidos — últimos 7 días</div>
         </div>
-        <div class="chart-bars">
-          <div class="bar-wrap"><div class="bar" style="height:40%"></div><div class="bar-label">L</div></div>
-          <div class="bar-wrap"><div class="bar" style="height:60%"></div><div class="bar-label">M</div></div>
-          <div class="bar-wrap"><div class="bar" style="height:35%"></div><div class="bar-label">X</div></div>
-          <div class="bar-wrap"><div class="bar" style="height:80%"></div><div class="bar-label">J</div></div>
-          <div class="bar-wrap"><div class="bar" style="height:55%"></div><div class="bar-label">V</div></div>
-          <div class="bar-wrap"><div class="bar" style="height:90%"></div><div class="bar-label">S</div></div>
-          <div class="bar-wrap"><div class="bar" style="height:70%"></div><div class="bar-label">D</div></div>
+        <div style="position:relative;height:220px;">
+          <canvas id="pedidosChart"></canvas>
         </div>
       </div>
 
@@ -147,31 +142,8 @@
         <div class="section-header">
           <div class="section-title">Últimas subidas</div>
         </div>
-        <div class="upload-list">
-          <div class="upload-item">
-            <div class="upload-thumb">🌄</div>
-            <div class="upload-info">
-              <div class="upload-name">familia_vacaciones_52imgs.zip</div>
-              <div class="upload-meta">María González · hace 10 min</div>
-            </div>
-            <div class="upload-size">124 MB</div>
-          </div>
-          <div class="upload-item">
-            <div class="upload-thumb">🎞️</div>
-            <div class="upload-info">
-              <div class="upload-name">retrato_sesion_30imgs.zip</div>
-              <div class="upload-meta">Carlos Mendoza · hace 2h</div>
-            </div>
-            <div class="upload-size">87 MB</div>
-          </div>
-          <div class="upload-item">
-            <div class="upload-thumb">📷</div>
-            <div class="upload-info">
-              <div class="upload-name">evento_cumple_80imgs.zip</div>
-              <div class="upload-meta">Ana Ruiz · hace 1 día</div>
-            </div>
-            <div class="upload-size">210 MB</div>
-          </div>
+        <div class="upload-list" id="uploadList">
+          <p style="color:var(--muted);text-align:center;font-size:13px">Cargando...</p>
         </div>
       </div>
     </div>
@@ -260,7 +232,7 @@
   }
   .fotos-link:hover { color: #9b8fff; }
 </style>
-
-<script type="module" src="{{ url_for('static', filename='script/dasbord_admin.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='script/dasbord_admin.js') }}"></script>
 </body>
 </html>

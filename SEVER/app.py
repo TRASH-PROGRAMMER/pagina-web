@@ -329,6 +329,96 @@ def obtener_precios():
         "total": total
     }), 200
 
+@app.route('/api/pedidos-semana', methods=['GET'])
+def pedidos_semana():
+    from datetime import datetime, timedelta
+    hoy = datetime.now().date()
+    dias = []
+    nombres_dias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+    for i in range(6, -1, -1):
+        dia = hoy - timedelta(days=i)
+        dias.append(dia)
+    clientes = Cliente.query.all()
+    conteo = {d: 0 for d in dias}
+    for c in clientes:
+        try:
+            fecha = datetime.strptime(c.fecha_registro.split(',')[0].strip(), '%d/%m/%Y').date()
+        except (ValueError, AttributeError):
+            try:
+                fecha = datetime.strptime(c.fecha_registro.split(',')[0].strip(), '%m/%d/%Y').date()
+            except (ValueError, AttributeError):
+                continue
+        if fecha in conteo:
+            conteo[fecha] += 1
+    labels = [nombres_dias[d.weekday()] for d in dias]
+    valores = [conteo[d] for d in dias]
+    return jsonify({"labels": labels, "valores": valores}), 200
+
+@app.route('/api/estadisticas', methods=['GET'])
+def estadisticas():
+    from datetime import datetime, timedelta
+    hoy = datetime.now().date()
+    ayer = hoy - timedelta(days=1)
+    inicio_semana = hoy - timedelta(days=7)
+
+    clientes = Cliente.query.all()
+    total_clientes = len(clientes)
+    total_fotos = Foto.query.count()
+
+    pedidos_hoy = 0
+    pedidos_ayer = 0
+    nuevos_hoy = 0
+    fotos_semana = 0
+
+    for c in clientes:
+        try:
+            fecha = datetime.strptime(c.fecha_registro.split(',')[0].strip(), '%d/%m/%Y').date()
+        except (ValueError, AttributeError):
+            try:
+                fecha = datetime.strptime(c.fecha_registro.split(',')[0].strip(), '%m/%d/%Y').date()
+            except (ValueError, AttributeError):
+                continue
+        if fecha == hoy:
+            pedidos_hoy += 1
+            nuevos_hoy += 1
+        elif fecha == ayer:
+            pedidos_ayer += 1
+        if fecha >= inicio_semana:
+            fotos_semana += sum(1 for _ in c.fotos)
+
+    if pedidos_ayer > 0:
+        cambio_pct = round(((pedidos_hoy - pedidos_ayer) / pedidos_ayer) * 100)
+    else:
+        cambio_pct = 100 if pedidos_hoy > 0 else 0
+
+    return jsonify({
+        "pedidos_hoy": pedidos_hoy,
+        "cambio_pct": cambio_pct,
+        "total_fotos": total_fotos,
+        "fotos_semana": fotos_semana,
+        "clientes_activos": total_clientes,
+        "nuevos_hoy": nuevos_hoy,
+        "pendientes": pedidos_hoy,
+    }), 200
+
+@app.route('/api/ultimas-subidas', methods=['GET'])
+def ultimas_subidas():
+    from datetime import datetime
+    fotos = (Foto.query
+             .order_by(Foto.id.desc())
+             .limit(10)
+             .all())
+    resultado = []
+    for f in fotos:
+        cliente = f.cliente
+        resultado.append({
+            "url": f.filename,
+            "cliente": f"{cliente.nombre} {cliente.apellido}",
+            "fecha": cliente.fecha_registro,
+            "numFotos": len(cliente.fotos),
+        })
+    return jsonify(resultado), 200
+
    
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
