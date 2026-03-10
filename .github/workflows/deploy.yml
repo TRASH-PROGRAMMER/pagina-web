@@ -1,4 +1,4 @@
-name: Deploy to Server (sin Docker)
+name: Deploy to Server (Docker)
 
 on:
   push:
@@ -19,11 +19,11 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT }}
-          source: "requirements.txt,SEVER/"
+          source: "requirements.txt,SEVER/,Dockerfile,docker-compose.yml,.dockerignore"
           target: /home/${{ secrets.SERVER_USER }}/pagina-web
           overwrite: true
 
-      - name: Setup and deploy via SSH
+      - name: Deploy via SSH with Docker
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -35,33 +35,19 @@ jobs:
             APP_DIR="/home/${{ secrets.SERVER_USER }}/pagina-web"
             cd "$APP_DIR"
 
-            # ── 1. Crear virtualenv e instalar dependencias ──
-            python3 -m venv "$APP_DIR/venv"
-            source "$APP_DIR/venv/bin/activate"
-            pip install --upgrade pip
-            pip install -r requirements.txt
-
-            # ── 2. Crear .ENV con secretos ──
+            # ── 1. Crear .ENV con secretos ──
             cat > "$APP_DIR/.ENV" <<EOF
             CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
             CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}
             CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
-            DATABASE_URL=${{ secrets.DATABASE_URL }}
             EOF
 
-            # Quitar espacios en blanco al inicio de cada línea del .ENV
+            # Quitar espacios en blanco al inicio de cada línea
             sed -i 's/^[[:space:]]*//' "$APP_DIR/.ENV"
 
-            # ── 3. Detener instancia anterior si existe ──
-            if [ -f "$APP_DIR/flask.pid" ]; then
-              kill $(cat "$APP_DIR/flask.pid") 2>/dev/null || true
-              rm -f "$APP_DIR/flask.pid"
-            fi
+            # ── 2. Build y deploy con Docker Compose ──
+            docker compose down || true
+            docker compose up -d --build
 
-            # ── 4. Iniciar Flask en background ──
-            cd "$APP_DIR"
-            source "$APP_DIR/venv/bin/activate"
-            nohup python3 SEVER/app.py > "$APP_DIR/flask.log" 2>&1 &
-            echo $! > "$APP_DIR/flask.pid"
-
-            echo "Deploy completado. Flask corriendo en PID $(cat $APP_DIR/flask.pid)"
+            echo "Deploy completado. Contenedores activos:"
+            docker compose ps

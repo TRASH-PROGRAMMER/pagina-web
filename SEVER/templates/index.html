@@ -3,119 +3,146 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>image Manager</title>
+<meta name="description" content="Image Manager — sube, organiza e imprime tus fotos en distintos tamaños y papeles fotográficos.">
+<title>Image Manager — Carga e impresión de fotos</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style/style.css') }}" />
 <link rel="stylesheet" href="{{ url_for('static', filename='style/reponsive_index.css') }}" />
 </head>
 <body>
-  <header class="container">
+<!-- Skip-link para navegación por teclado (eficiencia) -->
+<a href="#main-content" class="skip-link">Ir al contenido principal</a>
+  <header class="container" role="banner">
 <div>
-    <h1 class="titulo"><b>Image Manager </b></h1>
-    <p class=" text1">CARGA DE ARCHIVOS FOTOGRÁFICOS EN SEGUNDOS EN PNG ,JPG ,gif</p>
+    <h1 class="titulo"><b>Image Manager</b></h1>
+    <p class="text1">Carga de archivos fotográficos en segundos en PNG, JPG, GIF</p>
     <h2>Subir hasta 150 imágenes en segundos</h2>
-    <input type="file" id="inputImagenes" accept="image/*" multiple>
+    <label for="inputImagenes" class="sr-only">Seleccionar imágenes (PNG, JPG o GIF, máx. 150 archivos de 10 MB c/u)</label>
+    <input type="file" id="inputImagenes" accept="image/png,image/jpeg,image/gif" multiple
+           aria-describedby="inputImagenesHelp">
+    <p id="inputImagenesHelp" class="campo-ayuda">Formatos: PNG, JPG, GIF — Máximo 150 imágenes, 10 MB por archivo.</p>
 </div>
-<div class="preview-container" id="previewContainer"></div>
+<div class="preview-container" id="previewContainer" aria-live="polite" aria-label="Vista previa de imágenes cargadas"></div>
     <div class="progress-container" id="progressContainer">
         <div class="progress-track">
-            <div class="progress-bar" id="progressBar">0%</div>
+            <div class="progress-bar" id="progressBar"
+                 role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
+                 aria-label="Progreso de carga de imágenes">0%</div>
         </div>
         <div class="progress-buttons">
-            <button id="cancelButton">Cancelar</button>
-            <button id="retryButton">Reintentar</button>
+            <button id="cancelButton" aria-label="Cancelar la carga de imágenes">Cancelar</button>
+            <button id="retryButton" aria-label="Reintentar la carga de imágenes">Reintentar</button>
         </div>
-        <div id="errorMessage" class="error-message"></div>
-        <div id="successMessage" class="success-message"></div> 
+        <div id="errorMessage" class="error-message" role="alert" aria-live="assertive"></div>
+        <div id="successMessage" class="success-message" role="status" aria-live="polite"></div>
     </div>
 </header>
 
-<div class="instrucciones-pedido">
+<nav class="instrucciones-pedido" aria-label="Pasos del pedido">
   <h3>📋 ¿Cómo hacer tu pedido?</h3>
-  <div class="pasos">
-    <div class="paso"><span class="paso-num">1</span> Sube tus fotos (PNG, JPG o GIF)</div>
-    <div class="paso"><span class="paso-num">2</span> Elige los tamaños de impresión</div>
-    <div class="paso"><span class="paso-num">3</span> Selecciona el tipo de papel</div>
-    <div class="paso"><span class="paso-num">4</span> Completa tus datos personales</div>
-    <div class="paso"><span class="paso-num">5</span> Presiona <strong>Enviar</strong> y revisa tu resumen</div>
-  </div>
-</div>
+  <ol class="pasos" role="list">
+    <li class="paso"><span class="paso-num" aria-hidden="true">1</span> Sube tus fotos (PNG, JPG o GIF)</li>
+    <li class="paso"><span class="paso-num" aria-hidden="true">2</span> Elige los tamaños de impresión</li>
+    <li class="paso"><span class="paso-num" aria-hidden="true">3</span> Selecciona el tipo de papel</li>
+    <li class="paso"><span class="paso-num" aria-hidden="true">4</span> Completa tus datos personales</li>
+    <li class="paso"><span class="paso-num" aria-hidden="true">5</span> Presiona <strong>Enviar</strong> y revisa tu resumen</li>
+  </ol>
+</nav>
 
-<main>
- <button  class ="dark-mode-btn">🌓</button>
-    <label for="tamaño" class="tamaños-fotos"><h2>Elije los tamaños:</h2></label>
-    <select id="tamaño" name="tamano[]" multiple>
-        <option value="instax">Instax (5x8cm)</option>
-        <option value="polaroid">Polaroid (8x8cm)</option>
-        <option value="10x10">10x10cm</option>
-        <option value="10x15">10x15cm (4R)</option>
-        <option value="13x18">13x18cm (5R)</option>
-        <option value="15x15">15x15cm</option>
-        <option value="15x21">15x21cm (6R)</option>
-        <option value="20x20">20x20cm</option>
-        <option value="20x25">20x25cm (8R)</option>
-        <option value="20x30">20x30cm</option>
-    </select>
+<main id="main-content">
+ <button class="dark-mode-btn" aria-label="Alternar modo oscuro">🌓</button>
 
-    <form action="#" method="post" class="tipo_de_papel" id="formPapel">
+    <fieldset class="fieldset-tamanos">
+        <legend><h2>Elige los tamaños:</h2></legend>
+        <label for="tamaño" class="sr-only">Tamaños de impresión</label>
+        <select id="tamaño" name="tamano[]" multiple aria-describedby="tamanoHelp" required>
+            <option value="instax">Instax (5x8cm)</option>
+            <option value="polaroid">Polaroid (8x8cm)</option>
+            <option value="10x10">10x10cm</option>
+            <option value="10x15">10x15cm (4R)</option>
+            <option value="13x18">13x18cm (5R)</option>
+            <option value="15x15">15x15cm</option>
+            <option value="15x21">15x21cm (6R)</option>
+            <option value="20x20">20x20cm</option>
+            <option value="20x25">20x25cm (8R)</option>
+            <option value="20x30">20x30cm</option>
+        </select>
+        <p id="tamanoHelp" class="campo-ayuda">Mantén Ctrl (o Cmd) presionado para seleccionar varios tamaños.</p>
+    </fieldset>
 
-        <h2 class="text-tipo-papel">Elige el tipo de papel:</h2>
-    
-        <div class="opciones-papel">
-            <input type="radio" id="papel1" name="papel" value="Brillante">
+    <fieldset class="fieldset-papel">
+        <legend><h2 class="text-tipo-papel">Elige el tipo de papel:</h2></legend>
+        <div class="opciones-papel" role="radiogroup" aria-label="Tipo de papel fotográfico">
+            <input type="radio" id="papel1" name="papel" value="Brillante" required>
             <label for="papel1">Papel Fotográfico Brillante</label>
-    
+
             <input type="radio" id="papel2" name="papel" value="Mate">
             <label for="papel2">Papel Fotográfico Mate</label>
         </div>
-    
-    </form>
-    </main>
+    </fieldset>
+</main>
 
 <div class="container-datos">
-    <form action ="#" method="post" class = "formulario_datos_personales " id="formDatos" > 
-        <h2>Datos Personales </h2>
-        <label for="nombre" class = "nombre-text">
-            <h2>Nombres:</h2>
-        </label>  
-            <input type="text" id="nombre" name="nombre" placeholder="nombres">
-        <label for="apellido" class = "apellido-text">
-            <h2>Apellidos:</h2>
-        </label>
-            <input type="text" id="apellido" name="apellido" placeholder="apellidos">
-        <label for="correo" class = "correo-text">
-            <h2> Correo:</h2>
-        </label>
-            <input type="email" id="correo" name="correo" placeholder="correo">
-        <label for="telefono" class = "telefono-text">
-                <h2>Telefono:</h2> 
-        </label>
-        <input type="tel" id="telefono" name="telefono" placeholder="telefono">
-                <input type="submit" value="Enviar" class="enviar-button">
-                <div id= "mensajeError" class="mensaje-error"></div>
+    <form action="#" method="post" class="formulario_datos_personales" id="formDatos" novalidate>
+        <fieldset>
+            <legend><h2>Datos Personales</h2></legend>
+
+            <label for="nombre">Nombres:</label>
+            <input type="text" id="nombre" name="nombre" placeholder="Ej: Juan Carlos"
+                   autocomplete="given-name" required minlength="2"
+                   pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,}$"
+                   aria-describedby="nombreHelp">
+            <p id="nombreHelp" class="campo-ayuda">Solo letras, mínimo 2 caracteres.</p>
+
+            <label for="apellido">Apellidos:</label>
+            <input type="text" id="apellido" name="apellido" placeholder="Ej: Pérez López"
+                   autocomplete="family-name" required minlength="2"
+                   pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,}$"
+                   aria-describedby="apellidoHelp">
+            <p id="apellidoHelp" class="campo-ayuda">Solo letras, mínimo 2 caracteres.</p>
+
+            <label for="correo">Correo electrónico:</label>
+            <input type="email" id="correo" name="correo" placeholder="Ej: correo@ejemplo.com"
+                   autocomplete="email" required
+                   aria-describedby="correoHelp">
+            <p id="correoHelp" class="campo-ayuda">Formato válido: usuario@dominio.com</p>
+
+            <label for="telefono">Teléfono:</label>
+            <input type="tel" id="telefono" name="telefono" placeholder="Ej: 0991234567"
+                   autocomplete="tel" required minlength="7" maxlength="15"
+                   pattern="^\d{7,15}$"
+                   aria-describedby="telefonoHelp">
+            <p id="telefonoHelp" class="campo-ayuda">Entre 7 y 15 dígitos numéricos.</p>
+
+            <input type="submit" value="Enviar pedido" class="enviar-button"
+                   aria-label="Enviar pedido con fotos y datos personales">
+            <div id="mensajeError" class="mensaje-error" role="alert" aria-live="assertive"></div>
+        </fieldset>
     </form>
-    <button class="ver-resumen-btn" id="btnVerResumen" disabled>🧾 Ver resumen de precios</button>
+    <button class="ver-resumen-btn" id="btnVerResumen" disabled
+            aria-label="Ver resumen de precios del pedido">🧾 Ver resumen de precios</button>
 </div>
 
 <!-- MODAL FACTURA -->
-<div class="factura-overlay" id="facturaOverlay">
+<div class="factura-overlay" id="facturaOverlay" role="dialog" aria-modal="true" aria-labelledby="facturaTitle">
   <div class="factura-modal">
     <div class="factura-header">
       <div class="factura-logo">🖼️ Image Manager</div>
-      <div class="factura-title">Resumen de Pedido</div>
-      <button class="factura-close" id="facturaClose">&times;</button>
+      <div class="factura-title" id="facturaTitle">Resumen de Pedido</div>
+      <button class="factura-close" id="facturaClose" aria-label="Cerrar resumen de pedido">&times;</button>
     </div>
     <div class="factura-info" id="facturaInfo"></div>
-    <div class="factura-body" id="facturaBody"></div>
+    <div class="factura-body" id="facturaBody" aria-live="polite"></div>
     <div class="factura-footer-note">
       * Instax y Polaroid: precio a consultar. Descuentos aplicados según cantidad.
     </div>
   </div>
 </div>
 
-<footer>&copy; 2026 Todos los derechos reservados
-    <a class ="direccion" href="https://www.google.com/maps/place/Manta+Color/data=!4m2!3m1!1s0x0:0x91e1a40e9dd4f55b?sa=X&ved=1t:2428&ictx=111">Dirección: C. 13, Manta
-
-    </a>
+<footer role="contentinfo">
+    <p>&copy; 2026 Todos los derechos reservados</p>
+    <a class="direccion" href="https://www.google.com/maps/place/Manta+Color/data=!4m2!3m1!1s0x0:0x91e1a40e9dd4f55b?sa=X&ved=1t:2428&ictx=111"
+       target="_blank" rel="noopener noreferrer"
+       aria-label="Ver ubicación de Manta Color en Google Maps">📍 Dirección: C. 13, Manta</a>
 </footer>
 <script type = "module" src="{{ url_for('static', filename='script/main.js') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/db.js') }}"></script>

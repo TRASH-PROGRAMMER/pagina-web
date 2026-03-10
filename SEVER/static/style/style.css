@@ -14,6 +14,67 @@ body {
     flex-direction: column;
 }
 
+/* ===== ACCESIBILIDAD (ISO 9241-11) ===== */
+
+.skip-link {
+    position: absolute;
+    top: -100%;
+    left: 0;
+    background: #007BFF;
+    color: #fff;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 10000;
+    border-radius: 0 0 8px 0;
+    transition: top 0.2s;
+}
+
+.skip-link:focus {
+    top: 0;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.campo-ayuda {
+    font-size: 12px;
+    color: #999;
+    margin: 4px 0 0;
+    padding-left: 2px;
+    line-height: 1.4;
+    font-style: italic;
+}
+
+.fieldset-tamanos,
+.fieldset-papel {
+    border: none;
+    padding: 0;
+    margin: 24px auto;
+    text-align: center;
+}
+
+.fieldset-tamanos legend,
+.fieldset-papel legend {
+    padding: 0;
+    margin: 0;
+}
+
+/* Focus visible para teclado */
+:focus-visible {
+    outline: 3px solid #007BFF;
+    outline-offset: 2px;
+}
+
 
 /* ===== CONTAINER ===== */
 
@@ -61,27 +122,54 @@ h2 {
 }
 
 
-/* ===== INPUT ===== */
+/* ===== INPUT FILE ===== */
 
-input[type="file"],
-select {
+input[type="file"] {
     padding: 30px;
     width: 80%;
     max-width: 420px;
-    margin: 60px auto 0 auto;
-    /* centrado horizontal */
+    margin: 30px auto 0 auto;
     border: 2px dashed #007BFF;
-    border-radius: 10px;
+    border-radius: 12px;
     background: #f0f8ff;
     cursor: pointer;
     transition: 0.3s;
     display: block;
-    /* necesario para margin auto */
+    font-size: 14px;
 }
 
 input[type="file"]:hover {
     background: #e6f2ff;
     border-color: #0056b3;
+}
+
+/* ===== SELECT TAMAÑOS ===== */
+
+select {
+    padding: 10px 14px;
+    width: 80%;
+    max-width: 420px;
+    margin: 10px auto 0 auto;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    background: #fafbfc;
+    cursor: pointer;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    display: block;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+select:hover {
+    border-color: #007BFF;
+    background: #f0f8ff;
+}
+
+select:focus {
+    border-color: #007BFF;
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.12);
+    background: #fff;
 }
 
 
@@ -553,38 +641,84 @@ footer {
 .formulario_datos_personales {
     display: flex;
     flex-direction: column;
-    gap: 15px;
-    margin-top: 20px;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.formulario_datos_personales fieldset {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.formulario_datos_personales legend h2 {
+    font-size: 22px;
+    margin-bottom: 6px;
+    background: linear-gradient(90deg, #007BFF, #00c6ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-align: left;
 }
 
 .formulario_datos_personales label {
     font-weight: 600;
-    color: #333;
-}
-
-.formulario_datos_personales input {
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
     font-size: 14px;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    color: #444;
+    margin-top: 10px;
 }
 
-.formulario_datos_personales input:focus {
+.formulario_datos_personales input[type="text"],
+.formulario_datos_personales input[type="email"],
+.formulario_datos_personales input[type="tel"] {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    font-size: 15px;
+    background: #fafbfc;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+}
+
+.formulario_datos_personales input[type="text"]:hover,
+.formulario_datos_personales input[type="email"]:hover,
+.formulario_datos_personales input[type="tel"]:hover {
+    border-color: #b0cfef;
+    background: #f4f9ff;
+}
+
+.formulario_datos_personales input[type="text"]:focus,
+.formulario_datos_personales input[type="email"]:focus,
+.formulario_datos_personales input[type="tel"]:focus {
     border-color: #007BFF;
+    background: #fff;
     outline: none;
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+    box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.12);
 }
 
 .enviar-button {
-    padding: 10px 18px;
-    background: linear-gradient(90deg, #007BFF, #0056b3);
+    margin-top: 18px;
+    padding: 14px 24px;
+    width: 100%;
+    background: linear-gradient(135deg, #007BFF, #0056b3);
     color: white;
     border: none;
-    border-radius: 8px;
-    font-size: 14px;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
     cursor: pointer;
-    transition: transform 0.2s ease, opacity 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.enviar-button:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 123, 255, 0.3);
+}
+
+.enviar-button:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: none;
 }
 
 .tipo_de_papel {
@@ -603,8 +737,45 @@ footer {
 
 .opciones-papel {
     display: flex;
-    gap: 30px;
+    gap: 16px;
+    align-items: stretch;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.opciones-papel input[type="radio"] {
+    display: none;
+}
+
+.opciones-papel label {
+    display: flex;
     align-items: center;
+    justify-content: center;
+    padding: 14px 22px;
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #555;
+    background: #fafbfc;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    text-align: center;
+    min-width: 180px;
+}
+
+.opciones-papel label:hover {
+    border-color: #007BFF;
+    background: #f0f8ff;
+    color: #007BFF;
+}
+
+.opciones-papel input[type="radio"]:checked + label {
+    border-color: #007BFF;
+    background: linear-gradient(135deg, #e8f4fd, #f0f8ff);
+    color: #007BFF;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(0, 123, 255, 0.15);
 }
 
 .opcion-papel {
@@ -622,9 +793,19 @@ footer {
 }
 
 .enviar-button:disabled {
-    background: #999;
+    background: linear-gradient(135deg, #bbb, #999);
     cursor: not-allowed;
     box-shadow: none;
+    opacity: 0.7;
+}
+
+.mensaje-error {
+    margin-top: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 8px;
+    min-height: 20px;
 }
 
 .direccion {
@@ -736,30 +917,58 @@ footer {
 
 }
 
-.dark-mode .formulario_datos_personales input {
-    background: #1a1a25;
-    color: white;
-
+.dark-mode .formulario_datos_personales input[type="text"],
+.dark-mode .formulario_datos_personales input[type="email"],
+.dark-mode .formulario_datos_personales input[type="tel"] {
+    background: #22223a;
+    color: #e8e8f0;
+    border-color: #3a3a55;
 }
 
-.dark-mode .formulario_datos_personales input:focus {
-    background: #1a1a25;
-    color: white;
-}   
+.dark-mode .formulario_datos_personales input[type="text"]:hover,
+.dark-mode .formulario_datos_personales input[type="email"]:hover,
+.dark-mode .formulario_datos_personales input[type="tel"]:hover {
+    border-color: #5577aa;
+    background: #252540;
+}
+
+.dark-mode .formulario_datos_personales input[type="text"]:focus,
+.dark-mode .formulario_datos_personales input[type="email"]:focus,
+.dark-mode .formulario_datos_personales input[type="tel"]:focus {
+    background: #1e1e35;
+    border-color: #007BFF;
+    box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.2);
+}
+
+.dark-mode .campo-ayuda {
+    color: #888;
+}
+
+.dark-mode .opciones-papel label {
+    background: #22223a;
+    color: #ccc;
+    border-color: #3a3a55;
+}
+
+.dark-mode .opciones-papel label:hover {
+    border-color: #007BFF;
+    background: #252545;
+    color: #7bb8ff;
+}
+
+.dark-mode .opciones-papel input[type="radio"]:checked + label {
+    background: #1a2a45;
+    color: #7bb8ff;
+    border-color: #007BFF;
+}
 
 .dark-mode .enviar-button {
-    background: #333;
+    background: linear-gradient(135deg, #007BFF, #0056b3);
     color: white;
-}   
+}
 
-.dark-mode .enviar-button:hover {
-    background: #0056b3;
-    color: white;
-}   
-
-.dark-mode .enviar-button:active {
-    background: #0056b3;
-    color: white;
+.dark-mode .enviar-button:hover:not(:disabled) {
+    box-shadow: 0 8px 20px rgba(0, 123, 255, 0.35);
 }       
 .dark-mode .direccion {
     background: #1a1a25;

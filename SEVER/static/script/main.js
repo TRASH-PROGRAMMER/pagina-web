@@ -16,6 +16,7 @@ function procesarArchivos(archivos) {
     container.innerHTML = "";
     progressBar.style.width = "0%";
     progressBar.textContent = "0%";
+    progressBar.setAttribute("aria-valuenow", 0);
     errorMessage.textContent = "";
     successMessage.textContent = "";
     cancelado = false;
@@ -103,6 +104,7 @@ function procesarArchivos(archivos) {
                 const porcentaje = Math.round((procesados / total) * 100);
                 progressBar.style.width = porcentaje + "%";
                 progressBar.textContent = porcentaje + "%";
+                progressBar.setAttribute("aria-valuenow", porcentaje);
                 // Si se ha procesado todas las imágenes, se muestra un mensaje de éxito
                 if (procesados === total) {
                     successMessage.textContent = "✅ Carga completada con éxito.";
@@ -128,6 +130,7 @@ cancelButton.addEventListener("click", function() {
     container.innerHTML = "";
     progressBar.style.width = "0%";
     progressBar.textContent = "0%";
+    progressBar.setAttribute("aria-valuenow", 0);
     successMessage.textContent = "";
     errorMessage.textContent = "⚠️ Carga cancelada.";
 });
