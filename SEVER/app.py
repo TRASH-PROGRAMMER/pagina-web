@@ -91,10 +91,54 @@ def crear_clientes():
         if not data.get(campo):
             return jsonify({"error": f"Campo '{campo}' requerido"}), 400
 
-    # Verificar si ya existe el correo
+    # Verificar si ya existe el correo → agregar fotos al cliente existente
     existe = Cliente.query.filter_by(correo=data["correo"]).first()
     if existe:
-        return jsonify({"error": "El correo ya está registrado"}), 400
+        # Actualizar datos del pedido (tamaño, papel, fecha)
+        existe.tamano       = data.get("tamano", existe.tamano)
+        existe.tamano_keys  = data.get("tamano_keys", existe.tamano_keys)
+        existe.papel        = data.get("papel", existe.papel)
+        existe.fecha_registro = data["fechaRegistro"]
+
+        # Subir nuevas fotos a Cloudinary
+        fotos_guardadas = []
+        for archivo in archivos:
+            if archivo and archivo.filename and allowed_file(archivo.filename):
+                try:
+                    resultado = cloudinary.uploader.upload(
+                        archivo,
+                        folder=f"image_manager/cliente_{existe.id}",
+                        resource_type="image"
+                    )
+                    foto = Foto(
+                        filename=resultado['secure_url'],
+                        public_id=resultado['public_id'],
+                        cliente_id=existe.id
+                    )
+                    db.session.add(foto)
+                    fotos_guardadas.append(resultado['secure_url'])
+                except Exception as e:
+                    print(f"Error subiendo a Cloudinary: {e}")
+                    continue
+
+        db.session.commit()
+        return jsonify({
+            "mensaje": "Fotos agregadas al pedido existente",
+            "cliente": {
+                "id": existe.id,
+                "nombre": existe.nombre,
+                "apellido": existe.apellido,
+                "correo": existe.correo,
+                "telefono": existe.telefono,
+                "fechaRegistro": existe.fecha_registro,
+                "tamano": existe.tamano,
+                "papel": existe.papel,
+                "numFotos": len(fotos_guardadas),
+                "fotos": fotos_guardadas,
+                "precioTotal": calcular_precio_total(
+                    existe.tamano_keys, len(existe.fotos), existe.tamano)
+            }
+        }), 200
 
     nuevo_cliente = Cliente(
         nombre=data["nombre"],

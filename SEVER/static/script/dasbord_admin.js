@@ -7,15 +7,63 @@ clienteChannel.onmessage = function(event) {
     }
 };
 
-// ─── Filtrar tabla por búsqueda ───────────────────────────────────────────────
+// ─── Filtro alfabético activo ─────────────────────────────────────────────────
+let currentAlphaRange = 'todos';
+
+function toISODate(value) {
+    if (!value) return "";
+    if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+
+    const match = value.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (!match) return "";
+
+    const day = match[1].padStart(2, "0");
+    const month = match[2].padStart(2, "0");
+    const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+    return `${year}-${month}-${day}`;
+}
+
+// ─── Filtrar tabla por búsqueda + rango alfabético + fecha/estado/precio ────
 function filterTable() {
     const searchValue = document.getElementById("searchInput").value.toLowerCase();
+    const fechaFiltro = document.getElementById("filterFecha")?.value || "";
+    const estadoFiltro = (document.getElementById("filterEstado")?.value || "").toLowerCase();
+    const precioMinRaw = document.getElementById("filterPrecioMin")?.value;
+    const precioMaxRaw = document.getElementById("filterPrecioMax")?.value;
+    const precioMin = precioMinRaw !== "" ? Number(precioMinRaw) : null;
+    const precioMax = precioMaxRaw !== "" ? Number(precioMaxRaw) : null;
     const rows = document.querySelectorAll("#tableBody tr");
 
     rows.forEach(function(row) {
         const text = row.innerText.toLowerCase();
-        row.style.display = text.includes(searchValue) ? "" : "none";
+        const nameEl = row.querySelector(".client-name");
+        const firstLetter = nameEl ? nameEl.textContent.trim()[0].toUpperCase() : '';
+        const rowEstado = (row.dataset.estado || "").toLowerCase();
+        const rowFecha = row.dataset.fecha || "";
+        const rowPrecio = row.dataset.precio !== "" ? Number(row.dataset.precio) : null;
+
+        const matchesSearch = text.includes(searchValue);
+        const matchesAlpha  = currentAlphaRange === 'todos' || currentAlphaRange.includes(firstLetter);
+        const matchesFecha = !fechaFiltro || rowFecha === fechaFiltro;
+        const matchesEstado = !estadoFiltro || rowEstado === estadoFiltro;
+        const matchesPrecioMin = precioMin === null || (rowPrecio !== null && rowPrecio >= precioMin);
+        const matchesPrecioMax = precioMax === null || (rowPrecio !== null && rowPrecio <= precioMax);
+
+        row.style.display = (matchesSearch && matchesAlpha && matchesFecha && matchesEstado && matchesPrecioMin && matchesPrecioMax)
+            ? ""
+            : "none";
     });
+}
+
+// ─── Filtrar por rango de letras ──────────────────────────────────────────────
+function filterByAlpha(range) {
+    currentAlphaRange = range;
+
+    document.querySelectorAll(".alpha-btn").forEach(function(btn) {
+        btn.classList.toggle("active", btn.dataset.range === range);
+    });
+
+    filterTable();
 }
 
 // ─── Eliminar fila ────────────────────────────────────────────────────────────
@@ -52,12 +100,15 @@ function changeStatus(btn) {
     badge.classList.remove(...clases);
     badge.classList.add(clases[nuevoIndex]);
     badge.textContent = nuevoEstado;
+    row.dataset.estado = nuevoEstado.toLowerCase();
 
     if (nuevoEstado === "Pendiente") {
         actualizarBadge(+1);
     } else if (nuevoEstado === "Entregado" || nuevoEstado === "Cancelado") {
         actualizarBadge(-1);
     }
+
+    filterTable();
 }
 
 // ─── Exportar CSV ─────────────────────────────────────────────────────────────
@@ -144,7 +195,12 @@ function renderClienteRow(cliente) {
     const fotosJSON = JSON.stringify(fotos).replace(/'/g, "\\'").replace(/"/g, "&quot;");
     const nombreCompleto = `${cliente.nombre} ${cliente.apellido}`;
     const numFotos = cliente.numFotos || fotos.length || 0;
-    const precio = cliente.precioTotal != null ? `$${Number(cliente.precioTotal).toFixed(2)}` : '—';
+    const precioNum = cliente.precioTotal != null ? Number(cliente.precioTotal) : null;
+    const precio = precioNum != null ? `$${precioNum.toFixed(2)}` : '—';
+
+    tr.dataset.estado = "pendiente";
+    tr.dataset.fecha = toISODate(cliente.fechaRegistro);
+    tr.dataset.precio = precioNum != null && !Number.isNaN(precioNum) ? String(precioNum) : "";
 
     tr.innerHTML = `
         <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#${String(cliente.id).padStart(4,"0")}</code></td>
@@ -168,6 +224,8 @@ function renderClienteRow(cliente) {
         </td>
     `;
     tbody.prepend(tr);
+
+    filterTable();
 }
 
 // ─── Cargar pedidos desde la API Flask al cargar la página ───────────────────
@@ -187,6 +245,7 @@ document.addEventListener("DOMContentLoaded", async function() {
 
 // ─── Exponer funciones al scope global (usadas en onclick del HTML) ───────────
 window.filterTable   = filterTable;
+window.filterByAlpha = filterByAlpha;
 window.deleteRow     = deleteRow;
 window.changeStatus  = changeStatus;
 window.exportCSV     = exportCSV;

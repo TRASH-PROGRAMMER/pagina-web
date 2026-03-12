@@ -70,11 +70,19 @@ document.querySelectorAll('input[name="papel"]').forEach(radio => {
     radio.addEventListener("change", validarFormulario);
 });
 
-// 🔹 Submit — envía FormData con fotos + datos + tamaño + papel
+// 🔹 Submit — valida y abre resumen; si ya fue confirmado, envía el pedido
 form.addEventListener("submit", async function(e) {
     e.preventDefault();
 
     if (!validarFormulario()) return;
+
+    // Si no está confirmado, abrir modal de resumen primero
+    if (!form.dataset.confirmed) {
+        const btnResumen = document.getElementById("btnVerResumen");
+        if (btnResumen) btnResumen.click();
+        return;
+    }
+    delete form.dataset.confirmed;
 
     btnEnviar.disabled = true;
     errorMessage.textContent = "Subiendo fotos…⏳";

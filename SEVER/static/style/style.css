@@ -177,9 +177,10 @@ select:focus {
 
 .preview-container {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
     margin-top: 30px;
+    width: 100%;
 }
 
 
@@ -200,6 +201,7 @@ select:focus {
 
 .card img {
     width: 100%;
+    height: 160px;
     border-radius: 10px;
     object-fit: cover;
 }

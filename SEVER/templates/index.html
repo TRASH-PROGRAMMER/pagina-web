@@ -16,6 +16,17 @@
     <h1 class="titulo"><b>Image Manager</b></h1>
     <p class="text1">Carga de archivos fotográficos en segundos en PNG, JPG, GIF</p>
     <h2>Subir hasta 150 imágenes en segundos</h2>
+    <nav class="instrucciones-pedido" aria-label="Pasos del pedido">
+  <h3>📋 ¿Cómo hacer tu pedido?</h3>
+  <ol class="pasos" role="list">
+    <li class="paso"><span class="paso-num" aria-hidden="true">1</span> Sube tus fotos (PNG, JPG o GIF)</li>
+    <li class="paso"><span class="paso-num" aria-hidden="true">2</span> Elige los tamaños de impresión</li>
+    <li class="paso"><span class="paso-num" aria-hidden="true">3</span> Selecciona el tipo de papel</li>
+    <li class="paso"><span class="paso-num" aria-hidden="true">4</span> Completa tus datos personales</li>
+    <li class="paso"><span class="paso-num" aria-hidden="true">5</span> Presiona <strong>Revisar pedido</strong> para ver el resumen de precios</li>
+    <li class="paso"><span class="paso-num" aria-hidden="true">6</span> Confirma con <strong>Finalizar pedido</strong> para enviar tu pedido</li>
+  </ol>
+</nav>
     <label for="inputImagenes" class="sr-only">Seleccionar imágenes (PNG, JPG o GIF, máx. 150 archivos de 10 MB c/u)</label>
     <input type="file" id="inputImagenes" accept="image/png,image/jpeg,image/gif" multiple
            aria-describedby="inputImagenesHelp">
@@ -37,16 +48,7 @@
     </div>
 </header>
 
-<nav class="instrucciones-pedido" aria-label="Pasos del pedido">
-  <h3>📋 ¿Cómo hacer tu pedido?</h3>
-  <ol class="pasos" role="list">
-    <li class="paso"><span class="paso-num" aria-hidden="true">1</span> Sube tus fotos (PNG, JPG o GIF)</li>
-    <li class="paso"><span class="paso-num" aria-hidden="true">2</span> Elige los tamaños de impresión</li>
-    <li class="paso"><span class="paso-num" aria-hidden="true">3</span> Selecciona el tipo de papel</li>
-    <li class="paso"><span class="paso-num" aria-hidden="true">4</span> Completa tus datos personales</li>
-    <li class="paso"><span class="paso-num" aria-hidden="true">5</span> Presiona <strong>Enviar</strong> y revisa tu resumen</li>
-  </ol>
-</nav>
+
 
 <main id="main-content">
  <button class="dark-mode-btn" aria-label="Alternar modo oscuro">🌓</button>
@@ -113,8 +115,8 @@
                    aria-describedby="telefonoHelp">
             <p id="telefonoHelp" class="campo-ayuda">Entre 7 y 15 dígitos numéricos.</p>
 
-            <input type="submit" value="Enviar pedido" class="enviar-button"
-                   aria-label="Enviar pedido con fotos y datos personales">
+            <input type="submit" value="Revisar pedido" class="enviar-button"
+                   aria-label="Revisar pedido antes de enviar">
             <div id="mensajeError" class="mensaje-error" role="alert" aria-live="assertive"></div>
         </fieldset>
     </form>
@@ -133,6 +135,8 @@
     <div class="factura-info" id="facturaInfo"></div>
     <div class="factura-body" id="facturaBody" aria-live="polite"></div>
     <div class="factura-footer-note">
+        <button type="button" id="btnFinalizarPedido" class="enviar-button"
+                aria-label="Finalizar pedidos con fotos y datos personales">Finalizar pedido</button>
       * Instax y Polaroid: precio a consultar. Descuentos aplicados según cantidad.
     </div>
   </div>

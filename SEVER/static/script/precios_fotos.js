@@ -95,6 +95,18 @@ btnResumen.addEventListener("click", async function () {
     overlay.classList.add("active");
 });
 
+// Finalizar pedido desde el modal — confirma y envía
+const btnFinalizar = document.getElementById("btnFinalizarPedido");
+if (btnFinalizar) {
+    btnFinalizar.addEventListener("click", () => {
+        const form = document.getElementById("formDatos");
+        if (form) {
+            form.dataset.confirmed = "true";
+            form.requestSubmit();
+        }
+    });
+}
+
 // Cerrar modal
 closeBtn.addEventListener("click", () => overlay.classList.remove("active"));
 overlay.addEventListener("click", (e) => {

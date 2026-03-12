@@ -107,6 +107,41 @@
           <input type="text" placeholder="Buscar cliente o pedido…" id="searchInput" oninput="filterTable()">
         </div>
       </div>
+      <div class="alpha-filters" id="alphaFilters" role="group" aria-label="Filtrar por inicial del nombre">
+        <button class="alpha-btn active" onclick="filterByAlpha('todos')" data-range="todos">Todos</button>
+        <button class="alpha-btn" onclick="filterByAlpha('ABC')"   data-range="ABC">A–C</button>
+        <button class="alpha-btn" onclick="filterByAlpha('DEF')"   data-range="DEF">D–F</button>
+        <button class="alpha-btn" onclick="filterByAlpha('GHI')"   data-range="GHI">G–I</button>
+        <button class="alpha-btn" onclick="filterByAlpha('JKL')"   data-range="JKL">J–L</button>
+        <button class="alpha-btn" onclick="filterByAlpha('MNO')"   data-range="MNO">M–O</button>
+        <button class="alpha-btn" onclick="filterByAlpha('PQR')"   data-range="PQR">P–R</button>
+        <button class="alpha-btn" onclick="filterByAlpha('STU')"   data-range="STU">S–U</button>
+        <button class="alpha-btn" onclick="filterByAlpha('VWZ')"   data-range="VWZ">V–Z</button>
+      </div>
+      <div class="advanced-filters" role="group" aria-label="Filtros de fecha, estado y precio">
+        <label>
+          Fecha
+          <input type="date" id="filterFecha" oninput="filterTable()">
+        </label>
+        <label>
+          Estado
+          <select id="filterEstado" onchange="filterTable()">
+            <option value="">Todos</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="procesando">Procesando</option>
+            <option value="entregado">Entregado</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+        </label>
+        <label>
+          Precio min
+          <input type="number" id="filterPrecioMin" min="0" step="0.01" placeholder="0.00" oninput="filterTable()">
+        </label>
+        <label>
+          Precio max
+          <input type="number" id="filterPrecioMax" min="0" step="0.01" placeholder="999.99" oninput="filterTable()">
+        </label>
+      </div>
       <table id="ordersTable">
         <thead>
           <tr>
@@ -163,6 +198,78 @@
 </div>
 
 <style>
+  /* ── Filtros alfabéticos ── */
+  .alpha-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 20px 14px;
+    border-top: 1px solid #1e1e2a;
+  }
+  .alpha-btn {
+    background: #1a1a28;
+    border: 1px solid #2a2a3a;
+    color: var(--muted, #6b6b85);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .alpha-btn:hover {
+    background: #23233a;
+    color: #e8e8f0;
+    border-color: #7c6cfc;
+  }
+  .alpha-btn.active {
+    background: #7c6cfc;
+    border-color: #7c6cfc;
+    color: #fff;
+  }
+
+  .advanced-filters {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    gap: 10px;
+    padding: 0 20px 14px;
+  }
+  .advanced-filters label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #9ca3b0;
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .advanced-filters input,
+  .advanced-filters select {
+    background: #12121c;
+    border: 1px solid #2a2a3a;
+    color: #e8e8f0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    outline: none;
+  }
+  .advanced-filters input:focus,
+  .advanced-filters select:focus {
+    border-color: #7c6cfc;
+    box-shadow: 0 0 0 2px rgba(124, 108, 252, 0.2);
+  }
+
+  @media (max-width: 900px) {
+    .advanced-filters {
+      grid-template-columns: repeat(2, minmax(150px, 1fr));
+    }
+  }
+
+  @media (max-width: 520px) {
+    .advanced-filters {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .foto-modal {
     display: none;
     position: fixed;
