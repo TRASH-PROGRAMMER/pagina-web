@@ -36,7 +36,7 @@
     </a>
 
     <div class="nav-section-label">Configuración</div>
-    <a class="nav-item" href="#">
+    <a class="nav-item" href="#panelOpciones">
       <span class="icon">◈</span> Opciones
     </a>
     <a class="nav-item" href="{{ url_for('home') }}">
@@ -183,6 +183,45 @@
       </div>
     </div>
 
+    <div class="panel panel-opciones" id="panelOpciones">
+      <div class="section-header">
+        <div class="section-title">Configuración - Opciones</div>
+      </div>
+
+      <form id="formTamano" class="tamano-form" autocomplete="off">
+        <label>
+          Clave
+          <input type="text" id="tamanoClave" placeholder="ej: 12x18" maxlength="50" required>
+        </label>
+        <label>
+          Nombre visible
+          <input type="text" id="tamanoNombre" placeholder="ej: 12x18cm" maxlength="100" required>
+        </label>
+        <label>
+          Precio base
+          <input type="number" id="tamanoPrecio" min="0" step="0.01" placeholder="0.00" required>
+        </label>
+        <button type="submit" class="btn btn-ghost">Guardar tamaño</button>
+      </form>
+
+      <div id="tamanoMensaje" class="tamano-mensaje" aria-live="polite"></div>
+
+      <div class="tamano-table-wrap">
+        <table id="tamanosTable" class="tamanos-table">
+          <thead>
+            <tr>
+              <th>Clave</th>
+              <th>Nombre</th>
+              <th>Precio base</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tamanosBody"></tbody>
+        </table>
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div><!-- /main -->
 
@@ -194,6 +233,32 @@
       <button class="foto-modal-close" onclick="cerrarModal()">&times;</button>
     </div>
     <div id="fotoModalBody" class="foto-grid"></div>
+    <button type="button" id ="descargarpedido" class="descargarpedidobtn">descargar</button>
+  </div>
+</div>
+
+<!-- MODAL PARA EDITAR TAMAÑO -->
+<div id="editTamanoModal" class="foto-modal" aria-modal="true" role="dialog" aria-labelledby="editTamanoTitle">
+  <div class="foto-modal-content edit-tamano-modal-content">
+    <div class="foto-modal-header">
+      <h3 id="editTamanoTitle">Editar tamaño</h3>
+      <button class="foto-modal-close" type="button" id="editTamanoClose" aria-label="Cerrar edición">&times;</button>
+    </div>
+    <form id="formEditTamano" class="edit-tamano-form" autocomplete="off">
+      <input type="hidden" id="editTamanoId">
+      <label>
+        Nombre visible
+        <input type="text" id="editTamanoNombre" maxlength="100" required>
+      </label>
+      <label>
+        Precio base
+        <input type="number" id="editTamanoPrecio" min="0" step="0.01" required>
+      </label>
+      <div class="edit-tamano-actions">
+        <button type="button" class="tamano-btn" id="editTamanoCancel">Cancelar</button>
+        <button type="submit" class="btn btn-ghost">Guardar cambios</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -338,6 +403,111 @@
     font-size: 13px;
   }
   .fotos-link:hover { color: #9b8fff; }
+
+  .panel-opciones {
+    margin-top: 18px;
+  }
+  .tamano-form {
+    display: grid;
+    grid-template-columns: 1fr 2fr 1fr auto;
+    gap: 10px;
+    margin-top: 10px;
+    align-items: end;
+  }
+  .tamano-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #9ca3b0;
+    font-size: 12px;
+  }
+  .tamano-form input {
+    background: #12121c;
+    border: 1px solid #2a2a3a;
+    color: #e8e8f0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .tamano-mensaje {
+    min-height: 20px;
+    margin: 10px 0 4px;
+    color: #9ca3b0;
+    font-size: 13px;
+  }
+  .tamano-table-wrap {
+    overflow-x: auto;
+  }
+  .tamanos-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .tamanos-table th,
+  .tamanos-table td {
+    border-bottom: 1px solid #2a2a3a;
+    padding: 10px 8px;
+    color: #d5d7e3;
+    font-size: 13px;
+    text-align: left;
+  }
+  .tamano-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .tamano-btn {
+    border: 1px solid #2a2a3a;
+    background: #1a1a28;
+    color: #e8e8f0;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .tamano-btn.danger {
+    border-color: #5b2a2a;
+    color: #ffb3b3;
+  }
+
+  .edit-tamano-modal-content {
+    max-width: 520px;
+  }
+  .edit-tamano-form {
+    display: grid;
+    gap: 12px;
+  }
+  .edit-tamano-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #9ca3b0;
+    font-size: 12px;
+  }
+  .edit-tamano-form input {
+    background: #12121c;
+    border: 1px solid #2a2a3a;
+    color: #e8e8f0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .edit-tamano-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  @media (max-width: 900px) {
+    .tamano-form {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 520px) {
+    .tamano-form {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='script/dasbord_admin.js') }}"></script>

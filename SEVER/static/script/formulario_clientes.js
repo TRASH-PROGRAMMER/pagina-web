@@ -78,8 +78,9 @@ form.addEventListener("submit", async function(e) {
 
     // Si no está confirmado, abrir modal de resumen primero
     if (!form.dataset.confirmed) {
-        const btnResumen = document.getElementById("btnVerResumen");
-        if (btnResumen) btnResumen.click();
+        if (typeof window.abrirResumenPedido === "function") {
+            window.abrirResumenPedido();
+        }
         return;
     }
     delete form.dataset.confirmed;
@@ -121,8 +122,8 @@ form.addEventListener("submit", async function(e) {
         const clienteGuardado = await guardarCliente(formData);
         clienteChannel.postMessage({ tipo: "nuevo_cliente", cliente: clienteGuardado });
 
-        errorMessage.textContent = "";
-        alert(`Pedido enviado ✅ — ${clienteGuardado.numFotos} foto(s) subidas`);
+        errorMessage.textContent = " ¡Pedido enviado con éxito! 🎉";
+        errorMessage.style.color = "#00ff4c";
         form.reset();
         // Limpiar selección de tamaño y papel
         tamanoSelect.selectedIndex = -1;

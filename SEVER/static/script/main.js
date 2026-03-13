@@ -69,15 +69,6 @@ function procesarArchivos(archivos) {
                     mensaje.classList.add("alta");
                 }
 
-                const boton = document.createElement("button");
-                boton.textContent = "Descargar";
-                boton.onclick = function() {
-                    const link = document.createElement("a");
-                    link.href = img.src;
-                    link.download = archivo.name;
-                    link.click();
-                };
-
                 const botonEliminar = document.createElement("button");
                 botonEliminar.textContent = "Eliminar";
                 botonEliminar.onclick = function() {
@@ -90,7 +81,6 @@ function procesarArchivos(archivos) {
 
                 const btnGroup = document.createElement("div");
                 btnGroup.classList.add("btn-group");
-                btnGroup.appendChild(boton);
                 btnGroup.appendChild(botonEliminar);
 
                 card.appendChild(imagen);

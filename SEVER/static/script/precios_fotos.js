@@ -6,9 +6,53 @@ const overlay       = document.getElementById("facturaOverlay");
 const closeBtn      = document.getElementById("facturaClose");
 const facturaInfo   = document.getElementById("facturaInfo");
 const facturaBody   = document.getElementById("facturaBody");
+let catalogoVersion = "0";
 
 if (!tamanoSelect || !inputImagenes || !btnResumen || !overlay || !facturaInfo || !facturaBody) {
     console.warn("precios_fotos.js: faltan elementos del DOM, abortando.");
+}
+
+function normalizarClave(clave) {
+    return String(clave || "").trim().toLowerCase();
+}
+
+function renderTamanosEnSelect(tamanos) {
+    if (!tamanoSelect) return;
+
+    const seleccionActual = new Set(Array.from(tamanoSelect.selectedOptions).map(function(opt) {
+        return normalizarClave(opt.value);
+    }));
+
+    tamanoSelect.innerHTML = "";
+
+    tamanos.forEach(function(t) {
+        const option = document.createElement("option");
+        option.value = t.clave;
+        option.textContent = t.nombre;
+        if (seleccionActual.has(normalizarClave(t.clave))) {
+            option.selected = true;
+        }
+        tamanoSelect.appendChild(option);
+    });
+
+    checkResumenBtn();
+    tamanoSelect.dispatchEvent(new Event("change"));
+}
+
+async function cargarTamanosDinamicos(force = false) {
+    try {
+        const res = await fetch("/api/tamanos");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudo cargar catálogo de tamaños");
+
+        const nuevaVersion = data.version || "0";
+        if (force || nuevaVersion !== catalogoVersion) {
+            catalogoVersion = nuevaVersion;
+            renderTamanosEnSelect(Array.isArray(data.tamanos) ? data.tamanos : []);
+        }
+    } catch (error) {
+        console.error("Error cargando tamaños dinámicos:", error);
+    }
 }
 
 // Habilitar/deshabilitar botón según selección
@@ -22,7 +66,7 @@ if (tamanoSelect) tamanoSelect.addEventListener("change", checkResumenBtn);
 if (inputImagenes) inputImagenes.addEventListener("change", checkResumenBtn);
 
 // Abrir modal
-btnResumen.addEventListener("click", async function () {
+async function abrirResumenPedido() {
     const seleccionados = Array.from(tamanoSelect.selectedOptions);
     const numFotos      = inputImagenes.files ? inputImagenes.files.length : 0;
     const papelRadio    = document.querySelector('input[name="papel"]:checked');
@@ -93,7 +137,17 @@ btnResumen.addEventListener("click", async function () {
     `;
 
     overlay.classList.add("active");
-});
+}
+
+window.abrirResumenPedido = abrirResumenPedido;
+
+if (btnResumen) {
+    btnResumen.addEventListener("click", async function (e) {
+        // Si el botón está dentro del form, evita submit automático.
+        e.preventDefault();
+        await abrirResumenPedido();
+    });
+}
 
 // Finalizar pedido desde el modal — confirma y envía
 const btnFinalizar = document.getElementById("btnFinalizarPedido");
@@ -114,4 +168,11 @@ overlay.addEventListener("click", (e) => {
 });
 document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") overlay.classList.remove("active");
+});
+
+document.addEventListener("DOMContentLoaded", async () => {
+    await cargarTamanosDinamicos(true);
+    setInterval(() => {
+        cargarTamanosDinamicos(false);
+    }, 8000);
 });

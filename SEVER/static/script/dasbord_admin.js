@@ -7,6 +7,128 @@ clienteChannel.onmessage = function(event) {
     }
 };
 
+let tamanosAdmin = [];
+let tamanoEditandoId = null;
+
+function mostrarMensajeTamano(texto, ok = true) {
+    const msg = document.getElementById("tamanoMensaje");
+    if (!msg) return;
+    msg.textContent = texto;
+    msg.style.color = ok ? "#22c55e" : "#ff7a7a";
+}
+
+function formatearPrecio(valor) {
+    const n = Number(valor);
+    if (Number.isNaN(n)) return "0.00";
+    return n.toFixed(2);
+}
+
+function renderTamanosAdmin() {
+    const tbody = document.getElementById("tamanosBody");
+    if (!tbody) return;
+
+    tbody.innerHTML = "";
+    tamanosAdmin.forEach(function(t) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${t.clave}</td>
+            <td>${t.nombre}</td>
+            <td>$${formatearPrecio(t.precio_base)}</td>
+            <td>${t.activo ? "Activo" : "Inactivo"}</td>
+            <td>
+                <div class="tamano-actions">
+                    <button class="tamano-btn" onclick="editarTamano(${t.id})">Editar</button>
+                    ${t.activo
+                        ? `<button class="tamano-btn danger" onclick="desactivarTamano(${t.id})">Desactivar</button>`
+                        : `<button class="tamano-btn" onclick="activarTamano(${t.id})">Activar</button>`}
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+async function cargarTamanosAdmin() {
+    const tbody = document.getElementById("tamanosBody");
+    if (!tbody) return;
+
+    try {
+        const res = await fetch("/api/admin/tamanos");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudieron cargar los tamaños");
+
+        tamanosAdmin = Array.isArray(data.tamanos) ? data.tamanos : [];
+        renderTamanosAdmin();
+    } catch (error) {
+        console.error("Error cargando tamaños:", error);
+        mostrarMensajeTamano(error.message, false);
+    }
+}
+
+function abrirModalEditarTamano(tamano) {
+    const modal = document.getElementById("editTamanoModal");
+    const idInput = document.getElementById("editTamanoId");
+    const nombreInput = document.getElementById("editTamanoNombre");
+    const precioInput = document.getElementById("editTamanoPrecio");
+
+    if (!modal || !idInput || !nombreInput || !precioInput) return;
+
+    tamanoEditandoId = tamano.id;
+    idInput.value = String(tamano.id);
+    nombreInput.value = tamano.nombre || "";
+    precioInput.value = formatearPrecio(tamano.precio_base);
+    modal.classList.add("active");
+}
+
+function cerrarModalEditarTamano() {
+    const modal = document.getElementById("editTamanoModal");
+    if (!modal) return;
+
+    modal.classList.remove("active");
+    tamanoEditandoId = null;
+}
+
+async function editarTamano(id) {
+    const tamano = tamanosAdmin.find(function(t) { return t.id === id; });
+    if (!tamano) return;
+
+    abrirModalEditarTamano(tamano);
+}
+
+async function desactivarTamano(id) {
+    if (!confirm("¿Deseas desactivar este tamaño?")) return;
+
+    try {
+        const res = await fetch(`/api/admin/tamanos/${id}/desactivar`, { method: "PATCH" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudo desactivar");
+
+        mostrarMensajeTamano("Tamaño desactivado");
+        await cargarTamanosAdmin();
+    } catch (error) {
+        console.error("Error desactivando tamaño:", error);
+        mostrarMensajeTamano(error.message, false);
+    }
+}
+
+async function activarTamano(id) {
+    try {
+        const res = await fetch(`/api/admin/tamanos/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ activo: true })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudo activar");
+
+        mostrarMensajeTamano("Tamaño activado");
+        await cargarTamanosAdmin();
+    } catch (error) {
+        console.error("Error activando tamaño:", error);
+        mostrarMensajeTamano(error.message, false);
+    }
+}
+
 // ─── Filtro alfabético activo ─────────────────────────────────────────────────
 let currentAlphaRange = 'todos';
 
@@ -179,11 +301,21 @@ function cerrarModal() {
 
 // Cerrar modal con Escape o clic fuera
 document.addEventListener("keydown", function(e) {
-    if (e.key === "Escape") cerrarModal();
+    if (e.key === "Escape") {
+        cerrarModal();
+        cerrarModalEditarTamano();
+    }
 });
 document.getElementById("fotoModal").addEventListener("click", function(e) {
     if (e.target === this) cerrarModal();
 });
+
+const editTamanoModal = document.getElementById("editTamanoModal");
+if (editTamanoModal) {
+    editTamanoModal.addEventListener("click", function(e) {
+        if (e.target === this) cerrarModalEditarTamano();
+    });
+}
 
 // ─── Render fila de pedido ────────────────────────────────────────────────────
 function renderClienteRow(cliente) {
@@ -241,6 +373,84 @@ document.addEventListener("DOMContentLoaded", async function() {
     } catch (error) {
         console.error("Error al cargar pedidos:", error);
     }
+
+    const formTamano = document.getElementById("formTamano");
+    if (formTamano) {
+        formTamano.addEventListener("submit", async function(e) {
+            e.preventDefault();
+
+            const clave = (document.getElementById("tamanoClave")?.value || "").trim().toLowerCase();
+            const nombre = (document.getElementById("tamanoNombre")?.value || "").trim();
+            const precio = Number(document.getElementById("tamanoPrecio")?.value || "0");
+
+            if (!clave || !nombre || Number.isNaN(precio) || precio < 0) {
+                mostrarMensajeTamano("Completa clave, nombre y precio válidos", false);
+                return;
+            }
+
+            try {
+                const resCreate = await fetch("/api/admin/tamanos", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ clave, nombre, precio_base: precio })
+                });
+                const data = await resCreate.json();
+                if (!resCreate.ok) throw new Error(data.error || "No se pudo guardar el tamaño");
+
+                formTamano.reset();
+                mostrarMensajeTamano("Tamaño guardado correctamente");
+                await cargarTamanosAdmin();
+            } catch (error) {
+                console.error("Error guardando tamaño:", error);
+                mostrarMensajeTamano(error.message, false);
+            }
+        });
+    }
+
+    const formEditTamano = document.getElementById("formEditTamano");
+    const editTamanoClose = document.getElementById("editTamanoClose");
+    const editTamanoCancel = document.getElementById("editTamanoCancel");
+
+    if (editTamanoClose) {
+        editTamanoClose.addEventListener("click", cerrarModalEditarTamano);
+    }
+    if (editTamanoCancel) {
+        editTamanoCancel.addEventListener("click", cerrarModalEditarTamano);
+    }
+
+    if (formEditTamano) {
+        formEditTamano.addEventListener("submit", async function(e) {
+            e.preventDefault();
+
+            const id = tamanoEditandoId || Number(document.getElementById("editTamanoId")?.value || "0");
+            const nombre = (document.getElementById("editTamanoNombre")?.value || "").trim();
+            const precio = Number(document.getElementById("editTamanoPrecio")?.value || "0");
+
+            if (!id || !nombre || Number.isNaN(precio) || precio < 0) {
+                mostrarMensajeTamano("Datos inválidos para edición", false);
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/admin/tamanos/${id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ nombre, precio_base: precio })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || "No se pudo editar el tamaño");
+
+                mostrarMensajeTamano("Tamaño actualizado correctamente");
+                cerrarModalEditarTamano();
+                await cargarTamanosAdmin();
+            } catch (error) {
+                console.error("Error editando tamaño:", error);
+                mostrarMensajeTamano(error.message, false);
+            }
+        });
+    }
+
+    await cargarTamanosAdmin();
 });
 
 // ─── Exponer funciones al scope global (usadas en onclick del HTML) ───────────
@@ -251,6 +461,9 @@ window.changeStatus  = changeStatus;
 window.exportCSV     = exportCSV;
 window.verFotos      = verFotos;
 window.cerrarModal   = cerrarModal;
+window.editarTamano  = editarTamano;
+window.desactivarTamano = desactivarTamano;
+window.activarTamano = activarTamano;
 
 // ─── Chart.js: Pedidos últimos 7 días (tiempo real) ──────────────────────────
 let pedidosChart = null;
@@ -413,4 +626,13 @@ clienteChannel.addEventListener('message', function(event) {
         cargarUltimasSubidas();
         cargarEstadisticas();
     }
+});
+
+// Descargar pedido
+document.getElementById("descargarpedido").addEventListener("click", function() {
+    const url = window.location.href;
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "pedido.pdf";
+    link.click();
 });

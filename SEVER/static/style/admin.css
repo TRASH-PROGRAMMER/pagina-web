@@ -573,6 +573,24 @@ tr:hover td {
     z-index: 1000;
 }
 
+.descargarpedidobtn {
+     margin-top: 8px;
+    padding: 8px 40px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(90deg, #cc00ff, #04b7e3);
+    color: white;
+    cursor: pointer;
+    font-weight: 500;
+    transition: 0.3s ease;
+    margin-left: 240px;
+}
 
-
+.descargarpedidobtn:hover {
+    transform: scale(1.05);
+    opacity: 0.9;
+}
+.descargarpedidobtn:active {
+    transform: scale(0.95);
+}
 

@@ -14,7 +14,7 @@ for env_candidate in [
         break
 
 from flask import Flask, render_template, request, jsonify
-from db import Cliente, Foto, db
+from db import Cliente, Foto, FotoTamano, db
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
@@ -41,6 +41,19 @@ cloudinary.config(
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
+DEFAULT_TAMANOS = [
+    {"clave": "instax", "nombre": "Instax (5x8cm)", "precio_base": 0.00},
+    {"clave": "polaroid", "nombre": "Polaroid (8x8cm)", "precio_base": 0.00},
+    {"clave": "10x10", "nombre": "10x10cm", "precio_base": 1.80},
+    {"clave": "10x15", "nombre": "10x15cm (4R)", "precio_base": 1.70},
+    {"clave": "13x18", "nombre": "13x18cm (5R)", "precio_base": 1.80},
+    {"clave": "15x15", "nombre": "15x15cm", "precio_base": 1.95},
+    {"clave": "15x21", "nombre": "15x21cm (6R)", "precio_base": 1.95},
+    {"clave": "20x20", "nombre": "20x20cm", "precio_base": 3.65},
+    {"clave": "20x25", "nombre": "20x25cm (8R)", "precio_base": 3.65},
+    {"clave": "20x30", "nombre": "20x30cm", "precio_base": 4.00},
+]
+
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -60,7 +73,26 @@ with app.app_context():
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS tamano_keys VARCHAR(200)"))
         conn.execute(db.text(
             "ALTER TABLE fotos ADD COLUMN IF NOT EXISTS public_id VARCHAR(255)"))
+        conn.execute(db.text(
+            "ALTER TABLE foto_tamanos ADD COLUMN IF NOT EXISTS nombre VARCHAR(100)"))
+        conn.execute(db.text(
+            "ALTER TABLE foto_tamanos ADD COLUMN IF NOT EXISTS precio_base FLOAT"))
+        conn.execute(db.text(
+            "ALTER TABLE foto_tamanos ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT TRUE"))
+        conn.execute(db.text(
+            "ALTER TABLE foto_tamanos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"))
         conn.commit()
+
+    # Seed inicial de tamanos si la tabla está vacía
+    if FotoTamano.query.count() == 0:
+        for item in DEFAULT_TAMANOS:
+            db.session.add(FotoTamano(
+                clave=item["clave"],
+                nombre=item["nombre"],
+                precio_base=item["precio_base"],
+                activo=True,
+            ))
+        db.session.commit()
 
 @app.route('/')
 def home():
@@ -232,71 +264,97 @@ def eliminar_cliente(id):
     db.session.commit()
     return jsonify({"mensaje": "Cliente eliminado correctamente"}), 200
 
-PRECIOS = {
-    "instax": {"precio": 0.00},
-    "polaroid": {"precio": 0.00},
-    "10x10": {"precio": 1.80},
-    "10x15": {"precio": 1.70},
-    "13x18": {"precio": 1.80},
-    "15x15": {"precio": 1.95},
-    "15x21": {"precio": 1.95},
-    "20x20": {"precio": 3.65},
-    "20x25": {"precio": 3.65},
-    "20x30": {"precio": 4.00},
-}
+PRECIOS = {item["clave"]: {"precio": item["precio_base"]} for item in DEFAULT_TAMANOS}
 
-# Mapeo de texto legible → clave de precio (para registros sin tamano_keys)
-TAMANO_TEXT_A_KEY = {
-    "instax (5x8cm)": "instax",
-    "instax": "instax",
-    "polaroid (8x8cm)": "polaroid",
-    "polaroid": "polaroid",
-    "10x10cm": "10x10",
-    "10x15cm (4r)": "10x15",
-    "10x15cm(4r)": "10x15",
-    "10x15": "10x15",
-    "13x18cm (5r)": "13x18",
-    "13x18cm(5r)": "13x18",
-    "13x18": "13x18",
-    "15x15cm": "15x15",
-    "15x15": "15x15",
-    "15x21cm (6r)": "15x21",
-    "15x21cm(6r)": "15x21",
-    "15x21": "15x21",
-    "20x20cm": "20x20",
-    "20x20": "20x20",
-    "20x25cm (8r)": "20x25",
-    "20x25cm(8r)": "20x25",
-    "20x25": "20x25",
-    "20x30cm": "20x30",
-    "20x30": "20x30",
-}
+
+def _tamano_to_dict(t):
+    return {
+        "id": t.id,
+        "clave": t.clave,
+        "nombre": t.nombre,
+        "precio_base": float(t.precio_base or 0),
+        "activo": bool(t.activo),
+        "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+    }
+
+
+def _catalogo_version():
+    row = db.session.query(db.func.max(FotoTamano.updated_at)).scalar()
+    return row.isoformat() if row else "0"
+
+
+def _precio_base_tamano(clave):
+    t = FotoTamano.query.filter_by(clave=clave, activo=True).first()
+    if t:
+        return float(t.precio_base or 0)
+    if clave in PRECIOS:
+        return PRECIOS[clave]["precio"]
+    return None
+
+
+def _map_texto_a_clave():
+    mapping = {}
+    for t in FotoTamano.query.all():
+        nombre = (t.nombre or "").strip().lower()
+        if nombre:
+            mapping[nombre] = t.clave
+            mapping[nombre.replace(" ", "")] = t.clave
+        mapping[t.clave.lower()] = t.clave
+    return mapping
 
 
 def _extraer_claves_desde_texto(tamano_texto):
-    """Extrae claves de precio desde el texto legible del tamaño."""
     if not tamano_texto:
         return []
+    mapping = _map_texto_a_clave()
     partes = [p.strip().lower() for p in tamano_texto.split(',') if p.strip()]
     claves = []
     for parte in partes:
-        if parte in TAMANO_TEXT_A_KEY:
-            claves.append(TAMANO_TEXT_A_KEY[parte])
-        else:
-            # Intentar coincidencia parcial
-            for texto, clave in TAMANO_TEXT_A_KEY.items():
-                if texto in parte or parte in texto:
-                    claves.append(clave)
-                    break
+        normal = parte.replace(" ", "")
+        if parte in mapping:
+            claves.append(mapping[parte])
+            continue
+        if normal in mapping:
+            claves.append(mapping[normal])
+            continue
+        for texto, clave in mapping.items():
+            if texto in parte or parte in texto:
+                claves.append(clave)
+                break
     return claves
 
 
+def _aplicar_descuentos(clave, cantidad, precio_unitario):
+    pu = precio_unitario
+    if clave == "10x15":
+        if 15 <= cantidad <= 24:
+            pu = 0.62
+        elif 25 <= cantidad <= 49:
+            pu = 0.52
+        elif 50 <= cantidad <= 99:
+            pu = 0.47
+        elif 100 <= cantidad <= 299:
+            pu = 0.39
+        elif cantidad >= 300:
+            pu = 0.32
+    elif clave == "15x15":
+        if 15 <= cantidad <= 24:
+            pu = 1.80
+        elif 25 <= cantidad <= 49:
+            pu = 0.70
+        elif 50 <= cantidad <= 99:
+            pu = 0.60
+        elif 100 <= cantidad <= 299:
+            pu = 0.50
+        elif cantidad >= 300:
+            pu = 0.40
+    return pu
+
+
 def calcular_precio_total(tamano_keys_str, cantidad, tamano_texto=None):
-    """Calcula el precio total. Usa tamano_keys si existe, sino parsea tamano_texto."""
     if cantidad <= 0:
         return 0.0
 
-    # Obtener claves: primero de tamano_keys, si no, del texto
     if tamano_keys_str:
         claves = [k.strip() for k in tamano_keys_str.split(',') if k.strip()]
     elif tamano_texto:
@@ -306,64 +364,127 @@ def calcular_precio_total(tamano_keys_str, cantidad, tamano_texto=None):
 
     total = 0.0
     for clave in claves:
-        if clave not in PRECIOS:
+        precio_base = _precio_base_tamano(clave)
+        if precio_base is None:
             continue
-        pu = PRECIOS[clave]["precio"]
-        # Descuentos por cantidad
-        if clave == "10x15":
-            if 15 <= cantidad <= 24: pu = 0.62
-            elif 25 <= cantidad <= 49: pu = 0.52
-            elif 50 <= cantidad <= 99: pu = 0.47
-            elif 100 <= cantidad <= 299: pu = 0.39
-            elif cantidad >= 300: pu = 0.32
-        elif clave == "15x15":
-            if 15 <= cantidad <= 24: pu = 1.80
-            elif 25 <= cantidad <= 49: pu = 0.70
-            elif 50 <= cantidad <= 99: pu = 0.60
-            elif 100 <= cantidad <= 299: pu = 0.50
-            elif cantidad >= 300: pu = 0.40
+        pu = _aplicar_descuentos(clave, cantidad, precio_base)
         total += round(pu * cantidad, 2)
     return round(total, 2)
+
+
+@app.route('/api/tamanos', methods=['GET'])
+def obtener_tamanos_publicos():
+    tamanos = FotoTamano.query.filter_by(activo=True).order_by(FotoTamano.id.asc()).all()
+    return jsonify({
+        "version": _catalogo_version(),
+        "tamanos": [_tamano_to_dict(t) for t in tamanos],
+    }), 200
+
+
+@app.route('/api/admin/tamanos', methods=['GET'])
+def admin_listar_tamanos():
+    tamanos = FotoTamano.query.order_by(FotoTamano.id.asc()).all()
+    return jsonify({
+        "version": _catalogo_version(),
+        "tamanos": [_tamano_to_dict(t) for t in tamanos],
+    }), 200
+
+
+@app.route('/api/admin/tamanos', methods=['POST'])
+def admin_crear_tamano():
+    data = request.get_json() or {}
+    clave = (data.get("clave") or "").strip().lower()
+    nombre = (data.get("nombre") or "").strip()
+
+    try:
+        precio_base = float(data.get("precio_base", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "precio_base debe ser numérico"}), 400
+
+    if not clave or not nombre:
+        return jsonify({"error": "clave y nombre son requeridos"}), 400
+    if precio_base < 0:
+        return jsonify({"error": "precio_base no puede ser negativo"}), 400
+    if FotoTamano.query.filter_by(clave=clave).first():
+        return jsonify({"error": "La clave ya existe"}), 409
+
+    nuevo = FotoTamano(clave=clave, nombre=nombre, precio_base=precio_base, activo=True)
+    db.session.add(nuevo)
+    db.session.commit()
+
+    return jsonify({"tamano": _tamano_to_dict(nuevo), "version": _catalogo_version()}), 201
+
+
+@app.route('/api/admin/tamanos/<int:tamano_id>', methods=['PUT', 'PATCH'])
+def admin_editar_tamano(tamano_id):
+    t = db.session.get(FotoTamano, tamano_id)
+    if not t:
+        return jsonify({"error": "Tamaño no encontrado"}), 404
+
+    data = request.get_json() or {}
+
+    if "clave" in data:
+        nueva_clave = (data.get("clave") or "").strip().lower()
+        if not nueva_clave:
+            return jsonify({"error": "clave inválida"}), 400
+        existe = FotoTamano.query.filter(FotoTamano.clave == nueva_clave, FotoTamano.id != tamano_id).first()
+        if existe:
+            return jsonify({"error": "La clave ya existe"}), 409
+        t.clave = nueva_clave
+
+    if "nombre" in data:
+        nuevo_nombre = (data.get("nombre") or "").strip()
+        if not nuevo_nombre:
+            return jsonify({"error": "nombre inválido"}), 400
+        t.nombre = nuevo_nombre
+
+    if "precio_base" in data:
+        try:
+            nuevo_precio = float(data.get("precio_base"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "precio_base debe ser numérico"}), 400
+        if nuevo_precio < 0:
+            return jsonify({"error": "precio_base no puede ser negativo"}), 400
+        t.precio_base = nuevo_precio
+
+    if "activo" in data:
+        t.activo = bool(data.get("activo"))
+
+    db.session.commit()
+    return jsonify({"tamano": _tamano_to_dict(t), "version": _catalogo_version()}), 200
+
+
+@app.route('/api/admin/tamanos/<int:tamano_id>/desactivar', methods=['PATCH'])
+def admin_desactivar_tamano(tamano_id):
+    t = db.session.get(FotoTamano, tamano_id)
+    if not t:
+        return jsonify({"error": "Tamaño no encontrado"}), 404
+
+    t.activo = False
+    db.session.commit()
+    return jsonify({"tamano": _tamano_to_dict(t), "version": _catalogo_version()}), 200
+
+
 @app.route('/api/precios', methods=['POST'])
 def obtener_precios():
-    data = request.get_json()
+    data = request.get_json() or {}
 
     tamano = data.get("tamano")
     cantidad = data.get("cantidad")
 
-    if not tamano or not cantidad:
+    try:
+        cantidad = int(cantidad)
+    except (TypeError, ValueError):
+        return jsonify({"error": "cantidad inválida"}), 400
+
+    if not tamano or cantidad <= 0:
         return jsonify({"error": "Datos incompletos"}), 400
 
-    if tamano not in PRECIOS:
+    precio_base = _precio_base_tamano(tamano)
+    if precio_base is None:
         return jsonify({"error": "Tamaño no válido"}), 400
 
-    precio_unitario = PRECIOS[tamano]["precio"]
-
-    #  Descuentos
-    if tamano == "10x15":
-        if 15 <= cantidad <= 24:
-            precio_unitario = 0.62
-        elif 25 <= cantidad <= 49:
-            precio_unitario = 0.52
-        elif 50 <= cantidad <= 99:
-            precio_unitario = 0.47
-        elif 100 <= cantidad <= 299:
-            precio_unitario = 0.39
-        elif cantidad >= 300:
-            precio_unitario = 0.32
-
-    elif tamano == "15x15":
-        if 15 <= cantidad <= 24:
-            precio_unitario = 1.80
-        elif 25 <= cantidad <= 49:
-            precio_unitario = 0.70
-        elif 50 <= cantidad <= 99:
-            precio_unitario = 0.60
-        elif 100 <= cantidad <= 299:
-            precio_unitario = 0.50
-        elif cantidad >= 300:
-            precio_unitario = 0.40
-
+    precio_unitario = _aplicar_descuentos(tamano, cantidad, precio_base)
     total = round(precio_unitario * cantidad, 2)
 
     return jsonify({

@@ -1,4 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.sql import func
 
 db = SQLAlchemy()
 # Define los modelos de la base de datos
@@ -24,3 +25,14 @@ class Foto(db.Model):
     public_id  = db.Column(db.String(255), nullable=True)    # public_id para eliminar
     cliente_id = db.Column(db.Integer,
                            db.ForeignKey('clientes.id'), nullable=False)
+
+
+class FotoTamano(db.Model):
+    __tablename__ = 'foto_tamanos'
+    id            = db.Column(db.Integer, primary_key=True)
+    clave         = db.Column(db.String(50), nullable=False, unique=True)
+    nombre        = db.Column(db.String(100), nullable=False)
+    precio_base   = db.Column(db.Float, nullable=False, default=0.0)
+    activo        = db.Column(db.Boolean, nullable=False, default=True)
+    updated_at    = db.Column(db.DateTime(timezone=True), nullable=False,
+                              server_default=func.now(), onupdate=func.now())

@@ -27,9 +27,9 @@
     <li class="paso"><span class="paso-num" aria-hidden="true">6</span> Confirma con <strong>Finalizar pedido</strong> para enviar tu pedido</li>
   </ol>
 </nav>
-    <label for="inputImagenes" class="sr-only">Seleccionar imágenes (PNG, JPG o GIF, máx. 150 archivos de 10 MB c/u)</label>
+    <label for="inputImagenes" class="sr-only"><span>📸</span> imágenes (PNG, JPG o GIF, máx. 150 archivos de 10 MB c/u)</label>
     <input type="file" id="inputImagenes" accept="image/png,image/jpeg,image/gif" multiple
-           aria-describedby="inputImagenesHelp">
+           aria-describedby="inputImagenesHelp" aria-label="Seleccionar imágenes para subir, formatos PNG, JPG o GIF, máximo 150 archivos de 10 MB cada uno" required>
     <p id="inputImagenesHelp" class="campo-ayuda">Formatos: PNG, JPG, GIF — Máximo 150 imágenes, 10 MB por archivo.</p>
 </div>
 <div class="preview-container" id="previewContainer" aria-live="polite" aria-label="Vista previa de imágenes cargadas"></div>
@@ -116,12 +116,11 @@
             <p id="telefonoHelp" class="campo-ayuda">Entre 7 y 15 dígitos numéricos.</p>
 
             <input type="submit" value="Revisar pedido" class="enviar-button"
-                   aria-label="Revisar pedido antes de enviar">
+                   aria-label="Revisar pedido antes de enviar" id="btnVerResumen">
             <div id="mensajeError" class="mensaje-error" role="alert" aria-live="assertive"></div>
         </fieldset>
     </form>
-    <button class="ver-resumen-btn" id="btnVerResumen" disabled
-            aria-label="Ver resumen de precios del pedido">🧾 Ver resumen de precios</button>
+    
 </div>
 
 <!-- MODAL FACTURA -->
