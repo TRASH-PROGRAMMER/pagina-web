@@ -13,11 +13,15 @@ for env_candidate in [
         load_dotenv(env_candidate)
         break
 
-from flask import Flask, render_template, request, jsonify
-from db import Cliente, Foto, FotoTamano, db
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask_session import Session
+from werkzeug.security import generate_password_hash
+from db import Cliente, Foto, FotoTamano, User, db
+from auth import auth_bp, login_required, role_required
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
+import cloudinary.utils
 
 # Crea la app Flask
 app = Flask(__name__)
@@ -30,6 +34,18 @@ DB_URL = os.environ.get(
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 150 * 10 * 1024 * 1024  # 150 fotos × 10 MB
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-change-me')
+app.config['SESSION_TYPE'] = os.environ.get('SESSION_TYPE', 'filesystem')
+app.config['SESSION_FILE_DIR'] = os.environ.get(
+    'SESSION_FILE_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), '.flask_session')
+)
+app.config['SESSION_PERMANENT'] = False
+app.config['SESSION_USE_SIGNER'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
+
+Session(app)
 
 # Configuración de Cloudinary
 cloudinary.config(
@@ -58,7 +74,28 @@ DEFAULT_TAMANOS = [
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
+def _thumbnail_url(public_id=None, fallback_url=""):
+    """Genera una miniatura pequeña de Cloudinary y usa fallback si algo falla."""
+    if public_id:
+        try:
+            thumb_url, _ = cloudinary.utils.cloudinary_url(
+                public_id,
+                width=300,
+                height=300,
+                crop="fill",
+                gravity="auto",
+                fetch_format="auto",
+                quality="auto",
+                secure=True,
+            )
+            return thumb_url
+        except Exception as e:
+            print(f"Error creando thumbnail para {public_id}: {e}")
+    return fallback_url or ""
+
 db.init_app(app)
+app.register_blueprint(auth_bp)
 
 # Crea las tablas si no existen + migración ligera
 with app.app_context():
@@ -71,6 +108,14 @@ with app.app_context():
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS papel VARCHAR(50)"))
         conn.execute(db.text(
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS tamano_keys VARCHAR(200)"))
+        conn.execute(db.text(
+            "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS estado VARCHAR(20) DEFAULT 'pendiente'"))
+        conn.execute(db.text(
+            "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS pagado BOOLEAN DEFAULT FALSE"))
+        conn.execute(db.text(
+            "UPDATE clientes SET estado='pendiente' WHERE estado IS NULL"))
+        conn.execute(db.text(
+            "UPDATE clientes SET pagado=FALSE WHERE pagado IS NULL"))
         conn.execute(db.text(
             "ALTER TABLE fotos ADD COLUMN IF NOT EXISTS public_id VARCHAR(255)"))
         conn.execute(db.text(
@@ -94,19 +139,69 @@ with app.app_context():
             ))
         db.session.commit()
 
+    # Seed inicial de usuarios de acceso (idempotente)
+    default_users = [
+        {
+            "username": os.environ.get("ADMIN_USERNAME", "admin"),
+            "email": os.environ.get("ADMIN_EMAIL", "admin@imagemanager.local"),
+            "password": os.environ.get("ADMIN_PASSWORD", "admin123"),
+            "role": "admin",
+        },
+        {
+            "username": os.environ.get("OPERADOR_USERNAME", "operador"),
+            "email": os.environ.get("OPERADOR_EMAIL", "operador@imagemanager.local"),
+            "password": os.environ.get("OPERADOR_PASSWORD", "operador123"),
+            "role": "operador",
+        },
+        {
+            "username": os.environ.get("CAJERO_USERNAME", "cajero"),
+            "email": os.environ.get("CAJERO_EMAIL", "cajero@imagemanager.local"),
+            "password": os.environ.get("CAJERO_PASSWORD", "cajero123"),
+            "role": "cajero",
+        },
+    ]
+
+    for u in default_users:
+        exists = User.query.filter_by(username=u["username"]).first()
+        if exists:
+            continue
+
+        db.session.add(User(
+            username=u["username"],
+            email=u["email"],
+            password_hash=generate_password_hash(u["password"]),
+            role=u["role"],
+            activo=True,
+        ))
+
+    db.session.commit()
+
 @app.route('/')
 def home():
+    if session.get('user_id'):
+        return redirect(url_for('auth.redirect_by_role'))
     return render_template('index.html')
 
 # crea una ruta para la página de administración
 @app.route('/admin')
+@login_required
+@role_required('admin')
 def admin():
     return render_template('admin.html')
 # imprime un mensaje en la consola para indicar que el programa está funcionando
 print("El programa está funcionando")
 @app.route('/operador')
+@login_required
+@role_required('admin', 'operador')
 def operador():
     return render_template('operador.html')
+
+
+@app.route('/cajero')
+@login_required
+@role_required('admin', 'cajero')
+def cajero():
+    return render_template('cajero.html')
 @app.route('/api/clientes', methods=['POST'])
 def crear_clientes():
     # Soporta FormData (con fotos) y JSON (sin fotos)
@@ -131,9 +226,14 @@ def crear_clientes():
         existe.tamano_keys  = data.get("tamano_keys", existe.tamano_keys)
         existe.papel        = data.get("papel", existe.papel)
         existe.fecha_registro = data["fechaRegistro"]
+        if not existe.estado:
+            existe.estado = 'pendiente'
+        if existe.pagado is None:
+            existe.pagado = False
 
         # Subir nuevas fotos a Cloudinary
         fotos_guardadas = []
+        thumbnails_guardadas = []
         for archivo in archivos:
             if archivo and archivo.filename and allowed_file(archivo.filename):
                 try:
@@ -149,6 +249,9 @@ def crear_clientes():
                     )
                     db.session.add(foto)
                     fotos_guardadas.append(resultado['secure_url'])
+                    thumbnails_guardadas.append(
+                        _thumbnail_url(resultado.get('public_id'), resultado.get('secure_url', ''))
+                    )
                 except Exception as e:
                     print(f"Error subiendo a Cloudinary: {e}")
                     continue
@@ -165,8 +268,11 @@ def crear_clientes():
                 "fechaRegistro": existe.fecha_registro,
                 "tamano": existe.tamano,
                 "papel": existe.papel,
+                "estado": existe.estado,
+                "pagado": bool(existe.pagado),
                 "numFotos": len(fotos_guardadas),
                 "fotos": fotos_guardadas,
+                "thumbnails": thumbnails_guardadas,
                 "precioTotal": calcular_precio_total(
                     existe.tamano_keys, len(existe.fotos), existe.tamano)
             }
@@ -180,7 +286,9 @@ def crear_clientes():
         fecha_registro=data["fechaRegistro"],
         tamano=data.get("tamano", ""),
         tamano_keys=data.get("tamano_keys", ""),
-        papel=data.get("papel", "")
+        papel=data.get("papel", ""),
+        estado='pendiente',
+        pagado=False,
     )
 
     db.session.add(nuevo_cliente)
@@ -188,6 +296,7 @@ def crear_clientes():
 
     # Subir fotos a Cloudinary
     fotos_guardadas = []
+    thumbnails_guardadas = []
     for archivo in archivos:
         if archivo and archivo.filename and allowed_file(archivo.filename):
             try:
@@ -206,6 +315,7 @@ def crear_clientes():
                 )
                 db.session.add(foto)
                 fotos_guardadas.append(url_segura)
+                thumbnails_guardadas.append(_thumbnail_url(public_id, url_segura))
             except Exception as e:
                 print(f"Error subiendo a Cloudinary: {e}")
                 continue
@@ -223,8 +333,11 @@ def crear_clientes():
             "fechaRegistro": nuevo_cliente.fecha_registro,
             "tamano": nuevo_cliente.tamano,
             "papel": nuevo_cliente.papel,
+            "estado": nuevo_cliente.estado,
+            "pagado": bool(nuevo_cliente.pagado),
             "numFotos": len(fotos_guardadas),
             "fotos": fotos_guardadas,
+            "thumbnails": thumbnails_guardadas,
             "precioTotal": calcular_precio_total(
                 nuevo_cliente.tamano_keys, len(fotos_guardadas),
                 nuevo_cliente.tamano)
@@ -232,6 +345,8 @@ def crear_clientes():
     }), 201
 
 @app.route('/api/clientes', methods=['GET'])
+@login_required
+@role_required('admin', 'operador', 'cajero')
 def obtener_clientes():
     clientes = Cliente.query.order_by(Cliente.id.desc()).all()
     return jsonify([{
@@ -243,12 +358,17 @@ def obtener_clientes():
         "fechaRegistro":  c.fecha_registro,
         "tamano":         c.tamano or "",
         "papel":          c.papel or "",
+        "estado":         c.estado or "pendiente",
+        "pagado":         bool(c.pagado),
         "numFotos":       len(c.fotos),
         "fotos":          [f.filename for f in c.fotos],
+        "thumbnails":     [_thumbnail_url(f.public_id, f.filename) for f in c.fotos],
         "precioTotal":    calcular_precio_total(c.tamano_keys, len(c.fotos), c.tamano)
     } for c in clientes]), 200
 
 @app.route('/api/clientes/<int:id>', methods=['DELETE'])
+@login_required
+@role_required('admin', 'operador')
 def eliminar_cliente(id):
     cliente = db.session.get(Cliente, id)
     if not cliente:
@@ -263,6 +383,44 @@ def eliminar_cliente(id):
     db.session.delete(cliente)
     db.session.commit()
     return jsonify({"mensaje": "Cliente eliminado correctamente"}), 200
+
+
+@app.route('/api/clientes/<int:id>/estado', methods=['PATCH'])
+@login_required
+@role_required('admin', 'operador')
+def actualizar_estado_cliente(id):
+    cliente = db.session.get(Cliente, id)
+    if not cliente:
+        return jsonify({"error": "Cliente no encontrado"}), 404
+
+    data = request.get_json() or {}
+    estado = (data.get('estado') or '').strip().lower()
+    estados_validos = {'pendiente', 'procesando', 'entregado', 'cancelado'}
+
+    if estado not in estados_validos:
+        return jsonify({"error": "Estado invalido"}), 400
+
+    cliente.estado = estado
+    db.session.commit()
+    return jsonify({"mensaje": "Estado actualizado", "estado": cliente.estado}), 200
+
+
+@app.route('/api/clientes/<int:id>/pago', methods=['PATCH'])
+@login_required
+@role_required('admin', 'cajero')
+def actualizar_pago_cliente(id):
+    cliente = db.session.get(Cliente, id)
+    if not cliente:
+        return jsonify({"error": "Cliente no encontrado"}), 404
+
+    data = request.get_json() or {}
+    pagado = data.get('pagado')
+    if pagado is None:
+        return jsonify({"error": "Campo pagado requerido"}), 400
+
+    cliente.pagado = bool(pagado)
+    db.session.commit()
+    return jsonify({"mensaje": "Pago actualizado", "pagado": bool(cliente.pagado)}), 200
 
 PRECIOS = {item["clave"]: {"precio": item["precio_base"]} for item in DEFAULT_TAMANOS}
 
@@ -356,7 +514,34 @@ def calcular_precio_total(tamano_keys_str, cantidad, tamano_texto=None):
         return 0.0
 
     if tamano_keys_str:
-        claves = [k.strip() for k in tamano_keys_str.split(',') if k.strip()]
+        tokens = [k.strip() for k in tamano_keys_str.split(',') if k.strip()]
+
+        # Nuevo formato: clave:cantidad (ej: 10x15:2,20x30:2)
+        if any(':' in token for token in tokens):
+            total = 0.0
+            for token in tokens:
+                if ':' not in token:
+                    continue
+                clave_raw, cantidad_raw = token.split(':', 1)
+                clave = clave_raw.strip()
+                try:
+                    cantidad_clave = int(cantidad_raw.strip())
+                except (TypeError, ValueError):
+                    continue
+
+                if cantidad_clave <= 0:
+                    continue
+
+                precio_base = _precio_base_tamano(clave)
+                if precio_base is None:
+                    continue
+
+                pu = _aplicar_descuentos(clave, cantidad_clave, precio_base)
+                total += round(pu * cantidad_clave, 2)
+
+            return round(total, 2)
+
+        claves = tokens
     elif tamano_texto:
         claves = _extraer_claves_desde_texto(tamano_texto)
     else:
@@ -382,6 +567,8 @@ def obtener_tamanos_publicos():
 
 
 @app.route('/api/admin/tamanos', methods=['GET'])
+@login_required
+@role_required('admin')
 def admin_listar_tamanos():
     tamanos = FotoTamano.query.order_by(FotoTamano.id.asc()).all()
     return jsonify({
@@ -391,6 +578,8 @@ def admin_listar_tamanos():
 
 
 @app.route('/api/admin/tamanos', methods=['POST'])
+@login_required
+@role_required('admin')
 def admin_crear_tamano():
     data = request.get_json() or {}
     clave = (data.get("clave") or "").strip().lower()
@@ -416,6 +605,8 @@ def admin_crear_tamano():
 
 
 @app.route('/api/admin/tamanos/<int:tamano_id>', methods=['PUT', 'PATCH'])
+@login_required
+@role_required('admin')
 def admin_editar_tamano(tamano_id):
     t = db.session.get(FotoTamano, tamano_id)
     if not t:
@@ -455,6 +646,8 @@ def admin_editar_tamano(tamano_id):
 
 
 @app.route('/api/admin/tamanos/<int:tamano_id>/desactivar', methods=['PATCH'])
+@login_required
+@role_required('admin')
 def admin_desactivar_tamano(tamano_id):
     t = db.session.get(FotoTamano, tamano_id)
     if not t:
@@ -495,6 +688,8 @@ def obtener_precios():
     }), 200
 
 @app.route('/api/pedidos-semana', methods=['GET'])
+@login_required
+@role_required('admin')
 def pedidos_semana():
     from datetime import datetime, timedelta
     hoy = datetime.now().date()
@@ -520,6 +715,8 @@ def pedidos_semana():
     return jsonify({"labels": labels, "valores": valores}), 200
 
 @app.route('/api/estadisticas', methods=['GET'])
+@login_required
+@role_required('admin')
 def estadisticas():
     from datetime import datetime, timedelta
     hoy = datetime.now().date()
@@ -567,6 +764,8 @@ def estadisticas():
     }), 200
 
 @app.route('/api/ultimas-subidas', methods=['GET'])
+@login_required
+@role_required('admin', 'operador')
 def ultimas_subidas():
     from datetime import datetime
     fotos = (Foto.query
@@ -578,6 +777,7 @@ def ultimas_subidas():
         cliente = f.cliente
         resultado.append({
             "url": f.filename,
+            "thumbnail": _thumbnail_url(f.public_id, f.filename),
             "cliente": f"{cliente.nombre} {cliente.apellido}",
             "fecha": cliente.fecha_registro,
             "numFotos": len(cliente.fotos),

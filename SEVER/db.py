@@ -2,6 +2,8 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.sql import func
 
 db = SQLAlchemy()
+
+
 # Define los modelos de la base de datos
 class Cliente(db.Model):
     __tablename__ = 'clientes'
@@ -14,6 +16,8 @@ class Cliente(db.Model):
     tamano         = db.Column(db.String(200), nullable=True)
     tamano_keys    = db.Column(db.String(200), nullable=True)
     papel          = db.Column(db.String(50),  nullable=True)
+    estado         = db.Column(db.String(20),  nullable=False, default='pendiente')
+    pagado         = db.Column(db.Boolean, nullable=False, default=False)
     fotos          = db.relationship('Foto', backref='cliente',
                                      cascade='all, delete-orphan', lazy=True)
 
@@ -36,3 +40,15 @@ class FotoTamano(db.Model):
     activo        = db.Column(db.Boolean, nullable=False, default=True)
     updated_at    = db.Column(db.DateTime(timezone=True), nullable=False,
                               server_default=func.now(), onupdate=func.now())
+
+
+class User(db.Model):
+    __tablename__ = 'users'
+    id            = db.Column(db.Integer, primary_key=True)
+    username      = db.Column(db.String(50), nullable=False, unique=True)
+    email         = db.Column(db.String(120), nullable=False, unique=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    role          = db.Column(db.String(20), nullable=False, default='operador')
+    activo        = db.Column(db.Boolean, nullable=False, default=True)
+    created_at    = db.Column(db.DateTime(timezone=True), nullable=False,
+                              server_default=func.now())

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Cajero - Image Manager</title>
+	<style>
+		:root {
+			--bg: #0f1018;
+			--panel: #191b27;
+			--line: #2f3346;
+			--text: #edf0ff;
+			--muted: #9ca3b0;
+			--ok: #22c55e;
+			--warn: #f59e0b;
+		}
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			min-height: 100vh;
+			background: var(--bg);
+			color: var(--text);
+			font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+		}
+		header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 14px 20px;
+			border-bottom: 1px solid var(--line);
+			background: #141625;
+			position: sticky;
+			top: 0;
+		}
+		.meta {
+			color: var(--muted);
+			font-size: 13px;
+		}
+		.btn {
+			border: 1px solid var(--line);
+			border-radius: 8px;
+			padding: 8px 10px;
+			background: #23273a;
+			color: var(--text);
+			text-decoration: none;
+			font-size: 13px;
+			cursor: pointer;
+		}
+		.wrap {
+			max-width: 1000px;
+			margin: 20px auto;
+			padding: 0 16px;
+		}
+		table {
+			width: 100%;
+			border-collapse: collapse;
+			background: var(--panel);
+			border: 1px solid var(--line);
+			border-radius: 12px;
+			overflow: hidden;
+		}
+		th, td {
+			padding: 10px;
+			border-bottom: 1px solid var(--line);
+			text-align: left;
+			font-size: 13px;
+		}
+		th {
+			color: var(--muted);
+			text-transform: uppercase;
+			letter-spacing: 0.04em;
+			font-size: 11px;
+		}
+		.tag {
+			border-radius: 999px;
+			padding: 3px 8px;
+			display: inline-block;
+			font-size: 11px;
+			border: 1px solid var(--line);
+		}
+		.pending { color: var(--warn); }
+		.paid { color: var(--ok); }
+		.pay-btn {
+			border: 1px solid rgba(34, 197, 94, 0.5);
+			background: rgba(34, 197, 94, 0.12);
+			color: #c6ffe0;
+			border-radius: 8px;
+			padding: 6px 8px;
+			cursor: pointer;
+			font-size: 12px;
+		}
+		.pay-btn:disabled {
+			opacity: 0.55;
+			cursor: not-allowed;
+		}
+	</style>
+</head>
+<body>
+	<header>
+		<div>
+			<h2 style="margin:0">Panel Cajero</h2>
+			<div class="meta">Usuario: {{ session.get('username', '') }} | Rol: {{ session.get('role', '') }}</div>
+		</div>
+		<a class="btn" href="{{ url_for('auth.logout') }}">Salir</a>
+	</header>
+
+	<div class="wrap">
+		<table>
+			<thead>
+				<tr>
+					<th>Pedido</th>
+					<th>Cliente</th>
+					<th>Total</th>
+					<th>Estado</th>
+					<th>Pago</th>
+					<th>Accion</th>
+				</tr>
+			</thead>
+			<tbody id="cashierBody">
+				<tr><td colspan="6" style="color:var(--muted)">Cargando...</td></tr>
+			</tbody>
+		</table>
+	</div>
+
+	<script>
+		async function cargarPedidos() {
+			const body = document.getElementById("cashierBody");
+			try {
+				const res = await fetch("/api/clientes");
+				if (res.status === 401 || res.status === 403) {
+					window.location.href = "/login";
+					return;
+				}
+				const pedidos = await res.json();
+				body.innerHTML = "";
+				if (!Array.isArray(pedidos) || pedidos.length === 0) {
+					body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">No hay pedidos</td></tr>';
+					return;
+				}
+
+				pedidos.forEach(function(p) {
+					const pagado = !!p.pagado;
+					const tr = document.createElement("tr");
+					tr.innerHTML = `
+						<td>#${String(p.id).padStart(4, "0")}</td>
+						<td>${p.nombre} ${p.apellido}<br><span style="color:var(--muted)">${p.correo}</span></td>
+						<td>$${Number(p.precioTotal || 0).toFixed(2)}</td>
+						<td>${(p.estado || "pendiente").toUpperCase()}</td>
+						<td><span class="tag ${pagado ? "paid" : "pending"}">${pagado ? "PAGADO" : "PENDIENTE"}</span></td>
+						<td><button class="pay-btn" ${pagado ? "disabled" : ""} onclick="marcarPagado(${p.id})">Marcar pagado</button></td>
+					`;
+					body.appendChild(tr);
+				});
+			} catch (_error) {
+				body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Error al cargar pedidos</td></tr>';
+			}
+		}
+
+		async function marcarPagado(id) {
+			const res = await fetch(`/api/clientes/${id}/pago`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ pagado: true })
+			});
+			if (res.ok) {
+				await cargarPedidos();
+			}
+		}
+
+		cargarPedidos();
+	</script>
+</body>
+</html>

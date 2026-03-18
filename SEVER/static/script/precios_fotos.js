@@ -16,6 +16,17 @@ function normalizarClave(clave) {
     return String(clave || "").trim().toLowerCase();
 }
 
+function obtenerResumenAsignado() {
+    if (typeof window.obtenerResumenTamanosAsignados !== "function") {
+        return {};
+    }
+    return window.obtenerResumenTamanosAsignados() || {};
+}
+
+function usaAsignacionPorFoto() {
+    return typeof window.usaAsignacionPorFoto === "function" && window.usaAsignacionPorFoto();
+}
+
 function renderTamanosEnSelect(tamanos) {
     if (!tamanoSelect) return;
 
@@ -58,21 +69,48 @@ async function cargarTamanosDinamicos(force = false) {
 // Habilitar/deshabilitar botón según selección
 function checkResumenBtn() {
     const tienesFotos  = inputImagenes && inputImagenes.files && inputImagenes.files.length > 0;
-    const tieneTamano  = tamanoSelect && tamanoSelect.selectedOptions.length > 0;
+    const totalFotos = inputImagenes && inputImagenes.files ? inputImagenes.files.length : 0;
+    let tieneTamano = false;
+
+    if (usaAsignacionPorFoto()) {
+        const resumen = obtenerResumenAsignado();
+        const totalAsignado = Object.values(resumen).reduce(function(acc, item) {
+            return acc + Number(item.cantidad || 0);
+        }, 0);
+        tieneTamano = totalFotos > 0 && totalAsignado === totalFotos;
+    } else {
+        tieneTamano = tamanoSelect && tamanoSelect.selectedOptions.length > 0;
+    }
+
     if (btnResumen) btnResumen.disabled = !(tienesFotos && tieneTamano);
 }
 
 if (tamanoSelect) tamanoSelect.addEventListener("change", checkResumenBtn);
 if (inputImagenes) inputImagenes.addEventListener("change", checkResumenBtn);
+document.addEventListener("asignacionesTamanosActualizadas", checkResumenBtn);
 
 // Abrir modal
 async function abrirResumenPedido() {
-    const seleccionados = Array.from(tamanoSelect.selectedOptions);
+    const modoAsignado = usaAsignacionPorFoto();
+    const resumenAsignado = obtenerResumenAsignado();
+    const seleccionados = modoAsignado
+        ? Object.entries(resumenAsignado)
+        : Array.from(tamanoSelect.selectedOptions).map(function(opt) {
+            return [opt.value, { nombre: opt.text, cantidad: (inputImagenes.files ? inputImagenes.files.length : 0) }];
+        });
     const numFotos      = inputImagenes.files ? inputImagenes.files.length : 0;
     const papelRadio    = document.querySelector('input[name="papel"]:checked');
     const papel         = papelRadio ? papelRadio.value : "No seleccionado";
 
-    if (seleccionados.length === 0 || numFotos === 0) return;
+    const totalAsignado = seleccionados.reduce(function(acc, entry) {
+        return acc + Number(entry[1].cantidad || 0);
+    }, 0);
+
+    if (modoAsignado) {
+        if (seleccionados.length === 0 || numFotos === 0 || totalAsignado !== numFotos) return;
+    } else {
+        if (seleccionados.length === 0 || numFotos === 0) return;
+    }
 
     // Info del pedido
     const fecha = new Date().toLocaleDateString("es-EC", {
@@ -94,12 +132,12 @@ async function abrirResumenPedido() {
     let filas = "";
     let totalGeneral = 0;
 
-    for (const opt of seleccionados) {
+    for (const [clave, info] of seleccionados) {
         try {
             const res = await fetch("/api/precios", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ tamano: opt.value, cantidad: numFotos })
+                body: JSON.stringify({ tamano: clave, cantidad: info.cantidad })
             });
             if (!res.ok) continue;
             const data = await res.json();
@@ -107,7 +145,7 @@ async function abrirResumenPedido() {
 
             filas += `
                 <tr>
-                    <td>${opt.text}</td>
+                    <td>${info.nombre}</td>
                     <td class="text-center">${data.cantidad}</td>
                     <td class="text-right">$${data.precio_unitario.toFixed(2)}</td>
                     <td class="text-right subtotal-col">$${data.total.toFixed(2)}</td>

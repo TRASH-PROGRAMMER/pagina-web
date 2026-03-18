@@ -7,9 +7,35 @@ const cancelButton = document.getElementById("cancelButton");
 const retryButton = document.getElementById("retryButton");
 const errorMessage = document.getElementById("errorMessage");
 const successMessage = document.getElementById("successMessage");
+const paginationContainer = document.getElementById("previewPagination");
+const prevPageButton = document.getElementById("prevPageButton");
+const nextPageButton = document.getElementById("nextPageButton");
+const pageInfo = document.getElementById("pageInfo");
+const previewHelp = document.getElementById("previewHelp");
+const MAX_IMAGENES = 150;
+const ITEMS_POR_PAGINA = 20;
 // Variables para control de estado
 let cancelado = false;
-let archivosGlobal = [];
+let archivosGlobal = []; // Acumula todos los archivos seleccionados, incluso después de cancelar o reintentar
+let previewsGlobal = [];
+let paginaActual = 1;
+
+function mostrarError(texto, esAdvertencia = false) {
+    errorMessage.textContent = texto;
+    if (esAdvertencia) {
+        errorMessage.classList.add("warning-message");
+    } else {
+        errorMessage.classList.remove("warning-message");
+    }
+}
+
+function emitirImagenesActualizadas() {
+    document.dispatchEvent(new CustomEvent("imagenesActualizadas", {
+        detail: {
+            total: archivosGlobal.length
+        }
+    }));
+}
 
 // Sincroniza el input.files con archivosGlobal para que formulario_clientes.js
 // siempre vea todos los archivos acumulados
@@ -17,6 +43,118 @@ function sincronizarInputFiles() {
     const dt = new DataTransfer();
     archivosGlobal.forEach(f => dt.items.add(f));
     input.files = dt.files;
+    emitirImagenesActualizadas();
+}
+
+function totalPaginas() {
+    return Math.max(1, Math.ceil(previewsGlobal.length / ITEMS_POR_PAGINA));
+}
+
+function actualizarMensajeExito() {
+    if (archivosGlobal.length === 0) {
+        successMessage.textContent = "";
+        return;
+    }
+    successMessage.textContent = `✅ ${archivosGlobal.length} foto(s) seleccionada(s) en total.`;
+}
+
+function actualizarMensajeVistaPrevia() {
+    if (!previewHelp) return;
+
+    if (previewsGlobal.length === 0) {
+        previewHelp.textContent = "Las imágenes seleccionadas se mostrarán aquí, debajo del selector de archivos.";
+        return;
+    }
+
+    const inicio = (paginaActual - 1) * ITEMS_POR_PAGINA + 1;
+    const fin = Math.min(inicio + ITEMS_POR_PAGINA - 1, previewsGlobal.length);
+    previewHelp.textContent = `Vista previa de imágenes: mostrando ${inicio}-${fin} de ${previewsGlobal.length}.`;
+}
+
+function actualizarControlesPaginacion() {
+    const total = totalPaginas();
+    if (paginaActual > total) {
+        paginaActual = total;
+    }
+
+    if (paginationContainer) {
+        const mostrar = previewsGlobal.length > ITEMS_POR_PAGINA;
+        paginationContainer.hidden = !mostrar;
+    }
+
+    if (pageInfo) {
+        pageInfo.textContent = `Página ${paginaActual} de ${total}`;
+    }
+    if (prevPageButton) {
+        prevPageButton.disabled = paginaActual <= 1;
+    }
+    if (nextPageButton) {
+        nextPageButton.disabled = paginaActual >= total;
+    }
+}
+
+function eliminarPreview(archivo) {
+    const idxArchivo = archivosGlobal.indexOf(archivo);
+    if (idxArchivo > -1) {
+        archivosGlobal.splice(idxArchivo, 1);
+    }
+
+    const idxPreview = previewsGlobal.findIndex(item => item.archivo === archivo);
+    if (idxPreview > -1) {
+        previewsGlobal.splice(idxPreview, 1);
+    }
+
+    sincronizarInputFiles();
+    actualizarMensajeExito();
+    renderizarPaginaActual();
+}
+
+function crearCardPreview(item) {
+    const card = document.createElement("div");
+    card.className = "card";
+
+    const botonEliminar = document.createElement("button");
+    botonEliminar.type = "button";
+    botonEliminar.className = "delete-image-button";
+    botonEliminar.setAttribute("aria-label", "Eliminar imagen");
+    botonEliminar.setAttribute("data-tooltip", "Eliminar imagen");
+    botonEliminar.textContent = "×";
+    botonEliminar.onclick = function() {
+        eliminarPreview(item.archivo);
+    };
+
+    const imagen = document.createElement("img");
+    imagen.src = item.src;
+
+    const mensaje = document.createElement("div");
+    mensaje.className = "mensaje";
+    if (item.width < 800 || item.height < 600) {
+        mensaje.textContent = `Baja calidad (${item.width}x${item.height})`;
+        mensaje.classList.add("baja");
+    } else {
+        mensaje.textContent = `Buena calidad (${item.width}x${item.height})`;
+        mensaje.classList.add("alta");
+    }
+
+    card.appendChild(botonEliminar);
+    card.appendChild(imagen);
+    card.appendChild(mensaje);
+    return card;
+}
+
+function renderizarPaginaActual() {
+    container.innerHTML = "";
+
+    const inicio = (paginaActual - 1) * ITEMS_POR_PAGINA;
+    const fin = inicio + ITEMS_POR_PAGINA;
+    const pagina = previewsGlobal.slice(inicio, fin);
+
+    pagina.forEach(item => {
+        container.appendChild(crearCardPreview(item));
+    });
+
+    actualizarControlesPaginacion();
+    actualizarMensajeVistaPrevia();
 }
 
 // Agrega las previews de los archivos nuevos al contenedor (sin limpiar los anteriores)
@@ -24,7 +162,7 @@ function procesarArchivos(archivos) {
     progressBar.style.width = "0%";
     progressBar.textContent = "0%";
     progressBar.setAttribute("aria-valuenow", 0);
-    errorMessage.textContent = "";
+    mostrarError("");
     successMessage.textContent = "";
     cancelado = false;
     if (archivos.length === 0) return;
@@ -37,11 +175,11 @@ function procesarArchivos(archivos) {
 
         const tiposValidos = ["image/jpeg", "image/png", "image/gif"];
         if (!tiposValidos.includes(archivo.type)) {
-            errorMessage.textContent = `❌ Tipo de archivo no válido: ${archivo.name}`;
+            mostrarError(`❌ Tipo de archivo no válido: ${archivo.name}`);
             return;
         }
         if (archivo.size > 10 * 1024 * 1024) {
-            errorMessage.textContent = `❌ Archivo demasiado grande: ${archivo.name}`;
+            mostrarError(`❌ Archivo demasiado grande: ${archivo.name}`);
             return;
         }
 
@@ -52,41 +190,14 @@ function procesarArchivos(archivos) {
             img.src = e.target.result;
             img.onload = function() {
                 if (cancelado) return;
-
-                const card = document.createElement("div");
-                card.className = "card";
-
-                const imagen = document.createElement("img");
-                imagen.src = img.src;
-
-                const mensaje = document.createElement("div");
-                mensaje.className = "mensaje";
-                if (img.width < 800 || img.height < 600) {
-                    mensaje.textContent = `Baja calidad (${img.width}x${img.height})`;
-                    mensaje.classList.add("baja");
-                } else {
-                    mensaje.textContent = `Buena calidad (${img.width}x${img.height})`;
-                    mensaje.classList.add("alta");
-                }
-
-                const botonEliminar = document.createElement("button");
-                botonEliminar.textContent = "Eliminar";
-                botonEliminar.onclick = function() {
-                    container.removeChild(card);
-                    // Quitar el archivo de la lista acumulada
-                    const idx = archivosGlobal.indexOf(archivo);
-                    if (idx > -1) archivosGlobal.splice(idx, 1);
-                    sincronizarInputFiles();
-                };
-
-                const btnGroup = document.createElement("div");
-                btnGroup.classList.add("btn-group");
-                btnGroup.appendChild(botonEliminar);
-
-                card.appendChild(imagen);
-                card.appendChild(mensaje);
-                card.appendChild(btnGroup);
-                container.appendChild(card);
+                previewsGlobal.push({
+                    archivo,
+                    src: img.src,
+                    width: img.width,
+                    height: img.height
+                });
+                paginaActual = totalPaginas();
+                renderizarPaginaActual();
 
                 procesados++;
                 const porcentaje = Math.round((procesados / total) * 100);
@@ -94,12 +205,12 @@ function procesarArchivos(archivos) {
                 progressBar.textContent = porcentaje + "%";
                 progressBar.setAttribute("aria-valuenow", porcentaje);
                 if (procesados === total) {
-                    successMessage.textContent = `✅ ${archivosGlobal.length} foto(s) seleccionada(s) en total.`;
+                    actualizarMensajeExito();
                 }
             };
         };
         reader.onerror = function() {
-            errorMessage.textContent = "❌ Error al cargar una imagen.";
+            mostrarError("❌ Error al cargar una imagen.");
         };
         reader.readAsDataURL(archivo);
     });
@@ -107,13 +218,29 @@ function procesarArchivos(archivos) {
 
 // Al seleccionar archivos nuevos, se ACUMULAN a los anteriores (sin reemplazar)
 input.addEventListener("change", function() {
-    const nuevos = Array.from(this.files).filter(f =>
+    const seleccionados = Array.from(this.files);
+    const disponibles = MAX_IMAGENES - archivosGlobal.length;
+
+    if (disponibles <= 0) {
+        mostrarError(`⚠️ Ya alcanzaste el máximo de ${MAX_IMAGENES} imágenes.`, true);
+        sincronizarInputFiles();
+        return;
+    }
+
+    const noDuplicados = seleccionados.filter(f =>
         !archivosGlobal.some(a => a.name === f.name && a.size === f.size)
     );
+    const nuevos = noDuplicados.slice(0, disponibles);
+    const excedentes = noDuplicados.length - nuevos.length;
 
-    if (archivosGlobal.length + nuevos.length > 150) {
-        alert("Solo puedes subir máximo 150 imágenes en total.");
+    if (nuevos.length === 0) {
+        sincronizarInputFiles();
+        mostrarError("⚠️ No se agregaron nuevas imágenes.", true);
         return;
+    }
+
+    if (excedentes > 0) {
+        mostrarError(`⚠️ Seleccionaste más de ${MAX_IMAGENES} imágenes. Se agregaron ${nuevos.length} y se ignoraron ${excedentes} para respetar el límite.`, true);
     }
 
     archivosGlobal = archivosGlobal.concat(nuevos);
@@ -125,22 +252,44 @@ input.addEventListener("change", function() {
 cancelButton.addEventListener("click", function() {
     cancelado = true;
     archivosGlobal = [];
+    previewsGlobal = [];
+    paginaActual = 1;
     sincronizarInputFiles();
-    container.innerHTML = "";
+    renderizarPaginaActual();
     progressBar.style.width = "0%";
     progressBar.textContent = "0%";
     progressBar.setAttribute("aria-valuenow", 0);
     successMessage.textContent = "";
-    errorMessage.textContent = "⚠️ Carga cancelada.";
+    mostrarError("⚠️ Carga cancelada.", true);
 });
 
 // Reintentar muestra todas las fotos acumuladas desde cero
 retryButton.addEventListener("click", function() {
     if (archivosGlobal.length === 0) {
-        errorMessage.textContent = "⚠️ No hay imágenes para reintentar.";
+        mostrarError("⚠️ No hay imágenes para reintentar.", true);
         return;
     }
-    container.innerHTML = "";
+    previewsGlobal = [];
+    paginaActual = 1;
+    renderizarPaginaActual();
     procesarArchivos(archivosGlobal);
 });
+
+if (prevPageButton) {
+    prevPageButton.addEventListener("click", function() {
+        if (paginaActual > 1) {
+            paginaActual--;
+            renderizarPaginaActual();
+        }
+    });
+}
+
+if (nextPageButton) {
+    nextPageButton.addEventListener("click", function() {
+        if (paginaActual < totalPaginas()) {
+            paginaActual++;
+            renderizarPaginaActual();
+        }
+    });
+}
 

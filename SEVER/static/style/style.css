@@ -183,6 +183,132 @@ select:focus {
     width: 100%;
 }
 
+.preview-help {
+    margin-top: 16px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: #eef5ff;
+    border: 1px solid #c9dcff;
+    color: #1f3b73;
+    font-size: 14px;
+    line-height: 1.4;
+    font-weight: 500;
+}
+
+.preview-pagination {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.preview-pagination button {
+    margin-top: 0;
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
+.preview-pagination button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.page-info {
+    font-size: 14px;
+    font-weight: 600;
+    color: #445;
+}
+
+.asignacion-tamanos {
+    margin-top: 20px;
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #dce7fb;
+    background: #f8fbff;
+}
+
+.toggle-asignacion-wrap {
+    margin-top: 12px;
+    display: flex;
+    justify-content: center;
+}
+
+.toggle-asignacion {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #2a3f6c;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.toggle-asignacion input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #007bff;
+    cursor: pointer;
+}
+
+.asignacion-tamanos h3 {
+    margin: 0 0 8px;
+    font-size: 18px;
+    color: #1f3b73;
+}
+
+.asignacion-toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 12px 0 14px;
+}
+
+.asignacion-toolbar select {
+    margin: 0;
+    max-width: 320px;
+}
+
+.aplicar-todas-btn {
+    margin-top: 0;
+}
+
+.asignacion-fotos-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+}
+
+.asignacion-item {
+    border: 1px solid #e3e8f5;
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: #fff;
+    text-align: left;
+}
+
+.asignacion-item .foto-titulo {
+    font-weight: 700;
+    color: #102a56;
+    margin-bottom: 8px;
+}
+
+.asignacion-item .foto-nombre {
+    font-size: 12px;
+    color: #5d6f94;
+    margin-bottom: 8px;
+    word-break: break-all;
+}
+
+.asignacion-item .foto-tamano-select {
+    width: 100%;
+    margin: 0;
+}
+
 
 /* ===== CARD ===== */
 
@@ -192,6 +318,7 @@ select:focus {
     border-radius: 14px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
+    position: relative;
 }
 
 .card:hover {
@@ -204,6 +331,76 @@ select:focus {
     height: 160px;
     border-radius: 10px;
     object-fit: cover;
+}
+
+.delete-image-button {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 34px;
+    height: 34px;
+    margin-top: 0;
+    padding: 0;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(28, 32, 45, 0.78);
+    color: #fff;
+    font-size: 24px;
+    line-height: 1;
+    font-weight: 700;
+    z-index: 2;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.delete-image-button:hover,
+.delete-image-button:focus-visible {
+    background: #d62828;
+    color: #fff;
+    transform: scale(1.08);
+    opacity: 1;
+}
+
+.delete-image-button::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: 50%;
+    right: calc(100% + 10px);
+    transform: translateY(-50%);
+    background: #d62828;
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.delete-image-button:hover::after,
+.delete-image-button:focus-visible::after {
+    opacity: 1;
+}
+
+.card.cloud-thumb {
+    padding: 8px;
+}
+
+.card.cloud-thumb:hover {
+    transform: none;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+
+.card.cloud-thumb img {
+    height: 90px;
+}
+
+.card.cloud-thumb .mensaje {
+    font-size: 12px;
+    margin-top: 6px;
 }
 
 
@@ -302,6 +499,10 @@ button:nth-child(4) {
     color: #e53935;
     font-weight: 600;
     margin-top: 15px;
+}
+
+.error-message.warning-message {
+    color: #c77800;
 }
 
 .success-message {
@@ -682,6 +883,35 @@ footer {
     transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
 }
 
+.telefono-group {
+    display: grid;
+    grid-template-columns: minmax(170px, 230px) 1fr;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.prefijo-pais {
+    width: 100%;
+    padding: 12px 10px;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    font-size: 14px;
+    background: #fafbfc;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+}
+
+.prefijo-pais:hover {
+    border-color: #b0cfef;
+    background: #f4f9ff;
+}
+
+.prefijo-pais:focus {
+    border-color: #007BFF;
+    background: #fff;
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.12);
+}
+
 .formulario_datos_personales input[type="text"]:hover,
 .formulario_datos_personales input[type="email"]:hover,
 .formulario_datos_personales input[type="tel"]:hover {
@@ -877,6 +1107,42 @@ footer {
     background: #1a1a25;
     color: white;
 }
+.dark-mode .asignacion-tamanos {
+    background: #121d31;
+    border-color: #2f4268;
+}
+.dark-mode .toggle-asignacion {
+    color: #dbe5ff;
+}
+.dark-mode .asignacion-tamanos h3 {
+    color: #dbe5ff;
+}
+.dark-mode .asignacion-item {
+    background: #1a1a25;
+    border-color: #2f3b55;
+}
+.dark-mode .asignacion-item .foto-titulo {
+    color: #e4ecff;
+}
+.dark-mode .asignacion-item .foto-nombre {
+    color: #aab8d7;
+}
+.dark-mode .delete-image-button {
+    background: rgba(8, 10, 18, 0.88);
+    color: #f5f7ff;
+}
+.dark-mode .delete-image-button:hover,
+.dark-mode .delete-image-button:focus-visible {
+    background: #ff4d4f;
+}
+.dark-mode .preview-help {
+    background: #1a253a;
+    border-color: #324a73;
+    color: #dbe5ff;
+}
+.dark-mode .page-info {
+    color: #dbe5ff;
+}
 .dark-mode .mensaje {
     color: white;
 }
@@ -925,6 +1191,23 @@ footer {
     background: #22223a;
     color: #e8e8f0;
     border-color: #3a3a55;
+}
+
+.dark-mode .prefijo-pais {
+    background: #22223a;
+    color: #e8e8f0;
+    border-color: #3a3a55;
+}
+
+.dark-mode .prefijo-pais:hover {
+    border-color: #5577aa;
+    background: #252540;
+}
+
+.dark-mode .prefijo-pais:focus {
+    background: #1e1e35;
+    border-color: #007BFF;
+    box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.2);
 }
 
 .dark-mode .formulario_datos_personales input[type="text"]:hover,

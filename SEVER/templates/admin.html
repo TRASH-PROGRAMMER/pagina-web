@@ -20,14 +20,14 @@
 
   <nav class="sidebar-nav">
     <div class="nav-section-label">Principal</div>
-    <a class="nav-item active" href="#">
+    <a class="nav-item active" id="navDashboard" href="#">
       <span class="icon">◈</span> Dashboard
     </a>
-    <a class="nav-item" href="#">
+    <a class="nav-item" id="navPedidos" href="#">
       <span class="icon">◻</span> Pedidos
       <span class="badge warn" id="badgePedidos">0</span>
     </a>
-    <a class="nav-item" href="#">
+    <a class="nav-item" id="navClientes" href="#">
       <span class="icon">◎</span> Clientes
     </a>
     <a class="nav-item" href="#">
@@ -47,8 +47,8 @@
     <div class="admin-avatar">
       <div class="avatar-circle">AD</div>
       <div>
-        <div style="font-size:13px;color:var(--text);font-weight:500;">Admin</div>
-        <div style="font-size:11px;">admin@imagemanager</div>
+        <div style="font-size:13px;color:var(--text);font-weight:500;">{{ session.get('username', 'admin') }}</div>
+        <div style="font-size:11px;">rol: {{ session.get('role', 'admin') }}</div>
       </div>
     </div>
   </div>
@@ -64,6 +64,7 @@
     </div>
     <div class="topbar-actions">
       <button class="btn btn-ghost" onclick="exportCSV()">↓ Exportar CSV</button>
+      <a class="btn btn-ghost" href="{{ url_for('auth.logout') }}">Salir</a>
     </div>
   </div>
 
@@ -71,7 +72,7 @@
   <div class="content">
 
     <!-- STATS -->
-    <div class="stats-grid">
+    <div class="stats-grid dashboard-only">
       <div class="stat-card">
         <div class="stat-icon">📦</div>
         <div class="stat-label">Pedidos hoy</div>
@@ -92,14 +93,14 @@
       </div>
       <div class="stat-card">
         <div class="stat-icon">⏳</div>
-        <div class="stat-label">Pendientes</div>
+        <div class="stat-label"> Pedidos pendientes</div>
         <div class="stat-value" id="statPendientes" style="color:var(--warning)">—</div>
         <div class="stat-sub">Requieren acción</div>
       </div>
     </div>
 
     <!-- ORDERS TABLE -->
-    <div class="table-card">
+    <div class="table-card dashboard-only">
       <div class="table-toolbar">
         <div class="section-title">Pedidos recientes</div>
         <div class="search-box">
@@ -163,7 +164,7 @@
     </div>
 
     <!-- BOTTOM PANELS -->
-    <div class="bottom-grid">
+    <div class="bottom-grid dashboard-only">
       <div class="panel">
         <div class="section-header">
           <div class="section-title">Pedidos — últimos 7 días</div>
@@ -183,7 +184,14 @@
       </div>
     </div>
 
-    <div class="panel panel-opciones" id="panelOpciones">
+    <div class="clientes-cards-section" id="clientesCardsContainer" hidden>
+      <div class="section-header">
+        <div class="section-title">Clientes</div>
+      </div>
+      <div class="clientes-cards-grid" id="clientesCardsGrid"></div>
+    </div>
+
+    <div class="panel panel-opciones dashboard-only" id="panelOpciones">
       <div class="section-header">
         <div class="section-title">Configuración - Opciones</div>
       </div>
@@ -230,10 +238,12 @@
   <div class="foto-modal-content">
     <div class="foto-modal-header">
       <h3 id="fotoModalTitle">Fotos del pedido</h3>
-      <button class="foto-modal-close" onclick="cerrarModal()">&times;</button>
+      <div class="foto-modal-actions">
+        <button type="button" id="descargarpedido" class="descargarpedidobtn" aria-label="Descargar imagenes">descargar</button>
+        <button class="foto-modal-close" onclick="cerrarModal()" aria-label="Cerrar modal">&times;</button>
+      </div>
     </div>
     <div id="fotoModalBody" class="foto-grid"></div>
-    <button type="button" id ="descargarpedido" class="descargarpedidobtn">descargar</button>
   </div>
 </div>
 

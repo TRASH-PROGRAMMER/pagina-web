@@ -2,13 +2,20 @@
 const clienteChannel = new BroadcastChannel("clientes_channel");
 clienteChannel.onmessage = function(event) {
     if (event.data?.tipo === "nuevo_cliente") {
+        clientesCache.unshift(event.data.cliente);
         renderClienteRow(event.data.cliente);
+        if (!document.getElementById("clientesCardsContainer")?.hidden) {
+            renderClientesCards(clientesCache);
+        }
         actualizarBadge(+1);
     }
 };
 
 let tamanosAdmin = [];
 let tamanoEditandoId = null;
+let clientesCache = [];
+let fotosModalActuales = [];
+let nombrePedidoModal = "pedido";
 
 function mostrarMensajeTamano(texto, ok = true) {
     const msg = document.getElementById("tamanoMensaje");
@@ -21,6 +28,74 @@ function formatearPrecio(valor) {
     const n = Number(valor);
     if (Number.isNaN(n)) return "0.00";
     return n.toFixed(2);
+}
+
+function setActiveNav(navId) {
+    document.querySelectorAll(".sidebar .nav-item").forEach(function(item) {
+        item.classList.remove("active");
+    });
+    const nav = document.getElementById(navId);
+    if (nav) nav.classList.add("active");
+}
+
+function setAdminMainView(view) {
+    const dashboardBlocks = document.querySelectorAll(".dashboard-only");
+    const clientesSection = document.getElementById("clientesCardsContainer");
+    const title = document.querySelector(".topbar-title");
+
+    if (view === "clientes") {
+        dashboardBlocks.forEach(function(el) { el.classList.add("dashboard-hidden"); });
+        if (clientesSection) clientesSection.hidden = false;
+        if (title) title.innerHTML = "<span>Clientes</span> / Vista en tarjetas";
+        setActiveNav("navClientes");
+    } else {
+        dashboardBlocks.forEach(function(el) { el.classList.remove("dashboard-hidden"); });
+        if (clientesSection) clientesSection.hidden = true;
+        if (title) title.innerHTML = "<span>Dashboard</span> / Vista general";
+        setActiveNav("navDashboard");
+    }
+}
+
+function renderClienteCard(c) {
+    const card = document.createElement("article");
+    card.className = "cliente-card";
+    card.innerHTML = `
+        <h4>${c.nombre || ""} ${c.apellido || ""}</h4>
+        <div class="cliente-meta"><strong>Correo:</strong> ${c.correo || "-"}</div>
+        <div class="cliente-meta"><strong>Telefono:</strong> ${c.telefono || "-"}</div>
+        <div class="cliente-meta"><strong>Tamano:</strong> ${c.tamano || "-"}</div>
+        <div class="cliente-meta"><strong>Papel:</strong> ${c.papel || "-"}</div>
+        <div class="cliente-meta"><strong>Fotos:</strong> ${c.numFotos || 0}</div>
+        <div class="cliente-meta"><strong>Fecha:</strong> ${c.fechaRegistro || "-"}</div>
+        <div class="cliente-meta"><strong>Total:</strong> $${Number(c.precioTotal || 0).toFixed(2)}</div>
+    `;
+    return card;
+}
+
+function renderClientesCards(clientes) {
+    const grid = document.getElementById("clientesCardsGrid");
+    if (!grid) return;
+
+    grid.innerHTML = "";
+    clientes.forEach(function(c) {
+        grid.appendChild(renderClienteCard(c));
+    });
+}
+
+async function cargarClientesCards() {
+    try {
+        const res = await fetch("/api/clientes");
+        if (res.status === 401 || res.status === 403) {
+            window.location.href = "/login";
+            return;
+        }
+        const clientes = await res.json();
+        if (!res.ok) throw new Error(clientes.error || "No se pudo cargar clientes");
+        clientesCache = Array.isArray(clientes) ? clientes : [];
+        renderClientesCards(clientesCache);
+    } catch (error) {
+        console.error("Error cargando clientes en cards:", error);
+    }
 }
 
 function renderTamanosAdmin() {
@@ -199,6 +274,10 @@ async function deleteRow(btn) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Error al eliminar");
         row.remove();
+        clientesCache = clientesCache.filter(function(c) { return Number(c.id) !== id; });
+        if (!document.getElementById("clientesCardsContainer")?.hidden) {
+            renderClientesCards(clientesCache);
+        }
         actualizarBadge(-1);
     } catch (error) {
         console.error("Error al eliminar:", error);
@@ -210,27 +289,41 @@ async function deleteRow(btn) {
 const estados = ["Pendiente", "Procesando", "Entregado", "Cancelado"];
 const clases  = ["status-pendiente", "status-procesando", "status-entregado", "status-cancelado"];
 
-function changeStatus(btn) {
+async function changeStatus(btn) {
     const row = btn.closest("tr");
     const badge = row.querySelector(".status");
     if (!badge) return;
 
-    let currentIndex = clases.findIndex(c => badge.classList.contains(c));
+    let currentIndex = clases.findIndex(function(c) { return badge.classList.contains(c); });
+    if (currentIndex < 0) currentIndex = 0;
     const nuevoIndex = (currentIndex + 1) % estados.length;
     const nuevoEstado = estados[nuevoIndex];
 
-    badge.classList.remove(...clases);
-    badge.classList.add(clases[nuevoIndex]);
-    badge.textContent = nuevoEstado;
-    row.dataset.estado = nuevoEstado.toLowerCase();
+    try {
+        const id = Number(row.dataset.id);
+        const res = await fetch(`/api/clientes/${id}/estado`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ estado: nuevoEstado.toLowerCase() })
+        });
 
-    if (nuevoEstado === "Pendiente") {
-        actualizarBadge(+1);
-    } else if (nuevoEstado === "Entregado" || nuevoEstado === "Cancelado") {
-        actualizarBadge(-1);
+        if (res.status === 401 || res.status === 403) {
+            window.location.href = "/login";
+            return;
+        }
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudo cambiar el estado");
+
+        badge.classList.remove(...clases);
+        badge.classList.add(clases[nuevoIndex]);
+        badge.textContent = nuevoEstado;
+        row.dataset.estado = nuevoEstado.toLowerCase();
+        filterTable();
+    } catch (error) {
+        console.error("Error actualizando estado:", error);
+        alert(error.message || "No se pudo cambiar el estado");
     }
-
-    filterTable();
 }
 
 // ─── Exportar CSV ─────────────────────────────────────────────────────────────
@@ -274,6 +367,9 @@ function verFotos(fotosJSON, clienteNombre) {
     const body  = document.getElementById("fotoModalBody");
     const title = document.getElementById("fotoModalTitle");
 
+    fotosModalActuales = Array.isArray(fotos) ? fotos.slice() : [];
+    nombrePedidoModal = (clienteNombre || "pedido").trim();
+
     title.textContent = `Fotos — ${clienteNombre}`;
     body.innerHTML = "";
 
@@ -297,6 +393,98 @@ function verFotos(fotosJSON, clienteNombre) {
 
 function cerrarModal() {
     document.getElementById("fotoModal").classList.remove("active");
+}
+
+async function descargarImagenComoArchivo(url, nombreArchivo) {
+    try {
+        const response = await fetch(url, { mode: "cors" });
+        if (!response.ok) throw new Error("No se pudo descargar la imagen");
+
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = nombreArchivo;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(blobUrl);
+    } catch (_error) {
+        window.open(url, "_blank", "noopener");
+    }
+}
+
+function normalizarNombreArchivoBase(nombre) {
+    return String(nombre || "pedido")
+        .toLowerCase()
+        .replace(/\s+/g, "_")
+        .replace(/[^a-z0-9_-]/g, "")
+        .slice(0, 60) || "pedido";
+}
+
+function extensionDesdeUrl(url) {
+    try {
+        const parsed = new URL(url);
+        const file = parsed.pathname.split("/").pop() || "";
+        const dot = file.lastIndexOf(".");
+        if (dot >= 0) {
+            const ext = file.slice(dot).toLowerCase();
+            if (/^\.[a-z0-9]{2,5}$/.test(ext)) return ext;
+        }
+    } catch (_error) {
+        // Si la URL no es parseable, se usa el fallback.
+    }
+    return ".jpg";
+}
+
+async function descargarListaFotos(fotos, nombreBase, btn) {
+    if (!Array.isArray(fotos) || fotos.length === 0) {
+        alert("Este pedido no tiene imagenes para descargar");
+        return;
+    }
+
+    const textoOriginal = btn ? btn.textContent : "descargar";
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "descargando...";
+    }
+
+    const base = normalizarNombreArchivoBase(nombreBase);
+
+    try {
+        for (let i = 0; i < fotos.length; i += 1) {
+            const ext = extensionDesdeUrl(fotos[i]);
+            const nombre = `${base}_${String(i + 1).padStart(2, "0")}${ext}`;
+            await descargarImagenComoArchivo(fotos[i], nombre);
+            await new Promise(function(resolve) { setTimeout(resolve, 120); });
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = textoOriginal;
+        }
+    }
+}
+
+async function descargarPedido(btn) {
+    const row = btn.closest("tr");
+    if (!row) return;
+
+    const id = Number(row.dataset.id);
+    const cliente = clientesCache.find(function(c) { return Number(c.id) === id; });
+
+    if (!cliente) {
+        alert("No se encontro la informacion del pedido");
+        return;
+    }
+
+    const nombreBase = `${cliente.nombre || "pedido"}_${cliente.apellido || id}`;
+    await descargarListaFotos(cliente.fotos || [], nombreBase, btn);
+}
+
+async function descargarFotosDelModal() {
+    const btn = document.getElementById("descargarpedido");
+    await descargarListaFotos(fotosModalActuales, nombrePedidoModal, btn);
 }
 
 // Cerrar modal con Escape o clic fuera
@@ -330,7 +518,12 @@ function renderClienteRow(cliente) {
     const precioNum = cliente.precioTotal != null ? Number(cliente.precioTotal) : null;
     const precio = precioNum != null ? `$${precioNum.toFixed(2)}` : '—';
 
-    tr.dataset.estado = "pendiente";
+    const estadoRaw = (cliente.estado || "pendiente").toLowerCase();
+    const estadoIndex = estados.findIndex(function(e) { return e.toLowerCase() === estadoRaw; });
+    const estadoLabel = estadoIndex >= 0 ? estados[estadoIndex] : "Pendiente";
+    const estadoClass = estadoIndex >= 0 ? clases[estadoIndex] : "status-pendiente";
+
+    tr.dataset.estado = estadoRaw;
     tr.dataset.fecha = toISODate(cliente.fechaRegistro);
     tr.dataset.precio = precioNum != null && !Number.isNaN(precioNum) ? String(precioNum) : "";
 
@@ -348,11 +541,14 @@ function renderClienteRow(cliente) {
         <td>${cliente.tamano || '—'}</td>
         <td>${cliente.papel || '—'}</td>
         <td style="color:#22c55e;font-weight:600;font-family:'Space Mono',monospace">${precio}</td>
-        <td><span class="status status-pendiente">Pendiente</span></td>
+        <td><span class="status ${estadoClass}">${estadoLabel}</span></td>
         <td style="color:var(--muted);font-size:12px">${cliente.fechaRegistro}</td>
         <td>
-            <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
-            <button class="action-btn del" onclick="deleteRow(this)">✕</button>
+            <div class="acciones-pedido">
+                <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
+                <button class="action-btn del" onclick="deleteRow(this)">✕</button>
+                <button class="action-btn" onclick="descargarPedido(this)">↓ Descargar</button>
+            </div>
         </td>
     `;
     tbody.prepend(tr);
@@ -364,14 +560,50 @@ function renderClienteRow(cliente) {
 document.addEventListener("DOMContentLoaded", async function() {
     try {
         const res = await fetch("/api/clientes");
+        if (res.status === 401 || res.status === 403) {
+            window.location.href = "/login";
+            return;
+        }
         const clientes = await res.json();
+        clientesCache = Array.isArray(clientes) ? clientes : [];
         const tbody = document.getElementById("tableBody");
         tbody.innerHTML = "";  // Limpiar filas anteriores
-        clientes.forEach(renderClienteRow);
+        clientesCache.forEach(renderClienteRow);
         const badge = getBadge();
-        if (badge) badge.textContent = clientes.length;
+        if (badge) badge.textContent = clientesCache.length;
     } catch (error) {
         console.error("Error al cargar pedidos:", error);
+    }
+
+    const navDashboard = document.getElementById("navDashboard");
+    const navPedidos = document.getElementById("navPedidos");
+    const navClientes = document.getElementById("navClientes");
+
+    if (navDashboard) {
+        navDashboard.addEventListener("click", function(e) {
+            e.preventDefault();
+            setAdminMainView("dashboard");
+        });
+    }
+
+    if (navPedidos) {
+        navPedidos.addEventListener("click", function(e) {
+            e.preventDefault();
+            setAdminMainView("dashboard");
+            setActiveNav("navPedidos");
+        });
+    }
+
+    if (navClientes) {
+        navClientes.addEventListener("click", async function(e) {
+            e.preventDefault();
+            setAdminMainView("clientes");
+            if (clientesCache.length === 0) {
+                await cargarClientesCards();
+            } else {
+                renderClientesCards(clientesCache);
+            }
+        });
     }
 
     const formTamano = document.getElementById("formTamano");
@@ -628,11 +860,10 @@ clienteChannel.addEventListener('message', function(event) {
     }
 });
 
-// Descargar pedido
-document.getElementById("descargarpedido").addEventListener("click", function() {
-    const url = window.location.href;
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "pedido.pdf";
-    link.click();
-});
+// Descargar imagenes del pedido mostrado en el modal
+const descargarPedidoBtn = document.getElementById("descargarpedido");
+if (descargarPedidoBtn) {
+    descargarPedidoBtn.addEventListener("click", function() {
+        descargarFotosDelModal();
+    });
+}

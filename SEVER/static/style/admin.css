@@ -454,6 +454,18 @@ tr:hover td {
     border-color: #dc3545;
 }
 
+.acciones-pedido {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}
+
+.acciones-pedido .action-btn {
+    margin-left: 0;
+}
+
 .bottom-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -465,6 +477,49 @@ tr:hover td {
     padding: 20px;
     border-radius: 12px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-hidden {
+    display: none !important;
+}
+
+.clientes-cards-section {
+    background: #111118;
+    border: 1px solid #2a2a3a;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.clientes-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+    margin-top: 10px;
+}
+
+.cliente-card {
+    border-radius: 12px;
+    padding: 14px;
+    color: #e8e8f0;
+    border: 1px solid #2a2a3a;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.cliente-card:nth-child(4n+1) { background: linear-gradient(135deg, #1a1a28, #2a1f3f); }
+.cliente-card:nth-child(4n+2) { background: linear-gradient(135deg, #1a1a28, #213a46); }
+.cliente-card:nth-child(4n+3) { background: linear-gradient(135deg, #1a1a28, #3b2a2a); }
+.cliente-card:nth-child(4n+4) { background: linear-gradient(135deg, #1a1a28, #2a3f2f); }
+
+.cliente-card h4 {
+    margin: 0 0 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+}
+
+.cliente-meta {
+    font-size: 13px;
+    color: #c9cfde;
+    margin: 4px 0;
 }
 
 .chart-bars {
@@ -573,17 +628,27 @@ tr:hover td {
     z-index: 1000;
 }
 
+.foto-modal-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .descargarpedidobtn {
-     margin-top: 8px;
-    padding: 8px 40px;
+    margin: 0;
+    padding: 8px 18px;
     border: none;
     border-radius: 8px;
     background: linear-gradient(90deg, #cc00ff, #04b7e3);
     color: white;
     cursor: pointer;
     font-weight: 500;
-    transition: 0.3s ease;
-    margin-left: 240px;
+    font-size: 13px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
 .descargarpedidobtn:hover {
@@ -592,5 +657,11 @@ tr:hover td {
 }
 .descargarpedidobtn:active {
     transform: scale(0.95);
+}
+
+.descargarpedidobtn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
 }
 

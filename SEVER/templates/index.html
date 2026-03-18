@@ -32,7 +32,15 @@
            aria-describedby="inputImagenesHelp" aria-label="Seleccionar imágenes para subir, formatos PNG, JPG o GIF, máximo 150 archivos de 10 MB cada uno" required>
     <p id="inputImagenesHelp" class="campo-ayuda">Formatos: PNG, JPG, GIF — Máximo 150 imágenes, 10 MB por archivo.</p>
 </div>
+<p id="previewHelp" class="preview-help" role="status" aria-live="polite" aria-atomic="true">
+    Las imágenes seleccionadas se mostrarán aquí, debajo del selector de archivos.
+</p>
 <div class="preview-container" id="previewContainer" aria-live="polite" aria-label="Vista previa de imágenes cargadas"></div>
+<div class="preview-pagination" id="previewPagination" aria-label="Paginación de fotos" hidden>
+    <button type="button" id="prevPageButton" aria-label="Ir a la página anterior">Anterior</button>
+    <span id="pageInfo" class="page-info">Página 1 de 1</span>
+    <button type="button" id="nextPageButton" aria-label="Ir a la página siguiente">Siguiente</button>
+</div>
     <div class="progress-container" id="progressContainer">
         <div class="progress-track">
             <div class="progress-bar" id="progressBar"
@@ -69,6 +77,28 @@
             <option value="20x30">20x30cm</option>
         </select>
         <p id="tamanoHelp" class="campo-ayuda">Mantén Ctrl (o Cmd) presionado para seleccionar varios tamaños.</p>
+
+        <div class="toggle-asignacion-wrap">
+            <label class="toggle-asignacion" for="toggleAsignacionFotos">
+                <input type="checkbox" id="toggleAsignacionFotos" aria-controls="asignacionTamanos" aria-expanded="false">
+                <span>Configurar tamaño por foto (mostrar/ocultar)</span>
+            </label>
+        </div>
+
+        <section class="asignacion-tamanos" id="asignacionTamanos" aria-labelledby="asignacionTamanosTitle" hidden>
+            <h3 id="asignacionTamanosTitle">Asigna un tamaño a cada foto</h3>
+            <p class="campo-ayuda">Puedes asignar tamaños diferentes por foto o usar el atajo para aplicar uno a todas.</p>
+
+            <div class="asignacion-toolbar">
+                <label for="tamanoGlobal" class="sr-only">Tamaño para aplicar a todas las fotos</label>
+                <select id="tamanoGlobal" aria-label="Seleccionar tamaño para aplicar a todas las fotos">
+                    <option value="">Selecciona un tamaño para todas</option>
+                </select>
+                <button type="button" id="aplicarTamanoTodas" class="aplicar-todas-btn">Aplicar a todas</button>
+            </div>
+
+            <div id="asignacionFotosList" class="asignacion-fotos-list" aria-live="polite"></div>
+        </section>
     </fieldset>
 
     <fieldset class="fieldset-papel">
@@ -109,11 +139,26 @@
             <p id="correoHelp" class="campo-ayuda">Formato válido: usuario@dominio.com</p>
 
             <label for="telefono">Teléfono:</label>
-            <input type="tel" id="telefono" name="telefono" placeholder="Ej: 0991234567"
-                   autocomplete="tel" required minlength="7" maxlength="15"
-                   pattern="^\d{7,15}$"
-                   aria-describedby="telefonoHelp">
-            <p id="telefonoHelp" class="campo-ayuda">Entre 7 y 15 dígitos numéricos.</p>
+            <div class="telefono-group">
+                <label for="prefijoPais" class="sr-only">Prefijo internacional</label>
+                <select id="prefijoPais" name="prefijoPais" class="prefijo-pais" aria-label="Seleccionar país y prefijo internacional" required>
+                    <option value="593" data-iso="EC">🇪🇨 Ecuador (+593)</option>
+                    <option value="52" data-iso="MX">🇲🇽 México (+52)</option>
+                    <option value="57" data-iso="CO">🇨🇴 Colombia (+57)</option>
+                    <option value="51" data-iso="PE">🇵🇪 Perú (+51)</option>
+                    <option value="56" data-iso="CL">🇨🇱 Chile (+56)</option>
+                    <option value="54" data-iso="AR">🇦🇷 Argentina (+54)</option>
+                    <option value="34" data-iso="ES">🇪🇸 España (+34)</option>
+                    <option value="1" data-iso="US">🇺🇸 EE. UU. (+1)</option>
+                </select>
+
+                <input type="tel" id="telefono" name="telefono" placeholder="Ej: 991234567"
+                       autocomplete="tel-national" required minlength="6" maxlength="12"
+                       inputmode="numeric"
+                       pattern="^\d{6,12}$"
+                       aria-describedby="telefonoHelp">
+            </div>
+            <p id="telefonoHelp" class="campo-ayuda">Se detecta automáticamente el prefijo internacional. Escribe entre 6 y 12 dígitos del número local.</p>
 
             <input type="submit" value="Revisar pedido" class="enviar-button"
                    aria-label="Revisar pedido antes de enviar" id="btnVerResumen">

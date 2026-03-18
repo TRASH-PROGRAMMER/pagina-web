@@ -1,28 +1,227 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Manager — Operador</title>
+    <title>Operador - Image Manager</title>
+    <style>
+        :root {
+            --bg: #0b0b12;
+            --panel: #151522;
+            --line: #2a2a3a;
+            --text: #f2f3ff;
+            --muted: #9ca3b0;
+            --ok: #22c55e;
+            --warn: #facc15;
+            --danger: #ef4444;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--line);
+            background: #111118;
+            position: sticky;
+            top: 0;
+        }
+        .topbar h1 {
+            margin: 0;
+            font-size: 18px;
+        }
+        .meta {
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .topbar-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .btn {
+            border: 1px solid var(--line);
+            background: #1a1a25;
+            color: var(--text);
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .btn:hover { filter: brightness(1.1); }
+        .container {
+            max-width: 1100px;
+            margin: 18px auto;
+            padding: 0 16px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid var(--line);
+            text-align: left;
+            font-size: 13px;
+            vertical-align: middle;
+        }
+        th {
+            color: var(--muted);
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.05em;
+        }
+        .tag {
+            border-radius: 999px;
+            padding: 3px 8px;
+            font-size: 11px;
+            display: inline-block;
+            border: 1px solid var(--line);
+        }
+        .estado-pendiente { color: var(--warn); }
+        .estado-procesando { color: #60a5fa; }
+        .estado-entregado { color: var(--ok); }
+        .estado-cancelado { color: var(--danger); }
+        .actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .actions button {
+            border: 1px solid var(--line);
+            background: #1a1a25;
+            color: var(--text);
+            border-radius: 8px;
+            padding: 6px 8px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .actions .danger:hover { background: #7f1d1d; border-color: #ef4444; }
+        .muted { color: var(--muted); }
+    </style>
 </head>
 <body>
-    <header>
-        <img src="https://i.imgur.com/0e0u8zG.png" alt="Image Manager">
-        <h1>Operador</h1>
-        <p>Bienvenido a Image Manager, el sistema de gestión de imágenes.</p>
-    </header>
-    <main>
-        <h2>Funciones del Operador</h2>
-        <ul>
-            <li>Subir imágenes al sistema.</li> 
-            <li>Organizar y categorizar las imágenes.</li>
-            <li>Visualizar el estado de las cargas de imágenes.</li>
-            <li>Gestionar los permisos de acceso a las imágenes.</li>
-        </ul>
-    
-    
-    
-    </main> 
-    
+    <div class="topbar">
+        <div>
+            <h1>Panel Operador</h1>
+            <div class="meta">Usuario: {{ session.get('username', '') }} | Rol: {{ session.get('role', '') }}</div>
+        </div>
+        <div class="topbar-actions">
+            <a class="btn" href="{{ url_for('auth.logout') }}">Salir</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Cliente</th>
+                    <th>Contacto</th>
+                    <th>Estado</th>
+                    <th>Pago</th>
+                    <th>Fotos</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="ordersBody">
+                <tr><td colspan="6" class="muted">Cargando pedidos...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const estados = ["pendiente", "procesando", "entregado", "cancelado"];
+
+        function estadoClass(estado) {
+            return `estado-${estado || "pendiente"}`;
+        }
+
+        async function cargarPedidos() {
+            try {
+                const res = await fetch("/api/clientes");
+                if (res.status === 401 || res.status === 403) {
+                    window.location.href = "/login";
+                    return;
+                }
+                const pedidos = await res.json();
+                const tbody = document.getElementById("ordersBody");
+                tbody.innerHTML = "";
+
+                if (!Array.isArray(pedidos) || pedidos.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="muted">No hay pedidos</td></tr>';
+                    return;
+                }
+
+                pedidos.forEach(function(p) {
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+                        <td>${p.nombre} ${p.apellido}</td>
+                        <td>${p.correo}<br><span class="muted">${p.telefono || "-"}</span></td>
+                        <td><span class="tag ${estadoClass(p.estado)}">${(p.estado || "pendiente").toUpperCase()}</span></td>
+                        <td>${p.pagado ? "Pagado" : "Pendiente"}</td>
+                        <td>${p.numFotos || 0}</td>
+                        <td>
+                            <div class="actions">
+                                <button onclick="cambiarEstado(${p.id}, '${p.estado || "pendiente"}')">Cambiar estado</button>
+                                <button class="danger" onclick="eliminarPedido(${p.id})">Eliminar</button>
+                                <button onclick="descargarFotos(${encodeURIComponent(JSON.stringify(p.fotos || []))})">Descargar</button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (_error) {
+                const tbody = document.getElementById("ordersBody");
+                tbody.innerHTML = '<tr><td colspan="6" class="muted">Error cargando pedidos</td></tr>';
+            }
+        }
+
+        async function cambiarEstado(id, estadoActual) {
+            const idx = estados.indexOf((estadoActual || "pendiente").toLowerCase());
+            const siguiente = estados[(idx + 1) % estados.length];
+            const res = await fetch(`/api/clientes/${id}/estado`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ estado: siguiente })
+            });
+            if (res.ok) {
+                await cargarPedidos();
+            }
+        }
+
+        async function eliminarPedido(id) {
+            if (!confirm("Eliminar pedido?")) return;
+            const res = await fetch(`/api/clientes/${id}`, { method: "DELETE" });
+            if (res.ok) {
+                await cargarPedidos();
+            }
+        }
+
+        async function descargarFotos(encodedJson) {
+            const fotos = JSON.parse(decodeURIComponent(encodedJson));
+            for (let i = 0; i < fotos.length; i += 1) {
+                const link = document.createElement("a");
+                link.href = fotos[i];
+                link.target = "_blank";
+                link.rel = "noopener";
+                link.click();
+                await new Promise(function(r) { setTimeout(r, 120); });
+            }
+        }
+
+        cargarPedidos();
+    </script>
 </body>
 </html>
