@@ -419,8 +419,11 @@ def actualizar_pago_cliente(id):
         return jsonify({"error": "Campo pagado requerido"}), 400
 
     cliente.pagado = bool(pagado)
+    # Si se marca como pagado, cambiar estado a "procesando"
+    if cliente.pagado:
+        cliente.estado = 'procesando'
     db.session.commit()
-    return jsonify({"mensaje": "Pago actualizado", "pagado": bool(cliente.pagado)}), 200
+    return jsonify({"mensaje": "Pago actualizado", "pagado": bool(cliente.pagado), "estado": cliente.estado}), 200
 
 PRECIOS = {item["clave"]: {"precio": item["precio_base"]} for item in DEFAULT_TAMANOS}
 
@@ -783,6 +786,36 @@ def ultimas_subidas():
             "numFotos": len(cliente.fotos),
         })
     return jsonify(resultado), 200
+
+@app.route('/api/cloudinary-stats', methods=['GET'])
+@login_required
+@role_required('admin')
+def cloudinary_stats():
+    """Obtiene estadísticas de almacenamiento de Cloudinary."""
+    try:
+        stats = cloudinary.api.usage()
+        # stats contiene: 
+        # - bandwidth (ancho de banda usado)
+        # - get_requests (solicitudes GET)
+        # - put_requests (solicitudes PUT)
+        # - etc.
+        # Para planes con almacenamiento limitado, intentamos obtener el límite
+        return jsonify({
+            "bandwidth": stats.get("bandwidth", 0),
+            "bandwidth_limit": stats.get("bandwidth_limit", 0),
+            "context": stats.get("context", {}),
+            "derived_resources": stats.get("derived_resources", 0),
+            "derived_resources_limit": stats.get("derived_resources_limit", 0),
+            "media_limit": stats.get("media_limit", 0),
+            "media_duration": stats.get("media_duration", 0),
+            "media_duration_limit": stats.get("media_duration_limit", 0),
+            "transformation_count": stats.get("transformation_count", 0),
+            "transformation_count_limit": stats.get("transformation_count_limit", 0),
+            "requests": stats.get("requests", 0),
+        }), 200
+    except Exception as e:
+        print(f"Error obteniendo stats de Cloudinary: {e}")
+        return jsonify({"error": str(e)}), 500
 
    
 if __name__ == '__main__':
