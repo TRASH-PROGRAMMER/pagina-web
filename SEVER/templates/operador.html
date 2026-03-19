@@ -10,18 +10,50 @@
             --panel: #151522;
             --line: #2a2a3a;
             --text: #f2f3ff;
-            --muted: #9ca3b0;
+            --muted: #b0b7c8;
+            --focus: #5ea0ff;
             --ok: #22c55e;
             --warn: #facc15;
             --danger: #ef4444;
+            --info: #60a5fa;
         }
         * { box-sizing: border-box; }
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+        }
+        .skip-link {
+            position: absolute;
+            top: -40px;
+            left: 10px;
+            background: #e6f0ff;
+            color: #0f172a;
+            padding: 8px 10px;
+            border-radius: 8px;
+            z-index: 1000;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .skip-link:focus {
+            top: 10px;
+        }
         body {
             margin: 0;
             background: var(--bg);
             color: var(--text);
             font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
             min-height: 100vh;
+            line-height: 1.35;
+        }
+        :focus-visible {
+            outline: 2px solid var(--focus);
+            outline-offset: 2px;
         }
         .topbar {
             display: flex;
@@ -36,6 +68,11 @@
         .topbar h1 {
             margin: 0;
             font-size: 18px;
+        }
+        .topbar p {
+            margin: 6px 0 0;
+            color: var(--muted);
+            font-size: 12px;
         }
         .meta {
             color: var(--muted);
@@ -58,23 +95,97 @@
         }
         .btn:hover { filter: brightness(1.1); }
         .container {
-            max-width: 1100px;
+            max-width: 1360px;
             margin: 18px auto;
             padding: 0 16px;
+        }
+        .tools {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr auto auto;
+            gap: 10px;
+            align-items: end;
+            background: #111118;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .field label {
+            display: block;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 6px;
+            letter-spacing: 0.05em;
+        }
+        .field input,
+        .field select {
+            width: 100%;
+            border: 1px solid var(--line);
+            background: #1a1a25;
+            color: var(--text);
+            border-radius: 8px;
+            padding: 9px 10px;
+            font-size: 13px;
+        }
+        .tool-btn {
+            border: 1px solid var(--line);
+            background: #1a1a25;
+            color: var(--text);
+            border-radius: 8px;
+            padding: 9px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            height: 38px;
+        }
+        .tool-btn:hover { filter: brightness(1.1); }
+        .feedback {
+            display: none;
+            margin-bottom: 10px;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 13px;
+            border: 1px solid var(--line);
+            background: #111118;
+        }
+        .feedback.show { display: block; }
+        .feedback.info { border-color: #264a74; color: #bfdbfe; }
+        .feedback.ok { border-color: #1f5c35; color: #bbf7d0; }
+        .feedback.warn { border-color: #715516; color: #fde68a; }
+        .feedback.error { border-color: #7f1d1d; color: #fecaca; }
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 0 2px 10px;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .chip {
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            color: var(--muted);
+            background: #10101a;
+        }
+        .table-wrap {
+            border-radius: 12px;
+            overflow: auto;
+            border: 1px solid var(--line);
+            max-height: calc(100vh - 260px);
         }
         table {
             width: 100%;
             border-collapse: collapse;
             background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 12px;
-            overflow: hidden;
+            min-width: 980px;
         }
         th, td {
-            padding: 10px;
+            padding: 8px 10px;
             border-bottom: 1px solid var(--line);
             text-align: left;
-            font-size: 13px;
+            font-size: 12.5px;
             vertical-align: middle;
         }
         th {
@@ -82,6 +193,10 @@
             text-transform: uppercase;
             font-size: 11px;
             letter-spacing: 0.05em;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #171725;
         }
         .tag {
             border-radius: 999px;
@@ -96,7 +211,7 @@
         .estado-cancelado { color: var(--danger); }
         .actions {
             display: flex;
-            gap: 6px;
+            gap: 5px;
             flex-wrap: wrap;
         }
         .actions button {
@@ -104,51 +219,288 @@
             background: #1a1a25;
             color: var(--text);
             border-radius: 8px;
-            padding: 6px 8px;
-            font-size: 12px;
+            padding: 5px 8px;
+            font-size: 11.5px;
             cursor: pointer;
+        }
+        .actions .state-btn:hover { border-color: var(--info); }
+        .actions .download-btn:hover { border-color: var(--ok); }
+        .actions button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: grayscale(0.4);
         }
         .actions .danger:hover { background: #7f1d1d; border-color: #ef4444; }
         .muted { color: var(--muted); }
+        .pagination {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .pagination button {
+            border: 1px solid var(--line);
+            background: #1a1a25;
+            color: var(--text);
+            border-radius: 8px;
+            padding: 7px 9px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        @media (min-width: 1200px) {
+            .topbar {
+                padding: 12px 24px;
+            }
+            .tools {
+                grid-template-columns: 2.4fr 1fr 1fr auto auto;
+                padding: 10px 12px;
+            }
+            .field input,
+            .field select {
+                padding: 8px 10px;
+                font-size: 12.5px;
+            }
+            .chip {
+                font-size: 11.5px;
+                padding: 5px 9px;
+            }
+        }
+        @media (max-width: 900px) {
+            .tools {
+                grid-template-columns: 1fr;
+            }
+            .tool-btn {
+                width: 100%;
+            }
+            .table-wrap {
+                max-height: none;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="topbar">
+    <a class="skip-link" href="#contenido-principal">Saltar al contenido principal</a>
+
+    <header class="topbar" role="banner">
         <div>
             <h1>Panel Operador</h1>
+            <p>Flujo rapido: buscar, filtrar, actualizar estado y descargar pedidos pagados.</p>
             <div class="meta">Usuario: {{ session.get('username', '') }} | Rol: {{ session.get('role', '') }}</div>
         </div>
         <div class="topbar-actions">
             <a class="btn" href="{{ url_for('auth.logout') }}">Salir</a>
         </div>
-    </div>
+    </header>
 
-    <div class="container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Cliente</th>
-                    <th>Contacto</th>
-                    <th>Estado</th>
-                    <th>Pago</th>
-                    <th>Fotos</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody id="ordersBody">
-                <tr><td colspan="6" class="muted">Cargando pedidos...</td></tr>
-            </tbody>
-        </table>
-    </div>
+    <main id="contenido-principal" class="container" tabindex="-1" role="main">
+        <section aria-label="Herramientas de operacion">
+            <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
+            <p id="liveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+
+            <div class="tools">
+                <div class="field">
+                    <label for="searchInput">Buscar cliente o correo</label>
+                    <input id="searchInput" type="search" placeholder="Ej: Maria o correo@dominio.com" autocomplete="off">
+                </div>
+                <div class="field">
+                    <label for="estadoFiltro">Filtrar por estado</label>
+                    <select id="estadoFiltro">
+                        <option value="">Todos</option>
+                        <option value="pendiente">Pendiente</option>
+                        <option value="procesando">Procesando</option>
+                        <option value="entregado">Entregado</option>
+                        <option value="cancelado">Cancelado</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="pagoFiltro">Filtrar por pago</label>
+                    <select id="pagoFiltro">
+                        <option value="">Todos</option>
+                        <option value="pagado">Pagado</option>
+                        <option value="pendiente">Pendiente</option>
+                    </select>
+                </div>
+                <button id="clearFiltersBtn" class="tool-btn" type="button" aria-label="Limpiar todos los filtros">Limpiar</button>
+                <button id="refreshBtn" class="tool-btn" type="button" aria-label="Recargar lista de pedidos">Recargar</button>
+            </div>
+
+            <div class="stats-row" aria-live="polite">
+                <span id="resultsChip" class="chip">Resultados: 0</span>
+                <span id="pendingChip" class="chip">Pendientes: 0</span>
+            </div>
+        </section>
+
+        <section aria-label="Listado de pedidos">
+            <div class="table-wrap">
+                <table aria-label="Tabla de pedidos para operador" aria-describedby="tablaAyuda">
+                    <caption id="tablaAyuda" class="sr-only">Puedes filtrar pedidos arriba. El boton descargar solo se habilita cuando el pago esta marcado como pagado.</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Cliente</th>
+                            <th scope="col">Contacto</th>
+                            <th scope="col">Estado</th>
+                            <th scope="col">Pago</th>
+                            <th scope="col">Fotos</th>
+                            <th scope="col">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ordersBody" aria-busy="true">
+                        <tr><td colspan="6" class="muted">Cargando pedidos...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination">
+                <button id="prevPageBtn" type="button" aria-label="Pagina anterior">Anterior</button>
+                <span id="pageInfo" class="chip" aria-live="polite">Pagina 1 de 1</span>
+                <button id="nextPageBtn" type="button" aria-label="Pagina siguiente">Siguiente</button>
+            </div>
+        </section>
+    </main>
 
     <script>
         const estados = ["pendiente", "procesando", "entregado", "cancelado"];
+        const PAGE_SIZE = 20;
+        let pedidosAll = [];
+        let pedidosFiltrados = [];
+        let paginaActual = 1;
 
         function estadoClass(estado) {
             return `estado-${estado || "pendiente"}`;
         }
 
+        function escapeHtml(valor) {
+            return String(valor || "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
+        function anunciar(texto, tipo = "info") {
+            const feedback = document.getElementById("feedback");
+            const live = document.getElementById("liveRegion");
+            if (feedback) {
+                feedback.className = `feedback show ${tipo}`;
+                feedback.textContent = texto;
+            }
+            if (live) live.textContent = texto;
+        }
+
+        function limpiarAviso() {
+            const feedback = document.getElementById("feedback");
+            if (feedback) {
+                feedback.className = "feedback";
+                feedback.textContent = "";
+            }
+        }
+
+        function actualizarChips() {
+            const resultsChip = document.getElementById("resultsChip");
+            const pendingChip = document.getElementById("pendingChip");
+            if (resultsChip) resultsChip.textContent = `Resultados: ${pedidosFiltrados.length}`;
+            const pendientes = pedidosAll.filter(function(p) {
+                return (p.estado || "pendiente").toLowerCase() === "pendiente";
+            }).length;
+            if (pendingChip) pendingChip.textContent = `Pendientes: ${pendientes}`;
+        }
+
+        function totalPaginas() {
+            return Math.max(1, Math.ceil(pedidosFiltrados.length / PAGE_SIZE));
+        }
+
+        function actualizarPaginacion() {
+            const total = totalPaginas();
+            if (paginaActual > total) paginaActual = total;
+            if (paginaActual < 1) paginaActual = 1;
+
+            const info = document.getElementById("pageInfo");
+            const prevBtn = document.getElementById("prevPageBtn");
+            const nextBtn = document.getElementById("nextPageBtn");
+            if (info) info.textContent = `Pagina ${paginaActual} de ${total}`;
+            if (prevBtn) prevBtn.disabled = paginaActual <= 1;
+            if (nextBtn) nextBtn.disabled = paginaActual >= total;
+        }
+
+        function obtenerPedidoPorId(id) {
+            return pedidosAll.find(function(p) { return Number(p.id) === Number(id); }) || null;
+        }
+
+        function aplicarFiltros() {
+            const q = (document.getElementById("searchInput")?.value || "").trim().toLowerCase();
+            const estado = (document.getElementById("estadoFiltro")?.value || "").toLowerCase();
+            const pago = (document.getElementById("pagoFiltro")?.value || "").toLowerCase();
+
+            pedidosFiltrados = pedidosAll.filter(function(p) {
+                const nombre = `${p.nombre || ""} ${p.apellido || ""}`.toLowerCase();
+                const correo = String(p.correo || "").toLowerCase();
+                const estadoPedido = String(p.estado || "pendiente").toLowerCase();
+                const pagoPedido = p.pagado ? "pagado" : "pendiente";
+
+                const okBusqueda = !q || nombre.includes(q) || correo.includes(q);
+                const okEstado = !estado || estadoPedido === estado;
+                const okPago = !pago || pagoPedido === pago;
+                return okBusqueda && okEstado && okPago;
+            });
+
+            paginaActual = 1;
+            renderTabla();
+        }
+
+        function renderTabla() {
+            const tbody = document.getElementById("ordersBody");
+            if (!tbody) return;
+            tbody.setAttribute("aria-busy", "true");
+            tbody.innerHTML = "";
+
+            if (!Array.isArray(pedidosFiltrados) || pedidosFiltrados.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="muted">No hay pedidos para este filtro</td></tr>';
+                actualizarChips();
+                actualizarPaginacion();
+                tbody.setAttribute("aria-busy", "false");
+                return;
+            }
+
+            const start = (paginaActual - 1) * PAGE_SIZE;
+            const end = start + PAGE_SIZE;
+            const pagina = pedidosFiltrados.slice(start, end);
+
+            pagina.forEach(function(p) {
+                const estaPagado = Boolean(p.pagado);
+                const estadoPago = estaPagado ? "Pagado" : "Pendiente";
+                const downloadDisabled = estaPagado ? "" : "disabled";
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</td>
+                    <td>${escapeHtml(p.correo)}<br><span class="muted">${escapeHtml(p.telefono || "-")}</span></td>
+                    <td><span class="tag ${estadoClass(p.estado)}">${escapeHtml((p.estado || "pendiente").toUpperCase())}</span></td>
+                    <td>${estadoPago}</td>
+                    <td>${Number(p.numFotos || 0)}</td>
+                    <td>
+                        <div class="actions">
+                            <button type="button" class="state-btn" data-action="estado" data-id="${p.id}" aria-label="Cambiar estado del pedido ${p.id}">Cambiar estado</button>
+                            <button type="button" class="danger" data-action="eliminar" data-id="${p.id}" aria-label="Eliminar pedido ${p.id}">Eliminar</button>
+                            <button type="button" class="download-btn" ${downloadDisabled} data-action="descargar" data-id="${p.id}" aria-label="Descargar fotos del pedido ${p.id}">Descargar</button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            actualizarChips();
+            actualizarPaginacion();
+            tbody.setAttribute("aria-busy", "false");
+        }
+
         async function cargarPedidos() {
+            limpiarAviso();
+            const tbody = document.getElementById("ordersBody");
+            if (tbody) {
+                tbody.setAttribute("aria-busy", "true");
+                tbody.innerHTML = '<tr><td colspan="6" class="muted">Cargando pedidos...</td></tr>';
+            }
             try {
                 const res = await fetch("/api/clientes");
                 if (res.status === 401 || res.status === 403) {
@@ -156,71 +508,233 @@
                     return;
                 }
                 const pedidos = await res.json();
-                const tbody = document.getElementById("ordersBody");
-                tbody.innerHTML = "";
 
                 if (!Array.isArray(pedidos) || pedidos.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="muted">No hay pedidos</td></tr>';
+                    pedidosAll = [];
+                    pedidosFiltrados = [];
+                    renderTabla();
+                    anunciar("No hay pedidos disponibles.", "info");
                     return;
                 }
 
-                pedidos.forEach(function(p) {
-                    const tr = document.createElement("tr");
-                    tr.innerHTML = `
-                        <td>${p.nombre} ${p.apellido}</td>
-                        <td>${p.correo}<br><span class="muted">${p.telefono || "-"}</span></td>
-                        <td><span class="tag ${estadoClass(p.estado)}">${(p.estado || "pendiente").toUpperCase()}</span></td>
-                        <td>${p.pagado ? "Pagado" : "Pendiente"}</td>
-                        <td>${p.numFotos || 0}</td>
-                        <td>
-                            <div class="actions">
-                                <button onclick="cambiarEstado(${p.id}, '${p.estado || "pendiente"}')">Cambiar estado</button>
-                                <button class="danger" onclick="eliminarPedido(${p.id})">Eliminar</button>
-                                <button onclick="descargarFotos(${encodeURIComponent(JSON.stringify(p.fotos || []))})">Descargar</button>
-                            </div>
-                        </td>
-                    `;
-                    tbody.appendChild(tr);
-                });
+                pedidosAll = pedidos.slice();
+                pedidosFiltrados = pedidos.slice();
+                renderTabla();
+                anunciar("Pedidos cargados correctamente.", "ok");
             } catch (_error) {
-                const tbody = document.getElementById("ordersBody");
-                tbody.innerHTML = '<tr><td colspan="6" class="muted">Error cargando pedidos</td></tr>';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="muted">Error cargando pedidos</td></tr>';
+                anunciar("No se pudo cargar la lista de pedidos.", "error");
             }
         }
 
-        async function cambiarEstado(id, estadoActual) {
+        async function cambiarEstado(id, estadoActual, btn) {
             const idx = estados.indexOf((estadoActual || "pendiente").toLowerCase());
             const siguiente = estados[(idx + 1) % estados.length];
-            const res = await fetch(`/api/clientes/${id}/estado`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ estado: siguiente })
-            });
-            if (res.ok) {
-                await cargarPedidos();
+            const original = btn ? btn.textContent : "Cambiar estado";
+            try {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = "Actualizando...";
+                }
+                const res = await fetch(`/api/clientes/${id}/estado`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ estado: siguiente })
+                });
+                if (res.ok) {
+                    anunciar(`Pedido ${id} actualizado a ${siguiente}.`, "ok");
+                    await cargarPedidos();
+                    return;
+                }
+                anunciar(`No se pudo actualizar el estado del pedido ${id}.`, "error");
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = original;
+                }
             }
         }
 
-        async function eliminarPedido(id) {
+        async function eliminarPedido(id, btn) {
             if (!confirm("Eliminar pedido?")) return;
-            const res = await fetch(`/api/clientes/${id}`, { method: "DELETE" });
-            if (res.ok) {
-                await cargarPedidos();
+            const original = btn ? btn.textContent : "Eliminar";
+            try {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = "Eliminando...";
+                }
+                const res = await fetch(`/api/clientes/${id}`, { method: "DELETE" });
+                if (res.ok) {
+                    anunciar(`Pedido ${id} eliminado.`, "ok");
+                    await cargarPedidos();
+                    return;
+                }
+                anunciar(`No se pudo eliminar el pedido ${id}.`, "error");
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = original;
+                }
             }
         }
 
-        async function descargarFotos(encodedJson) {
-            const fotos = JSON.parse(decodeURIComponent(encodedJson));
+        function nombreArchivoDesdeUrl(url, index) {
+            try {
+                const limpia = (url || "").split("?")[0];
+                const base = limpia.substring(limpia.lastIndexOf("/") + 1) || `foto_${index + 1}.jpg`;
+                return base;
+            } catch (_e) {
+                return `foto_${index + 1}.jpg`;
+            }
+        }
+
+        async function descargarFotos(pedido, btn) {
+            if (!pedido) return;
+            if (!pedido.pagado) {
+                anunciar("Este pedido aun no esta pagado. El cajero debe marcarlo como pagado para descargar.", "warn");
+                return;
+            }
+            const fotos = Array.isArray(pedido.fotos) ? pedido.fotos : [];
+            if (!Array.isArray(fotos) || fotos.length === 0) {
+                anunciar("Este pedido no tiene fotos para descargar.", "warn");
+                return;
+            }
+
+            const original = btn ? btn.textContent : "Descargar";
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = "Descargando...";
+            }
+
             for (let i = 0; i < fotos.length; i += 1) {
-                const link = document.createElement("a");
-                link.href = fotos[i];
-                link.target = "_blank";
-                link.rel = "noopener";
-                link.click();
-                await new Promise(function(r) { setTimeout(r, 120); });
+                const url = fotos[i];
+                const nombre = nombreArchivoDesdeUrl(url, i);
+
+                try {
+                    const res = await fetch(url, { mode: "cors" });
+                    if (!res.ok) throw new Error("No se pudo descargar");
+
+                    const blob = await res.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = objectUrl;
+                    link.download = nombre;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    URL.revokeObjectURL(objectUrl);
+                } catch (_err) {
+                    // Fallback: abrir URL directa si el navegador bloquea fetch por CORS
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.target = "_blank";
+                    link.rel = "noopener";
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                }
+
+                // Pequeña pausa para evitar que el navegador ignore descargas consecutivas
+                await new Promise(function(r) { setTimeout(r, 180); });
             }
+
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = original;
+            }
+            anunciar(`Se iniciaron ${fotos.length} descarga(s) del pedido ${pedido.id}.`, "info");
         }
 
+        function limpiarFiltros() {
+            const search = document.getElementById("searchInput");
+            const estado = document.getElementById("estadoFiltro");
+            const pago = document.getElementById("pagoFiltro");
+            if (search) search.value = "";
+            if (estado) estado.value = "";
+            if (pago) pago.value = "";
+            aplicarFiltros();
+            anunciar("Filtros limpiados.", "info");
+        }
+
+        function configurarEventos() {
+            const tbody = document.getElementById("ordersBody");
+            const search = document.getElementById("searchInput");
+            const estado = document.getElementById("estadoFiltro");
+            const pago = document.getElementById("pagoFiltro");
+            const clearBtn = document.getElementById("clearFiltersBtn");
+            const refreshBtn = document.getElementById("refreshBtn");
+            const prevBtn = document.getElementById("prevPageBtn");
+            const nextBtn = document.getElementById("nextPageBtn");
+
+            if (search) search.addEventListener("input", aplicarFiltros);
+            if (estado) estado.addEventListener("change", aplicarFiltros);
+            if (pago) pago.addEventListener("change", aplicarFiltros);
+            if (clearBtn) clearBtn.addEventListener("click", limpiarFiltros);
+            if (refreshBtn) refreshBtn.addEventListener("click", cargarPedidos);
+
+            if (prevBtn) {
+                prevBtn.addEventListener("click", function() {
+                    if (paginaActual > 1) {
+                        paginaActual -= 1;
+                        renderTabla();
+                    }
+                });
+            }
+
+            if (nextBtn) {
+                nextBtn.addEventListener("click", function() {
+                    const total = totalPaginas();
+                    if (paginaActual < total) {
+                        paginaActual += 1;
+                        renderTabla();
+                    }
+                });
+            }
+
+            if (tbody) {
+                tbody.addEventListener("click", async function(event) {
+                    const btn = event.target.closest("button[data-action]");
+                    if (!btn) return;
+
+                    const action = btn.getAttribute("data-action");
+                    const id = Number(btn.getAttribute("data-id"));
+                    const pedido = obtenerPedidoPorId(id);
+                    if (!pedido) return;
+
+                    if (action === "estado") {
+                        await cambiarEstado(id, pedido.estado || "pendiente", btn);
+                    } else if (action === "eliminar") {
+                        await eliminarPedido(id, btn);
+                    } else if (action === "descargar") {
+                        await descargarFotos(pedido, btn);
+                    }
+                });
+            }
+
+            document.addEventListener("keydown", function(event) {
+                const target = event.target;
+                const isTyping = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT");
+
+                if (event.key === "/" && !isTyping) {
+                    event.preventDefault();
+                    if (search) search.focus();
+                }
+
+                if (event.key === "Escape") {
+                    if (isTyping) {
+                        target.blur();
+                    }
+                    limpiarFiltros();
+                }
+
+                if ((event.key === "r" || event.key === "R") && !isTyping) {
+                    event.preventDefault();
+                    cargarPedidos();
+                }
+            });
+        }
+
+        configurarEventos();
         cargarPedidos();
     </script>
 </body>

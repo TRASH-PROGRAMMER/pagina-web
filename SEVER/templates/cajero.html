@@ -141,13 +141,14 @@
 				pedidos.forEach(function(p) {
 					const pagado = !!p.pagado;
 					const tr = document.createElement("tr");
+					tr.id = `pedido-${p.id}`;
 					tr.innerHTML = `
 						<td>#${String(p.id).padStart(4, "0")}</td>
 						<td>${p.nombre} ${p.apellido}<br><span style="color:var(--muted)">${p.correo}</span></td>
 						<td>$${Number(p.precioTotal || 0).toFixed(2)}</td>
-						<td>${(p.estado || "pendiente").toUpperCase()}</td>
-						<td><span class="tag ${pagado ? "paid" : "pending"}">${pagado ? "PAGADO" : "PENDIENTE"}</span></td>
-						<td><button class="pay-btn" ${pagado ? "disabled" : ""} onclick="marcarPagado(${p.id})">Marcar pagado</button></td>
+						<td><span id="estado-${p.id}">${(p.estado || "pendiente").toUpperCase()}</span></td>
+						<td><span class="tag ${pagado ? "paid" : "pending"}" id="pago-${p.id}">${pagado ? "PAGADO" : "PENDIENTE"}</span></td>
+						<td><button class="pay-btn" id="btn-${p.id}" ${pagado ? "disabled" : ""} onclick="marcarPagado(${p.id})">Marcar pagado</button></td>
 					`;
 					body.appendChild(tr);
 				});
@@ -163,7 +164,32 @@
 				body: JSON.stringify({ pagado: true })
 			});
 			if (res.ok) {
-				await cargarPedidos();
+				const data = await res.json();
+				// Actualizar UI sin recargar toda la tabla
+				const pagoTag = document.getElementById(`pago-${id}`);
+				const estadoSpan = document.getElementById(`estado-${id}`);
+				const botón = document.getElementById(`btn-${id}`);
+				
+				if (pagoTag) {
+					pagoTag.textContent = "PAGADO";
+					pagoTag.className = "tag paid";
+				}
+				if (estadoSpan) {
+					estadoSpan.textContent = data.estado ? data.estado.toUpperCase() : "PROCESANDO";
+				}
+				if (botón) {
+					botón.disabled = true;
+				}
+				
+				// Notificar al panel admin que el pago fue registrado y el estado cambió
+				if (window.clienteChannel) {
+					window.clienteChannel.postMessage({
+						tipo: "estado_actualizado",
+						clienteId: id,
+						nuevoEstado: data.estado || "procesando",
+						pagado: true
+					});
+				}
 			}
 		}
 

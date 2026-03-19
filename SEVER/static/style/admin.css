@@ -244,6 +244,34 @@ body {
     background: #FF0505;
 }
 
+.cloudinary-wide-card {
+    grid-column: 1 / -1;
+}
+
+.cloudinary-wide-card::before {
+    background: #00D4FF;
+}
+
+.cloudinary-progress-wrap {
+    max-width: 520px;
+}
+
+@media (max-width: 1200px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .cloudinary-progress-wrap {
+        max-width: 100%;
+    }
+}
+
 .stat-label {
     font-size: 11px;
     color: #6b6b85;

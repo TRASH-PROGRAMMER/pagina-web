@@ -97,6 +97,17 @@
         <div class="stat-value" id="statPendientes" style="color:var(--warning)">—</div>
         <div class="stat-sub">Requieren acción</div>
       </div>
+      <div class="stat-card cloudinary-wide-card">
+        <div class="stat-icon">☁️</div>
+        <div class="stat-label"> Almacenamiento de Imágenes</div>
+        <div class="stat-value" id="cloudinaryStorageValue" style="color:var(--accent2)">—</div>
+        <div class="cloudinary-progress-wrap" style="margin-top: 12px;">
+          <div class="cloudinary-progress" style="background: var(--input-bg); border-radius: 4px; height: 6px; overflow: hidden;">
+            <div id="cloudinaryStorageBar" style="height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); width: 0%; transition: width 0.3s ease;"></div>
+          </div>
+          <div id="cloudinaryStorageText" style="font-size: 11px; color: var(--muted); margin-top: 6px;" title="Transformaciones usadas / Límite del plan">Cargando...</div>
+        </div>
+      </div>
     </div>
 
     <!-- ORDERS TABLE -->

@@ -7,7 +7,10 @@ clienteChannel.onmessage = function(event) {
         if (!document.getElementById("clientesCardsContainer")?.hidden) {
             renderClientesCards(clientesCache);
         }
-        actualizarBadge(+1);
+        // Solo incrementar badge si el estado es 'pendiente'
+        if (event.data.cliente.estado === 'pendiente') {
+            actualizarBadge(+1);
+        }
     }
 };
 
@@ -269,6 +272,7 @@ async function deleteRow(btn) {
     if (!row || !confirm("¿Eliminar este pedido?")) return;
 
     const id = Number(row.dataset.id);
+    const estadoActual = (row.dataset.estado || 'pendiente').toLowerCase();
     try {
         const res = await fetch(`/api/clientes/${id}`, { method: "DELETE" });
         const data = await res.json();
@@ -278,7 +282,10 @@ async function deleteRow(btn) {
         if (!document.getElementById("clientesCardsContainer")?.hidden) {
             renderClientesCards(clientesCache);
         }
-        actualizarBadge(-1);
+        // Solo decrementar badge si el pedido eliminado estaba en estado 'pendiente'
+        if (estadoActual === 'pendiente') {
+            actualizarBadge(-1);
+        }
     } catch (error) {
         console.error("Error al eliminar:", error);
         alert(error.message);
@@ -296,6 +303,7 @@ async function changeStatus(btn) {
 
     let currentIndex = clases.findIndex(function(c) { return badge.classList.contains(c); });
     if (currentIndex < 0) currentIndex = 0;
+    const estadoActual = estados[currentIndex].toLowerCase();
     const nuevoIndex = (currentIndex + 1) % estados.length;
     const nuevoEstado = estados[nuevoIndex];
 
@@ -319,6 +327,17 @@ async function changeStatus(btn) {
         badge.classList.add(clases[nuevoIndex]);
         badge.textContent = nuevoEstado;
         row.dataset.estado = nuevoEstado.toLowerCase();
+        
+        // Actualizar badge de pedidos pendientes
+        // Si el estado anterior era 'pendiente' y el nuevo no lo es → decrementar
+        if (estadoActual === 'pendiente' && nuevoEstado.toLowerCase() !== 'pendiente') {
+            actualizarBadge(-1);
+        }
+        // Si el estado anterior no era 'pendiente' y el nuevo sí lo es → incrementar
+        else if (estadoActual !== 'pendiente' && nuevoEstado.toLowerCase() === 'pendiente') {
+            actualizarBadge(+1);
+        }
+        
         filterTable();
     } catch (error) {
         console.error("Error actualizando estado:", error);
@@ -569,8 +588,13 @@ document.addEventListener("DOMContentLoaded", async function() {
         const tbody = document.getElementById("tableBody");
         tbody.innerHTML = "";  // Limpiar filas anteriores
         clientesCache.forEach(renderClienteRow);
+        
+        // Contar solo pedidos en estado 'pendiente' para el badge
+        const pedidosPendientes = clientesCache.filter(function(c) {
+            return (c.estado || 'pendiente').toLowerCase() === 'pendiente';
+        }).length;
         const badge = getBadge();
-        if (badge) badge.textContent = clientesCache.length;
+        if (badge) badge.textContent = pedidosPendientes;
     } catch (error) {
         console.error("Error al cargar pedidos:", error);
     }
@@ -785,18 +809,78 @@ async function cargarEstadisticas() {
     }
 }
 
+// ─── Cargar stats de almacenamiento Cloudinary ──────────────────────────────
+async function cargarCloudinaryStats() {
+    try {
+        const res = await fetch('/api/cloudinary-stats');
+        const stats = await res.json();
+        
+        if (!res.ok) {
+            console.error('Error en API cloudinary-stats:', stats.error);
+            return;
+        }
+        
+        // Usar transformación count como proxy para almacenamiento
+        // (Cloudinary free plan no devuelve almacenamiento exacto, pero sí transformaciones)
+        const usado = stats.transformation_count || 0;
+        const limite = stats.transformation_count_limit || 1000;
+        const porcentaje = limite > 0 ? Math.min(100, (usado / limite) * 100) : 0;
+        
+        const barraEl = document.getElementById('cloudinaryStorageBar');
+        const textEl = document.getElementById('cloudinaryStorageText');
+        const valueEl = document.getElementById('cloudinaryStorageValue');
+        
+        if (barraEl) {
+            barraEl.style.width = porcentaje + '%';
+            // Cambiar color según uso
+            if (porcentaje >= 80) {
+                barraEl.style.background = 'linear-gradient(90deg, #ff7a7a, #ff5555)'; // Rojo
+            } else if (porcentaje >= 50) {
+                barraEl.style.background = 'linear-gradient(90deg, var(--warning), #ff9500)'; // Naranja
+            } else {
+                barraEl.style.background = 'linear-gradient(90deg, var(--accent2), var(--accent))'; // Verde
+            }
+        }
+        
+        if (textEl) {
+            textEl.textContent = `${usado.toLocaleString('es-MX')} / ${limite.toLocaleString('es-MX')} (${porcentaje.toFixed(1)}%)`;
+        }
+
+        if (valueEl) {
+            valueEl.textContent = `${porcentaje.toFixed(1)}%`;
+        }
+    } catch (err) {
+        console.error('Error cargando stats de Cloudinary:', err);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     cargarEstadisticas();
+    cargarCloudinaryStats();
     setInterval(cargarEstadisticas, 30000);
+    setInterval(cargarCloudinaryStats, 60000);
 });
 
 // ─── Últimas subidas (tiempo real) ────────────────────────────────────────────
 function tiempoRelativo(fechaStr) {
     try {
-        const partes = fechaStr.split(',');
-        const [d, m, y] = partes[0].trim().split('/');
-        const hora = partes[1] ? partes[1].trim() : '00:00:00';
-        const fecha = new Date(+y, +m - 1, +d, ...hora.split(':').map(Number));
+        // Manejar formato ISO (YYYY-MM-DDTHH:MM:SS) o formato personalizado (DD/MM/YYYY, HH:MM:SS)
+        let fecha;
+        if (fechaStr.includes('T') || fechaStr.includes('-')) {
+            // Formato ISO
+            fecha = new Date(fechaStr);
+        } else if (fechaStr.includes('/')) {
+            // Formato personalizado DD/MM/YYYY, HH:MM:SS
+            const partes = fechaStr.split(',');
+            const [d, m, y] = partes[0].trim().split('/');
+            const hora = partes[1] ? partes[1].trim() : '00:00:00';
+            fecha = new Date(+y, +m - 1, +d, ...hora.split(':').map(Number));
+        } else {
+            return fechaStr;
+        }
+        
+        if (isNaN(fecha.getTime())) return fechaStr;
+        
         const diff = Date.now() - fecha.getTime();
         const mins = Math.floor(diff / 60000);
         if (mins < 1) return 'ahora';
@@ -856,6 +940,29 @@ clienteChannel.addEventListener('message', function(event) {
     if (event.data?.tipo === 'nuevo_cliente') {
         cargarGraficoPedidos();
         cargarUltimasSubidas();
+        cargarEstadisticas();
+        cargarCloudinaryStats(); // Actualizar almacenamiento cuando se suben nuevas fotos
+    }
+    else if (event.data?.tipo === 'estado_actualizado') {
+        // Actualizar cuando cajero marca como pagado y cambia estado a 'procesando'
+        const clienteId = event.data.clienteId;
+        const nuevoEstado = event.data.nuevoEstado;
+        const row = document.querySelector(`tr[data-id="${clienteId}"]`);
+        if (row) {
+            const estadoActual = (row.dataset.estado || 'pendiente').toLowerCase();
+            const statusBadge = row.querySelector('.status');
+            if (statusBadge && nuevoEstado !== estadoActual) {
+                statusBadge.textContent = nuevoEstado.charAt(0).toUpperCase() + nuevoEstado.slice(1);
+                statusBadge.className = `status status-${nuevoEstado}`;
+                row.dataset.estado = nuevoEstado.toLowerCase();
+                
+                // Actualizar badge si cambió de pendiente a otro estado
+                if (estadoActual === 'pendiente' && nuevoEstado !== 'pendiente') {
+                    actualizarBadge(-1);
+                }
+            }
+        }
+        cargarGraficoPedidos();
         cargarEstadisticas();
     }
 });
