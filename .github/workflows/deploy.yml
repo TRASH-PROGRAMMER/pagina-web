@@ -12,6 +12,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Preflight - validate SSH connectivity
+        run: |
+          set -e
+          echo "Checking TCP connectivity to ${SERVER_HOST}:${SERVER_PORT}"
+          nc -vz -w 10 "${SERVER_HOST}" "${SERVER_PORT}"
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+
       - name: Copy project files to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -22,6 +31,9 @@ jobs:
           source: "requirements.txt,SEVER/,Dockerfile,docker-compose.yml,.dockerignore"
           target: /home/${{ secrets.SERVER_USER }}/pagina-web
           overwrite: true
+          timeout: 120s
+          command_timeout: 10m
+          debug: true
 
       - name: Deploy via SSH with Docker
         uses: appleboy/ssh-action@v1.2.0
@@ -30,6 +42,9 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT }}
+          timeout: 120s
+          command_timeout: 20m
+          debug: true
           script: |
             set -e
             APP_DIR="/home/${{ secrets.SERVER_USER }}/pagina-web"
