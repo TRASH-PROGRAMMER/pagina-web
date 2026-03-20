@@ -130,7 +130,7 @@
         <button class="alpha-btn" onclick="filterByAlpha('STU')"   data-range="STU">S–U</button>
         <button class="alpha-btn" onclick="filterByAlpha('VWZ')"   data-range="VWZ">V–Z</button>
       </div>
-      <div class="advanced-filters" role="group" aria-label="Filtros de fecha, estado y precio">
+      <div class="advanced-filters" role="group" aria-label="Filtros de fecha, estado, precio e imagenes">
         <label>
           Fecha
           <input type="date" id="filterFecha" oninput="filterTable()">
@@ -153,6 +153,14 @@
           Precio max
           <input type="number" id="filterPrecioMax" min="0" step="0.01" placeholder="999.99" oninput="filterTable()">
         </label>
+        <label>
+          Imagenes
+          <select id="filterImagenes" onchange="filterTable()">
+            <option value="">Todas</option>
+            <option value="con">Con imagenes</option>
+            <option value="sin">Sin imagenes</option>
+          </select>
+        </label>
       </div>
       <table id="ordersTable">
         <thead>
@@ -172,6 +180,7 @@
           <!-- Se llena dinámicamente desde la API -->
         </tbody>
       </table>
+      <nav class="orders-table-pagination" id="ordersTablePagination" aria-label="Paginacion de pedidos"></nav>
     </div>
 
     <!-- BOTTOM PANELS -->
@@ -199,7 +208,34 @@
       <div class="section-header">
         <div class="section-title">Clientes</div>
       </div>
+      <div class="clientes-cards-tools" role="group" aria-label="Filtros de tarjetas de clientes">
+        <label>
+          Buscar cliente
+          <input type="text" id="searchClientesCards" placeholder="Nombre o apellido">
+        </label>
+        <label>
+          Imagenes
+          <select id="filterImagenesCards">
+            <option value="">Todas</option>
+            <option value="con">Con imagenes</option>
+            <option value="sin">Sin imagenes</option>
+          </select>
+        </label>
+        <span class="clientes-cards-count" id="clientesCardsCount">0 resultados</span>
+      </div>
+      <div class="clientes-cards-alpha-filters" id="alphaFiltersCards" role="group" aria-label="Filtrar tarjetas por inicial del nombre">
+        <button class="alpha-btn-cards active" data-range="todos">Todos</button>
+        <button class="alpha-btn-cards" data-range="ABC">A-C</button>
+        <button class="alpha-btn-cards" data-range="DEF">D-F</button>
+        <button class="alpha-btn-cards" data-range="GHI">G-I</button>
+        <button class="alpha-btn-cards" data-range="JKL">J-L</button>
+        <button class="alpha-btn-cards" data-range="MNO">M-O</button>
+        <button class="alpha-btn-cards" data-range="PQR">P-R</button>
+        <button class="alpha-btn-cards" data-range="STU">S-U</button>
+        <button class="alpha-btn-cards" data-range="VWZ">V-Z</button>
+      </div>
       <div class="clientes-cards-grid" id="clientesCardsGrid"></div>
+      <nav class="clientes-cards-pagination" id="clientesCardsPagination" aria-label="Paginacion de clientes" hidden></nav>
     </div>
 
     <div class="panel panel-opciones dashboard-only" id="panelOpciones">
@@ -316,7 +352,7 @@
 
   .advanced-filters {
     display: grid;
-    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    grid-template-columns: repeat(5, minmax(150px, 1fr));
     gap: 10px;
     padding: 0 20px 14px;
   }

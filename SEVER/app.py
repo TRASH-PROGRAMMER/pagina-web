@@ -144,19 +144,19 @@ with app.app_context():
         {
             "username": os.environ.get("ADMIN_USERNAME", "admin"),
             "email": os.environ.get("ADMIN_EMAIL", "admin@imagemanager.local"),
-            "password": os.environ.get("ADMIN_PASSWORD", "admin123"),
+            "password": os.environ.get("ADMIN_PASSWORD", "FUEGOtierra65$admin"),
             "role": "admin",
         },
         {
             "username": os.environ.get("OPERADOR_USERNAME", "operador"),
             "email": os.environ.get("OPERADOR_EMAIL", "operador@imagemanager.local"),
-            "password": os.environ.get("OPERADOR_PASSWORD", "operador123"),
+            "password": os.environ.get("OPERADOR_PASSWORD", "Cocolimon3455·#"),
             "role": "operador",
         },
         {
             "username": os.environ.get("CAJERO_USERNAME", "cajero"),
             "email": os.environ.get("CAJERO_EMAIL", "cajero@imagemanager.local"),
-            "password": os.environ.get("CAJERO_PASSWORD", "cajero123"),
+            "password": os.environ.get("CAJERO_PASSWORD", "dloktrukgr345£!3"),
             "role": "cajero",
         },
     ]

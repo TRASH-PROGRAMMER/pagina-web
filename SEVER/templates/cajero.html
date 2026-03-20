@@ -10,17 +10,50 @@
 			--panel: #191b27;
 			--line: #2f3346;
 			--text: #edf0ff;
-			--muted: #9ca3b0;
+			--muted: #b4bccd;
+			--focus: #5ea0ff;
 			--ok: #22c55e;
 			--warn: #f59e0b;
+			--error: #ef4444;
+			--info: #60a5fa;
 		}
 		* { box-sizing: border-box; }
+		.sr-only {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			padding: 0;
+			margin: -1px;
+			overflow: hidden;
+			clip: rect(0, 0, 0, 0);
+			border: 0;
+		}
+		.skip-link {
+			position: absolute;
+			top: -42px;
+			left: 10px;
+			z-index: 1000;
+			background: #e6f0ff;
+			color: #0f172a;
+			padding: 8px 10px;
+			border-radius: 8px;
+			text-decoration: none;
+			font-weight: 600;
+		}
+		.skip-link:focus {
+			top: 10px;
+		}
 		body {
 			margin: 0;
 			min-height: 100vh;
 			background: var(--bg);
 			color: var(--text);
 			font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+			line-height: 1.35;
+		}
+		:focus-visible {
+			outline: 2px solid var(--focus);
+			outline-offset: 2px;
 		}
 		header {
 			display: flex;
@@ -36,6 +69,11 @@
 			color: var(--muted);
 			font-size: 13px;
 		}
+		header p {
+			margin: 6px 0 0;
+			color: var(--muted);
+			font-size: 12px;
+		}
 		.btn {
 			border: 1px solid var(--line);
 			border-radius: 8px;
@@ -46,30 +84,107 @@
 			font-size: 13px;
 			cursor: pointer;
 		}
+		.btn:hover { filter: brightness(1.08); }
 		.wrap {
-			max-width: 1000px;
+			max-width: 1280px;
 			margin: 20px auto;
 			padding: 0 16px;
+		}
+		.tools {
+			display: grid;
+			grid-template-columns: 2.2fr 1fr 1fr auto auto;
+			gap: 10px;
+			align-items: end;
+			background: #141625;
+			border: 1px solid var(--line);
+			border-radius: 12px;
+			padding: 12px;
+			margin-bottom: 10px;
+		}
+		.field label {
+			display: block;
+			font-size: 11px;
+			color: var(--muted);
+			margin-bottom: 6px;
+			text-transform: uppercase;
+			letter-spacing: 0.04em;
+		}
+		.field input,
+		.field select {
+			width: 100%;
+			border: 1px solid var(--line);
+			background: #1b1f31;
+			color: var(--text);
+			border-radius: 8px;
+			padding: 8px 10px;
+			font-size: 12.5px;
+		}
+		.tool-btn {
+			border: 1px solid var(--line);
+			background: #23273a;
+			color: var(--text);
+			border-radius: 8px;
+			padding: 8px 10px;
+			font-size: 12px;
+			height: 36px;
+			cursor: pointer;
+		}
+		.tool-btn:hover { filter: brightness(1.08); }
+		.feedback {
+			display: none;
+			margin-bottom: 10px;
+			padding: 10px 12px;
+			border-radius: 10px;
+			font-size: 13px;
+			border: 1px solid var(--line);
+			background: #141625;
+		}
+		.feedback.show { display: block; }
+		.feedback.info { border-color: #2d4d70; color: #bfdbfe; }
+		.feedback.ok { border-color: #1f5c35; color: #bbf7d0; }
+		.feedback.warn { border-color: #715516; color: #fde68a; }
+		.feedback.error { border-color: #7f1d1d; color: #fecaca; }
+		.summary {
+			display: flex;
+			gap: 8px;
+			flex-wrap: wrap;
+			margin: 0 0 10px;
+		}
+		.chip {
+			border: 1px solid var(--line);
+			border-radius: 999px;
+			padding: 6px 10px;
+			font-size: 12px;
+			color: var(--muted);
+			background: #121521;
+		}
+		.table-wrap {
+			border: 1px solid var(--line);
+			border-radius: 12px;
+			overflow: auto;
+			max-height: calc(100vh - 260px);
 		}
 		table {
 			width: 100%;
 			border-collapse: collapse;
 			background: var(--panel);
-			border: 1px solid var(--line);
-			border-radius: 12px;
-			overflow: hidden;
+			min-width: 900px;
 		}
 		th, td {
-			padding: 10px;
+			padding: 8px 10px;
 			border-bottom: 1px solid var(--line);
 			text-align: left;
-			font-size: 13px;
+			font-size: 12.5px;
 		}
 		th {
 			color: var(--muted);
 			text-transform: uppercase;
 			letter-spacing: 0.04em;
 			font-size: 11px;
+			position: sticky;
+			top: 0;
+			z-index: 2;
+			background: #1c1f2d;
 		}
 		.tag {
 			border-radius: 999px;
@@ -85,114 +200,425 @@
 			background: rgba(34, 197, 94, 0.12);
 			color: #c6ffe0;
 			border-radius: 8px;
-			padding: 6px 8px;
+			padding: 5px 8px;
 			cursor: pointer;
-			font-size: 12px;
+			font-size: 11.5px;
 		}
+		.pay-btn:hover { filter: brightness(1.08); }
 		.pay-btn:disabled {
 			opacity: 0.55;
 			cursor: not-allowed;
 		}
+		.pagination {
+			display: flex;
+			justify-content: flex-end;
+			align-items: center;
+			gap: 8px;
+			margin-top: 10px;
+		}
+		.pagination button {
+			border: 1px solid var(--line);
+			background: #23273a;
+			color: var(--text);
+			border-radius: 8px;
+			padding: 7px 9px;
+			font-size: 12px;
+			cursor: pointer;
+		}
+		@media (max-width: 950px) {
+			.tools {
+				grid-template-columns: 1fr;
+			}
+			.tool-btn {
+				width: 100%;
+			}
+			.table-wrap {
+				max-height: none;
+			}
+		}
 	</style>
 </head>
 <body>
+	<a class="skip-link" href="#contenido-cajero">Saltar al contenido principal</a>
+
 	<header>
 		<div>
 			<h2 style="margin:0">Panel Cajero</h2>
+			<p>Cobra rapido: busca pedido, marca pagado y continua con el siguiente.</p>
 			<div class="meta">Usuario: {{ session.get('username', '') }} | Rol: {{ session.get('role', '') }}</div>
 		</div>
 		<a class="btn" href="{{ url_for('auth.logout') }}">Salir</a>
 	</header>
 
-	<div class="wrap">
-		<table>
-			<thead>
-				<tr>
-					<th>Pedido</th>
-					<th>Cliente</th>
-					<th>Total</th>
-					<th>Estado</th>
-					<th>Pago</th>
-					<th>Accion</th>
-				</tr>
-			</thead>
-			<tbody id="cashierBody">
-				<tr><td colspan="6" style="color:var(--muted)">Cargando...</td></tr>
-			</tbody>
-		</table>
-	</div>
+	<main id="contenido-cajero" class="wrap" tabindex="-1" role="main">
+		<section aria-label="Herramientas de cobro">
+			<div id="feedback" class="feedback" role="status" aria-live="polite"></div>
+			<p id="liveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+
+			<div class="tools">
+				<div class="field">
+					<label for="searchInput">Buscar cliente o correo</label>
+					<input id="searchInput" type="search" autocomplete="off" placeholder="Ej: Perez o cliente@correo.com">
+				</div>
+				<div class="field">
+					<label for="pagoFiltro">Filtrar por pago</label>
+					<select id="pagoFiltro">
+						<option value="">Todos</option>
+						<option value="pendiente">Pendiente</option>
+						<option value="pagado">Pagado</option>
+					</select>
+				</div>
+				<div class="field">
+					<label for="estadoFiltro">Filtrar por estado</label>
+					<select id="estadoFiltro">
+						<option value="">Todos</option>
+						<option value="pendiente">Pendiente</option>
+						<option value="procesando">Procesando</option>
+						<option value="entregado">Entregado</option>
+						<option value="cancelado">Cancelado</option>
+					</select>
+				</div>
+				<button id="clearBtn" class="tool-btn" type="button" aria-label="Limpiar filtros">Limpiar</button>
+				<button id="refreshBtn" class="tool-btn" type="button" aria-label="Recargar pedidos">Recargar</button>
+			</div>
+
+			<div class="summary" aria-live="polite">
+				<span id="chipVisibles" class="chip">Visibles: 0</span>
+				<span id="chipPendientes" class="chip">Pendientes cobro: 0</span>
+				<span id="chipPagados" class="chip">Pagados: 0</span>
+			</div>
+		</section>
+
+		<section aria-label="Listado de pedidos para cobro">
+			<div class="table-wrap">
+				<table aria-label="Tabla de pedidos del cajero" aria-describedby="tablaAyuda">
+					<caption id="tablaAyuda" class="sr-only">El boton marcar pagado confirma el cobro y cambia el estado del pedido.</caption>
+					<thead>
+						<tr>
+							<th scope="col">Pedido</th>
+							<th scope="col">Cliente</th>
+							<th scope="col">Total</th>
+							<th scope="col">Estado</th>
+							<th scope="col">Pago</th>
+							<th scope="col">Accion</th>
+						</tr>
+					</thead>
+					<tbody id="cashierBody" aria-busy="true">
+						<tr><td colspan="6" style="color:var(--muted)">Cargando...</td></tr>
+					</tbody>
+				</table>
+			</div>
+			<div class="pagination">
+				<button id="prevPageBtn" type="button" aria-label="Pagina anterior">Anterior</button>
+				<span id="pageInfo" class="chip" aria-live="polite">Pagina 1 de 1</span>
+				<button id="nextPageBtn" type="button" aria-label="Pagina siguiente">Siguiente</button>
+			</div>
+		</section>
+	</main>
 
 	<script>
+		const PAGE_SIZE = 20;
+		let pedidosAll = [];
+		let pedidosFiltrados = [];
+		let paginaActual = 1;
+
+		let clienteChannel = null;
+		try {
+			clienteChannel = new BroadcastChannel("clientes_channel");
+			window.clienteChannel = clienteChannel;
+		} catch (_err) {
+			clienteChannel = null;
+		}
+
+		function showFeedback(msg, type = "info") {
+			const box = document.getElementById("feedback");
+			const live = document.getElementById("liveRegion");
+			if (box) {
+				box.className = `feedback show ${type}`;
+				box.textContent = msg;
+			}
+			if (live) live.textContent = msg;
+		}
+
+		function clearFeedback() {
+			const box = document.getElementById("feedback");
+			if (box) {
+				box.className = "feedback";
+				box.textContent = "";
+			}
+		}
+
+		function updateSummary() {
+			const visibles = pedidosFiltrados.length;
+			const pendientes = pedidosAll.filter(function(p) { return !p.pagado; }).length;
+			const pagados = pedidosAll.filter(function(p) { return !!p.pagado; }).length;
+
+			const c1 = document.getElementById("chipVisibles");
+			const c2 = document.getElementById("chipPendientes");
+			const c3 = document.getElementById("chipPagados");
+			if (c1) c1.textContent = `Visibles: ${visibles}`;
+			if (c2) c2.textContent = `Pendientes cobro: ${pendientes}`;
+			if (c3) c3.textContent = `Pagados: ${pagados}`;
+		}
+
+		function totalPaginas() {
+			return Math.max(1, Math.ceil(pedidosFiltrados.length / PAGE_SIZE));
+		}
+
+		function updatePagination() {
+			const total = totalPaginas();
+			if (paginaActual > total) paginaActual = total;
+			if (paginaActual < 1) paginaActual = 1;
+
+			const info = document.getElementById("pageInfo");
+			const prev = document.getElementById("prevPageBtn");
+			const next = document.getElementById("nextPageBtn");
+			if (info) info.textContent = `Pagina ${paginaActual} de ${total}`;
+			if (prev) prev.disabled = paginaActual <= 1;
+			if (next) next.disabled = paginaActual >= total;
+		}
+
+		function findPedido(id) {
+			return pedidosAll.find(function(p) { return Number(p.id) === Number(id); }) || null;
+		}
+
+		function applyFilters() {
+			const q = (document.getElementById("searchInput")?.value || "").trim().toLowerCase();
+			const pagoFiltro = (document.getElementById("pagoFiltro")?.value || "").toLowerCase();
+			const estadoFiltro = (document.getElementById("estadoFiltro")?.value || "").toLowerCase();
+
+			pedidosFiltrados = pedidosAll.filter(function(p) {
+				const nombre = `${p.nombre || ""} ${p.apellido || ""}`.toLowerCase();
+				const correo = String(p.correo || "").toLowerCase();
+				const pago = p.pagado ? "pagado" : "pendiente";
+				const estado = String(p.estado || "pendiente").toLowerCase();
+
+				const okQ = !q || nombre.includes(q) || correo.includes(q);
+				const okPago = !pagoFiltro || pago === pagoFiltro;
+				const okEstado = !estadoFiltro || estado === estadoFiltro;
+				return okQ && okPago && okEstado;
+			});
+
+			paginaActual = 1;
+			renderRows();
+		}
+
+		function renderRows() {
+			const body = document.getElementById("cashierBody");
+			if (!body) return;
+
+			body.setAttribute("aria-busy", "true");
+			body.innerHTML = "";
+
+			if (!Array.isArray(pedidosFiltrados) || pedidosFiltrados.length === 0) {
+				body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">No hay pedidos para este filtro</td></tr>';
+				updateSummary();
+				updatePagination();
+				body.setAttribute("aria-busy", "false");
+				return;
+			}
+
+			const start = (paginaActual - 1) * PAGE_SIZE;
+			const pageRows = pedidosFiltrados.slice(start, start + PAGE_SIZE);
+
+			pageRows.forEach(function(p) {
+				const pagado = !!p.pagado;
+				const tr = document.createElement("tr");
+				tr.id = `pedido-${p.id}`;
+				tr.innerHTML = `
+					<td>#${String(p.id).padStart(4, "0")}</td>
+					<td>${p.nombre} ${p.apellido}<br><span style="color:var(--muted)">${p.correo}</span></td>
+					<td>$${Number(p.precioTotal || 0).toFixed(2)}</td>
+					<td><span id="estado-${p.id}">${(p.estado || "pendiente").toUpperCase()}</span></td>
+					<td><span class="tag ${pagado ? "paid" : "pending"}" id="pago-${p.id}">${pagado ? "PAGADO" : "PENDIENTE"}</span></td>
+					<td><button type="button" class="pay-btn" id="btn-${p.id}" data-action="pay" data-id="${p.id}" ${pagado ? "disabled" : ""} aria-label="Marcar pagado pedido ${p.id}">Marcar pagado</button></td>
+				`;
+				body.appendChild(tr);
+			});
+
+			updateSummary();
+			updatePagination();
+			body.setAttribute("aria-busy", "false");
+		}
+
 		async function cargarPedidos() {
 			const body = document.getElementById("cashierBody");
+			clearFeedback();
 			try {
+				if (body) {
+					body.setAttribute("aria-busy", "true");
+					body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Cargando...</td></tr>';
+				}
 				const res = await fetch("/api/clientes");
 				if (res.status === 401 || res.status === 403) {
 					window.location.href = "/login";
 					return;
 				}
 				const pedidos = await res.json();
-				body.innerHTML = "";
 				if (!Array.isArray(pedidos) || pedidos.length === 0) {
-					body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">No hay pedidos</td></tr>';
+					pedidosAll = [];
+					pedidosFiltrados = [];
+					renderRows();
+					showFeedback("No hay pedidos para cobrar.", "info");
 					return;
 				}
 
-				pedidos.forEach(function(p) {
-					const pagado = !!p.pagado;
-					const tr = document.createElement("tr");
-					tr.id = `pedido-${p.id}`;
-					tr.innerHTML = `
-						<td>#${String(p.id).padStart(4, "0")}</td>
-						<td>${p.nombre} ${p.apellido}<br><span style="color:var(--muted)">${p.correo}</span></td>
-						<td>$${Number(p.precioTotal || 0).toFixed(2)}</td>
-						<td><span id="estado-${p.id}">${(p.estado || "pendiente").toUpperCase()}</span></td>
-						<td><span class="tag ${pagado ? "paid" : "pending"}" id="pago-${p.id}">${pagado ? "PAGADO" : "PENDIENTE"}</span></td>
-						<td><button class="pay-btn" id="btn-${p.id}" ${pagado ? "disabled" : ""} onclick="marcarPagado(${p.id})">Marcar pagado</button></td>
-					`;
-					body.appendChild(tr);
-				});
+				pedidosAll = pedidos.slice();
+				pedidosFiltrados = pedidos.slice();
+				renderRows();
+				showFeedback("Pedidos cargados correctamente.", "ok");
 			} catch (_error) {
-				body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Error al cargar pedidos</td></tr>';
+				if (body) body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Error al cargar pedidos</td></tr>';
+				showFeedback("No se pudo cargar pedidos. Intenta recargar.", "error");
 			}
 		}
 
-		async function marcarPagado(id) {
-			const res = await fetch(`/api/clientes/${id}/pago`, {
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ pagado: true })
-			});
-			if (res.ok) {
+		async function marcarPagado(id, btn) {
+			const original = btn ? btn.textContent : "Marcar pagado";
+			try {
+				if (btn) {
+					btn.disabled = true;
+					btn.textContent = "Procesando...";
+				}
+
+				const res = await fetch(`/api/clientes/${id}/pago`, {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ pagado: true })
+				});
+
+				if (!res.ok) {
+					if (res.status === 401 || res.status === 403) {
+						window.location.href = "/login";
+						return;
+					}
+					showFeedback("No se pudo marcar el pedido como pagado.", "error");
+					if (btn) {
+						btn.disabled = false;
+						btn.textContent = original;
+					}
+					return;
+				}
+
 				const data = await res.json();
-				// Actualizar UI sin recargar toda la tabla
+				const pedido = findPedido(id);
+				if (pedido) {
+					pedido.pagado = true;
+					pedido.estado = data.estado || "procesando";
+				}
+
 				const pagoTag = document.getElementById(`pago-${id}`);
 				const estadoSpan = document.getElementById(`estado-${id}`);
-				const botón = document.getElementById(`btn-${id}`);
-				
 				if (pagoTag) {
 					pagoTag.textContent = "PAGADO";
 					pagoTag.className = "tag paid";
 				}
 				if (estadoSpan) {
-					estadoSpan.textContent = data.estado ? data.estado.toUpperCase() : "PROCESANDO";
+					estadoSpan.textContent = (data.estado || "procesando").toUpperCase();
 				}
-				if (botón) {
-					botón.disabled = true;
+				if (btn) {
+					btn.disabled = true;
+					btn.textContent = "Pagado";
 				}
-				
-				// Notificar al panel admin que el pago fue registrado y el estado cambió
-				if (window.clienteChannel) {
-					window.clienteChannel.postMessage({
+
+				// Emitir evento realtime para admin
+				if (clienteChannel) {
+					clienteChannel.postMessage({
 						tipo: "estado_actualizado",
 						clienteId: id,
 						nuevoEstado: data.estado || "procesando",
 						pagado: true
 					});
 				}
+
+				showFeedback(`Pedido #${String(id).padStart(4, "0")} marcado como pagado.`, "ok");
+				applyFilters();
+			} catch (_err) {
+				if (btn) {
+					btn.disabled = false;
+					btn.textContent = original;
+				}
+				showFeedback("Error de red al procesar el cobro.", "error");
 			}
 		}
 
+		function clearFilters() {
+			const s = document.getElementById("searchInput");
+			const p = document.getElementById("pagoFiltro");
+			const e = document.getElementById("estadoFiltro");
+			if (s) s.value = "";
+			if (p) p.value = "";
+			if (e) e.value = "";
+			applyFilters();
+			showFeedback("Filtros limpiados.", "info");
+		}
+
+		function wireEvents() {
+			const body = document.getElementById("cashierBody");
+			const search = document.getElementById("searchInput");
+			const pago = document.getElementById("pagoFiltro");
+			const estado = document.getElementById("estadoFiltro");
+			const clearBtn = document.getElementById("clearBtn");
+			const refreshBtn = document.getElementById("refreshBtn");
+			const prevBtn = document.getElementById("prevPageBtn");
+			const nextBtn = document.getElementById("nextPageBtn");
+
+			if (search) search.addEventListener("input", applyFilters);
+			if (pago) pago.addEventListener("change", applyFilters);
+			if (estado) estado.addEventListener("change", applyFilters);
+			if (clearBtn) clearBtn.addEventListener("click", clearFilters);
+			if (refreshBtn) refreshBtn.addEventListener("click", cargarPedidos);
+
+			if (prevBtn) {
+				prevBtn.addEventListener("click", function() {
+					if (paginaActual > 1) {
+						paginaActual -= 1;
+						renderRows();
+					}
+				});
+			}
+			if (nextBtn) {
+				nextBtn.addEventListener("click", function() {
+					const total = totalPaginas();
+					if (paginaActual < total) {
+						paginaActual += 1;
+						renderRows();
+					}
+				});
+			}
+
+			if (body) {
+				body.addEventListener("click", async function(ev) {
+					const btn = ev.target.closest("button[data-action='pay']");
+					if (!btn) return;
+					const id = Number(btn.getAttribute("data-id"));
+					if (!id) return;
+					await marcarPagado(id, btn);
+				});
+			}
+
+			document.addEventListener("keydown", function(ev) {
+				const t = ev.target;
+				const isTyping = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
+
+				if (ev.key === "/" && !isTyping) {
+					ev.preventDefault();
+					if (search) search.focus();
+				}
+
+				if (ev.key === "Escape") {
+					if (isTyping) t.blur();
+					clearFilters();
+				}
+
+				if ((ev.key === "r" || ev.key === "R") && !isTyping) {
+					ev.preventDefault();
+					cargarPedidos();
+				}
+			});
+		}
+
+		wireEvents();
 		cargarPedidos();
 	</script>
 </body>

@@ -19,6 +19,11 @@ let tamanoEditandoId = null;
 let clientesCache = [];
 let fotosModalActuales = [];
 let nombrePedidoModal = "pedido";
+let currentAlphaRangeCards = "todos";
+let currentCardsPage = 1;
+const CARDS_PAGE_SIZE = 6;
+let currentTablePage = 1;
+const TABLE_PAGE_SIZE = 8;
 
 function mostrarMensajeTamano(texto, ok = true) {
     const msg = document.getElementById("tamanoMensaje");
@@ -75,14 +80,133 @@ function renderClienteCard(c) {
     return card;
 }
 
+function filtrarClientesParaCards(clientes) {
+    const filtro = (document.getElementById("filterImagenesCards")?.value || "").toLowerCase();
+    const busqueda = (document.getElementById("searchClientesCards")?.value || "").trim().toLowerCase();
+
+    return clientes.filter(function(c) {
+        const nombre = String(c.nombre || "").toLowerCase();
+        const apellido = String(c.apellido || "").toLowerCase();
+        const nombreCompleto = `${nombre} ${apellido}`.trim();
+        const inicial = (nombreCompleto.charAt(0) || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toUpperCase();
+        const numFotos = Number(c.numFotos || (Array.isArray(c.fotos) ? c.fotos.length : 0));
+
+        const matchesBusqueda = !busqueda
+            || nombre.includes(busqueda)
+            || apellido.includes(busqueda)
+            || nombreCompleto.includes(busqueda);
+
+        const matchesImagenes = !filtro
+            || (filtro === "con" && numFotos > 0)
+            || (filtro === "sin" && numFotos === 0);
+
+        const matchesAlpha = currentAlphaRangeCards === "todos"
+            || (inicial && currentAlphaRangeCards.includes(inicial));
+
+        return matchesBusqueda && matchesImagenes && matchesAlpha;
+    });
+}
+
+function filterCardsByAlpha(range) {
+    currentAlphaRangeCards = range;
+    currentCardsPage = 1;
+    document.querySelectorAll("#alphaFiltersCards .alpha-btn-cards").forEach(function(btn) {
+        btn.classList.toggle("active", btn.dataset.range === range);
+    });
+    renderClientesCards(clientesCache);
+}
+
+function renderCardsPagination(totalPages) {
+    const pagination = document.getElementById("clientesCardsPagination");
+    if (!pagination) return;
+
+    pagination.hidden = false;
+    pagination.innerHTML = "";
+
+    const pageInfo = document.createElement("span");
+    pageInfo.className = "cards-page-info";
+    pageInfo.textContent = `Pagina ${currentCardsPage} de ${totalPages}`;
+    pagination.appendChild(pageInfo);
+
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "cards-page-btn";
+    prevBtn.textContent = "Anterior";
+    prevBtn.disabled = currentCardsPage <= 1;
+    prevBtn.addEventListener("click", function() {
+        if (currentCardsPage > 1) {
+            currentCardsPage -= 1;
+            renderClientesCards(clientesCache);
+        }
+    });
+    pagination.appendChild(prevBtn);
+
+    for (let page = 1; page <= totalPages; page += 1) {
+        const pageBtn = document.createElement("button");
+        pageBtn.type = "button";
+        pageBtn.className = "cards-page-btn";
+        if (page === currentCardsPage) {
+            pageBtn.classList.add("active");
+            pageBtn.setAttribute("aria-current", "page");
+        }
+        pageBtn.textContent = String(page);
+        pageBtn.addEventListener("click", function() {
+            currentCardsPage = page;
+            renderClientesCards(clientesCache);
+        });
+        pagination.appendChild(pageBtn);
+    }
+
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "cards-page-btn";
+    nextBtn.textContent = "Siguiente";
+    nextBtn.disabled = currentCardsPage >= totalPages;
+    nextBtn.addEventListener("click", function() {
+        if (currentCardsPage < totalPages) {
+            currentCardsPage += 1;
+            renderClientesCards(clientesCache);
+        }
+    });
+    pagination.appendChild(nextBtn);
+}
+
 function renderClientesCards(clientes) {
     const grid = document.getElementById("clientesCardsGrid");
     if (!grid) return;
 
+    const lista = Array.isArray(clientes) ? clientes : [];
+    const filtrados = filtrarClientesParaCards(lista);
+    const countEl = document.getElementById("clientesCardsCount");
+    const totalPages = Math.max(1, Math.ceil(filtrados.length / CARDS_PAGE_SIZE));
+
+    if (currentCardsPage > totalPages) currentCardsPage = totalPages;
+    if (currentCardsPage < 1) currentCardsPage = 1;
+
+    const inicio = (currentCardsPage - 1) * CARDS_PAGE_SIZE;
+    const fin = inicio + CARDS_PAGE_SIZE;
+    const paginaActual = filtrados.slice(inicio, fin);
+
     grid.innerHTML = "";
-    clientes.forEach(function(c) {
+    paginaActual.forEach(function(c) {
         grid.appendChild(renderClienteCard(c));
     });
+
+    if (countEl) {
+        countEl.textContent = `${filtrados.length} resultado${filtrados.length === 1 ? "" : "s"}`;
+    }
+
+    if (filtrados.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "clientes-cards-empty";
+        empty.textContent = "No hay clientes para este filtro";
+        grid.appendChild(empty);
+    }
+
+    renderCardsPagination(totalPages);
 }
 
 async function cargarClientesCards() {
@@ -95,6 +219,7 @@ async function cargarClientesCards() {
         const clientes = await res.json();
         if (!res.ok) throw new Error(clientes.error || "No se pudo cargar clientes");
         clientesCache = Array.isArray(clientes) ? clientes : [];
+        currentCardsPage = 1;
         renderClientesCards(clientesCache);
     } catch (error) {
         console.error("Error cargando clientes en cards:", error);
@@ -224,15 +349,77 @@ function toISODate(value) {
 }
 
 // ─── Filtrar tabla por búsqueda + rango alfabético + fecha/estado/precio ────
-function filterTable() {
+function renderOrdersTablePagination(totalPages, totalResults) {
+    const pagination = document.getElementById("ordersTablePagination");
+    if (!pagination) return;
+
+    pagination.innerHTML = "";
+
+    const info = document.createElement("span");
+    info.className = "orders-page-info";
+    info.textContent = `${totalResults} resultado${totalResults === 1 ? "" : "s"} - Pagina ${currentTablePage} de ${totalPages}`;
+    pagination.appendChild(info);
+
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "orders-page-btn";
+    prevBtn.textContent = "Anterior";
+    prevBtn.disabled = currentTablePage <= 1;
+    prevBtn.addEventListener("click", function() {
+        if (currentTablePage > 1) {
+            currentTablePage -= 1;
+            filterTable(false);
+        }
+    });
+    pagination.appendChild(prevBtn);
+
+    for (let page = 1; page <= totalPages; page += 1) {
+        const pageBtn = document.createElement("button");
+        pageBtn.type = "button";
+        pageBtn.className = "orders-page-btn";
+        pageBtn.textContent = String(page);
+        if (page === currentTablePage) {
+            pageBtn.classList.add("active");
+            pageBtn.setAttribute("aria-current", "page");
+        }
+        pageBtn.addEventListener("click", function() {
+            currentTablePage = page;
+            filterTable(false);
+        });
+        pagination.appendChild(pageBtn);
+    }
+
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "orders-page-btn";
+    nextBtn.textContent = "Siguiente";
+    nextBtn.disabled = currentTablePage >= totalPages;
+    nextBtn.addEventListener("click", function() {
+        if (currentTablePage < totalPages) {
+            currentTablePage += 1;
+            filterTable(false);
+        }
+    });
+    pagination.appendChild(nextBtn);
+}
+
+function filterTable(resetPage = true) {
     const searchValue = document.getElementById("searchInput").value.toLowerCase();
     const fechaFiltro = document.getElementById("filterFecha")?.value || "";
     const estadoFiltro = (document.getElementById("filterEstado")?.value || "").toLowerCase();
+    const imagenesFiltro = (document.getElementById("filterImagenes")?.value || "").toLowerCase();
     const precioMinRaw = document.getElementById("filterPrecioMin")?.value;
     const precioMaxRaw = document.getElementById("filterPrecioMax")?.value;
     const precioMin = precioMinRaw !== "" ? Number(precioMinRaw) : null;
     const precioMax = precioMaxRaw !== "" ? Number(precioMaxRaw) : null;
-    const rows = document.querySelectorAll("#tableBody tr");
+    const rows = Array.from(document.querySelectorAll("#tableBody tr[data-id]"));
+    const tbody = document.getElementById("tableBody");
+    const emptyRow = document.getElementById("ordersTableEmptyRow");
+    const filtrados = [];
+
+    if (emptyRow) emptyRow.remove();
+
+    if (resetPage) currentTablePage = 1;
 
     rows.forEach(function(row) {
         const text = row.innerText.toLowerCase();
@@ -241,6 +428,7 @@ function filterTable() {
         const rowEstado = (row.dataset.estado || "").toLowerCase();
         const rowFecha = row.dataset.fecha || "";
         const rowPrecio = row.dataset.precio !== "" ? Number(row.dataset.precio) : null;
+        const rowNumFotos = row.dataset.numFotos !== "" ? Number(row.dataset.numFotos) : 0;
 
         const matchesSearch = text.includes(searchValue);
         const matchesAlpha  = currentAlphaRange === 'todos' || currentAlphaRange.includes(firstLetter);
@@ -248,22 +436,48 @@ function filterTable() {
         const matchesEstado = !estadoFiltro || rowEstado === estadoFiltro;
         const matchesPrecioMin = precioMin === null || (rowPrecio !== null && rowPrecio >= precioMin);
         const matchesPrecioMax = precioMax === null || (rowPrecio !== null && rowPrecio <= precioMax);
+        const matchesImagenes = !imagenesFiltro
+            || (imagenesFiltro === "con" && rowNumFotos > 0)
+            || (imagenesFiltro === "sin" && rowNumFotos === 0);
 
-        row.style.display = (matchesSearch && matchesAlpha && matchesFecha && matchesEstado && matchesPrecioMin && matchesPrecioMax)
-            ? ""
-            : "none";
+        const matches = matchesSearch && matchesAlpha && matchesFecha && matchesEstado && matchesPrecioMin && matchesPrecioMax && matchesImagenes;
+        if (matches) filtrados.push(row);
     });
+
+    const totalPages = Math.max(1, Math.ceil(filtrados.length / TABLE_PAGE_SIZE));
+    if (currentTablePage > totalPages) currentTablePage = totalPages;
+    if (currentTablePage < 1) currentTablePage = 1;
+
+    rows.forEach(function(row) {
+        row.style.display = "none";
+    });
+
+    const inicio = (currentTablePage - 1) * TABLE_PAGE_SIZE;
+    const fin = inicio + TABLE_PAGE_SIZE;
+    filtrados.slice(inicio, fin).forEach(function(row) {
+        row.style.display = "";
+    });
+
+    if (filtrados.length === 0 && tbody) {
+        const tr = document.createElement("tr");
+        tr.id = "ordersTableEmptyRow";
+        tr.innerHTML = '<td colspan="9" class="orders-table-empty">No hay pedidos para este filtro</td>';
+        tbody.appendChild(tr);
+    }
+
+    renderOrdersTablePagination(totalPages, filtrados.length);
 }
 
 // ─── Filtrar por rango de letras ──────────────────────────────────────────────
 function filterByAlpha(range) {
     currentAlphaRange = range;
+    currentTablePage = 1;
 
     document.querySelectorAll(".alpha-btn").forEach(function(btn) {
         btn.classList.toggle("active", btn.dataset.range === range);
     });
 
-    filterTable();
+    filterTable(false);
 }
 
 // ─── Eliminar fila ────────────────────────────────────────────────────────────
@@ -338,7 +552,7 @@ async function changeStatus(btn) {
             actualizarBadge(+1);
         }
         
-        filterTable();
+        filterTable(false);
     } catch (error) {
         console.error("Error actualizando estado:", error);
         alert(error.message || "No se pudo cambiar el estado");
@@ -525,7 +739,7 @@ if (editTamanoModal) {
 }
 
 // ─── Render fila de pedido ────────────────────────────────────────────────────
-function renderClienteRow(cliente) {
+function renderClienteRow(cliente, applyFilters = true) {
     const tbody = document.getElementById("tableBody");
     const tr = document.createElement("tr");
     tr.dataset.id = cliente.id;
@@ -545,6 +759,7 @@ function renderClienteRow(cliente) {
     tr.dataset.estado = estadoRaw;
     tr.dataset.fecha = toISODate(cliente.fechaRegistro);
     tr.dataset.precio = precioNum != null && !Number.isNaN(precioNum) ? String(precioNum) : "";
+    tr.dataset.numFotos = String(numFotos);
 
     tr.innerHTML = `
         <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#${String(cliente.id).padStart(4,"0")}</code></td>
@@ -572,7 +787,9 @@ function renderClienteRow(cliente) {
     `;
     tbody.prepend(tr);
 
-    filterTable();
+    if (applyFilters) {
+        filterTable(true);
+    }
 }
 
 // ─── Cargar pedidos desde la API Flask al cargar la página ───────────────────
@@ -587,7 +804,10 @@ document.addEventListener("DOMContentLoaded", async function() {
         clientesCache = Array.isArray(clientes) ? clientes : [];
         const tbody = document.getElementById("tableBody");
         tbody.innerHTML = "";  // Limpiar filas anteriores
-        clientesCache.forEach(renderClienteRow);
+        clientesCache.forEach(function(cliente) {
+            renderClienteRow(cliente, false);
+        });
+        filterTable(true);
         
         // Contar solo pedidos en estado 'pendiente' para el badge
         const pedidosPendientes = clientesCache.filter(function(c) {
@@ -629,6 +849,28 @@ document.addEventListener("DOMContentLoaded", async function() {
             }
         });
     }
+
+    const filterImagenesCards = document.getElementById("filterImagenesCards");
+    if (filterImagenesCards) {
+        filterImagenesCards.addEventListener("change", function() {
+            currentCardsPage = 1;
+            renderClientesCards(clientesCache);
+        });
+    }
+
+    const searchClientesCards = document.getElementById("searchClientesCards");
+    if (searchClientesCards) {
+        searchClientesCards.addEventListener("input", function() {
+            currentCardsPage = 1;
+            renderClientesCards(clientesCache);
+        });
+    }
+
+    document.querySelectorAll("#alphaFiltersCards .alpha-btn-cards").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+            filterCardsByAlpha(btn.dataset.range || "todos");
+        });
+    });
 
     const formTamano = document.getElementById("formTamano");
     if (formTamano) {
