@@ -1,48 +1,55 @@
 /* responsive */
 
- @media (max-width: 768px) {
-    /* Agrupamos selectores que comparten propiedades para limpiar el código */
+@media (max-width: 768px) {
     .container,
     main,
     .container-datos {
         width: 100%;
-        padding: 1.25rem; /* 20px aproximado */
+        padding: 1.25rem;
     }
 
-    /* Fuentes más fluidas */
     .titulo { font-size: 1.5rem; }
     h2 { font-size: 1.125rem; }
-    
-    .text1, .mensaje, .formulario_datos_personales label, 
-    .formulario_datos_personales input, button {
-        font-size: 0.875rem; /* 14px es más legible que 12px en móvil */
+
+    .text1,
+    .mensaje,
+    .formulario_datos_personales label,
+    .formulario_datos_personales input,
+    .enviar-button,
+    .image-action-btn,
+    .foto-action-btn {
+        font-size: 0.875rem;
     }
 
-    .baja, .alta {
-        font-size: 0.75rem; /* 12px */
+    .baja,
+    .alta {
+        font-size: 0.75rem;
     }
 
-    /* Elementos de formulario */
     input[type="file"],
     .formulario_datos_personales {
         width: 100%;
         display: flex;
         flex-direction: column;
-        gap: 0.625rem; /* 10px */
+        gap: 0.625rem;
     }
 
-    /* Interactividad */
-    button, .enviar-button {
+    .enviar-button,
+    .image-action-btn {
         padding: 0.5rem 0.75rem;
-        width: 100%; /* En móviles, los botones grandes son más fáciles de tocar */
+        width: 100%;
     }
 
-    .btn-group, .progress-buttons, .direccion {
+    .btn-group,
+    .progress-buttons,
+    .direccion {
         gap: 0.5rem;
     }
+
     .btn-group {
         flex-direction: column;
     }
+
     .dark-mode-btn {
         top: 12px;
         bottom: auto;
@@ -53,13 +60,75 @@
         padding: 0;
         border-radius: 50%;
         z-index: 999;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     }
 
-        
-
-
-
-
-    
+    /* Choice chips solo en móvil */
+    .tamano-select-native {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
     }
+
+    .tamano-choice-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+        align-items: stretch;
+    }
+
+    .tamano-choice-chips .choice-chip {
+        flex: 1 1 calc(33.333% - 8px);
+        min-width: 116px;
+        max-width: 220px;
+        min-height: 44px;
+        width: auto;
+        margin-top: 0;
+        padding: 10px 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        line-height: 1.2;
+    }
+
+    .tamano-base-indicator {
+        display: block;
+    }
+
+    .foto-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .image-action-modal {
+        padding: 12px;
+    }
+
+    .image-action-modal-content {
+        width: 100%;
+        padding: 14px;
+    }
+
+    .image-action-title {
+        font-size: 22px;
+    }
+
+    .cropper-stage,
+    .frame-preview-stage {
+        min-height: 220px;
+    }
+}
+
+@media (max-width: 420px) {
+    .tamano-choice-chips .choice-chip {
+        flex: 1 1 calc(50% - 8px);
+        min-width: 0;
+    }
+}

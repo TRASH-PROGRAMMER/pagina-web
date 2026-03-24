@@ -13,14 +13,41 @@ const prefijoPaisSelect = document.getElementById("prefijoPais");
 const telefonoHelp = document.getElementById("telefonoHelp");
 const inputImagenes = document.getElementById("inputImagenes");
 const tamanoSelect = document.getElementById("tamaño");
+const tamanoChipsContainer = document.getElementById("tamanoChips");
+const tamanoBaseIndicator = document.getElementById("tamanoBaseIndicator");
 const toggleAsignacionFotos = document.getElementById("toggleAsignacionFotos");
 const asignacionTamanosSection = document.getElementById("asignacionTamanos");
 const previewContainer = document.getElementById("previewContainer");
 const asignacionFotosList = document.getElementById("asignacionFotosList");
-const tamanoGlobal = document.getElementById("tamanoGlobal");
-const aplicarTamanoTodasBtn = document.getElementById("aplicarTamanoTodas");
+const pedidoSpinnerOverlay = document.getElementById("pedidoSpinnerOverlay");
+const btnFinalizarPedido = document.getElementById("btnFinalizarPedido");
+const cropImageModal = document.getElementById("cropImageModal");
+const cropImageTarget = document.getElementById("cropImageTarget");
+const cancelCropBtn = document.getElementById("cancelCropBtn");
+const applyCropBtn = document.getElementById("applyCropBtn");
+const frameImageModal = document.getElementById("frameImageModal");
+const frameImagePreview = document.getElementById("frameImagePreview");
+const frameOptions = document.getElementById("frameOptions");
+const cancelFrameBtn = document.getElementById("cancelFrameBtn");
+const applyFrameAllBtn = document.getElementById("applyFrameAllBtn");
+const clearFrameAllBtn = document.getElementById("clearFrameAllBtn");
+const applyFrameBtn = document.getElementById("applyFrameBtn");
 
 const asignacionesPorFoto = new Map();
+const edicionesPorFoto = new Map();
+const previewUrlPorFoto = new Map();
+const frameCatalogo = [
+    { value: "none", label: "🚫 Ninguno" },
+    { value: "polaroid", label: "📸 Polaroid" },
+    { value: "gold", label: "🏆 Dorado" },
+    { value: "dark", label: "⬛ Oscuro" },
+    { value: "museum", label: "🖼️ Museo" },
+];
+
+let cropperInstance = null;
+let fotoKeyEnEdicion = "";
+let frameSeleccionadoTemporal = "none";
+let bloquearMensajesValidacion = false;
 
 btnEnviar.disabled = true;
 
@@ -99,26 +126,313 @@ function claveFoto(file) {
     return `${file.name}__${file.size}__${file.lastModified}`;
 }
 
+function obtenerArchivoPorKey(key) {
+    return Array.from(inputImagenes.files || []).find(function(file) {
+        return claveFoto(file) === key;
+    }) || null;
+}
+
+function limpiarPreviewUrl(key) {
+    const previewUrl = previewUrlPorFoto.get(key);
+    if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        previewUrlPorFoto.delete(key);
+    }
+}
+
+function limpiarEdicionFoto(key) {
+    const edit = edicionesPorFoto.get(key);
+    if (edit && edit.previewUrl) {
+        URL.revokeObjectURL(edit.previewUrl);
+    }
+    edicionesPorFoto.delete(key);
+}
+
+function depurarRecursosDeFotos() {
+    const vigentes = new Set(Array.from(inputImagenes.files || []).map(claveFoto));
+
+    Array.from(previewUrlPorFoto.keys()).forEach(function(key) {
+        if (!vigentes.has(key)) {
+            limpiarPreviewUrl(key);
+        }
+    });
+
+    Array.from(edicionesPorFoto.keys()).forEach(function(key) {
+        if (!vigentes.has(key)) {
+            limpiarEdicionFoto(key);
+        }
+    });
+}
+
+function obtenerPreviewFoto(file) {
+    const key = claveFoto(file);
+    const edit = edicionesPorFoto.get(key);
+    if (edit && edit.previewUrl) {
+        return edit.previewUrl;
+    }
+    if (!previewUrlPorFoto.has(key)) {
+        previewUrlPorFoto.set(key, URL.createObjectURL(file));
+    }
+    return previewUrlPorFoto.get(key);
+}
+
+function abrirModal(modal) {
+    if (!modal) return;
+    modal.classList.add("active");
+    modal.setAttribute("aria-hidden", "false");
+}
+
+function cerrarModal(modal) {
+    if (!modal) return;
+    modal.classList.remove("active");
+    modal.setAttribute("aria-hidden", "true");
+}
+
+function destruirCropper() {
+    if (cropperInstance) {
+        cropperInstance.destroy();
+        cropperInstance = null;
+    }
+}
+
+function actualizarClaseMarcoPreview(frameValue) {
+    if (!frameImagePreview) return;
+    frameImagePreview.dataset.frame = frameValue;
+}
+
+function renderOpcionesMarco(frameActual) {
+    if (!frameOptions) return;
+    frameOptions.innerHTML = "";
+
+    frameCatalogo.forEach(function(item) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "frame-option";
+        btn.textContent = item.label;
+        btn.setAttribute("role", "radio");
+
+        const isActive = item.value === frameActual;
+        btn.classList.toggle("is-active", isActive);
+        btn.setAttribute("aria-checked", isActive ? "true" : "false");
+        btn.setAttribute("aria-label", `Marco ${item.label}`);
+
+        btn.addEventListener("click", function() {
+            frameSeleccionadoTemporal = item.value;
+            actualizarClaseMarcoPreview(item.value);
+            renderOpcionesMarco(frameSeleccionadoTemporal);
+        });
+
+        frameOptions.appendChild(btn);
+    });
+}
+
+function abrirModalRecorte(key) {
+    const file = obtenerArchivoPorKey(key);
+    if (!file || !cropImageTarget || typeof Cropper === "undefined") {
+        errorMessage.textContent = "No se pudo abrir el recorte. Recarga la pagina e intenta de nuevo.";
+        errorMessage.style.color = "red";
+        return;
+    }
+
+    fotoKeyEnEdicion = key;
+    const src = obtenerPreviewFoto(file);
+
+    destruirCropper();
+    cropImageTarget.onload = function() {
+        destruirCropper();
+        cropperInstance = new Cropper(cropImageTarget, {
+            viewMode: 1,
+            dragMode: "move",
+            autoCropArea: 0.86,
+            responsive: true,
+            background: false,
+            guides: true,
+            movable: true,
+            zoomable: true,
+            scalable: false,
+            rotatable: false,
+        });
+    };
+    cropImageTarget.src = src;
+    abrirModal(cropImageModal);
+}
+
+function abrirModalMarco(key) {
+    const file = obtenerArchivoPorKey(key);
+    if (!file || !frameImagePreview) return;
+
+    fotoKeyEnEdicion = key;
+    const edit = edicionesPorFoto.get(key);
+    frameSeleccionadoTemporal = edit && edit.frame ? edit.frame : "none";
+    frameImagePreview.src = obtenerPreviewFoto(file);
+    actualizarClaseMarcoPreview(frameSeleccionadoTemporal);
+    renderOpcionesMarco(frameSeleccionadoTemporal);
+    abrirModal(frameImageModal);
+}
+
+async function cargarImagenDesdeUrl(url) {
+    return new Promise(function(resolve, reject) {
+        const img = new Image();
+        img.onload = function() { resolve(img); };
+        img.onerror = reject;
+        img.src = url;
+    });
+}
+
+async function blobDesdeCanvas(canvas, tipo = "image/jpeg", calidad = 0.92) {
+    return new Promise(function(resolve, reject) {
+        canvas.toBlob(function(blob) {
+            if (!blob) {
+                reject(new Error("No se pudo generar imagen editada"));
+                return;
+            }
+            resolve(blob);
+        }, tipo, calidad);
+    });
+}
+
+async function aplicarMarcoABlob(baseBlob, frameValue, tipoMime) {
+    if (!frameValue || frameValue === "none") return baseBlob;
+
+    const srcUrl = URL.createObjectURL(baseBlob);
+    try {
+        const img = await cargarImagenDesdeUrl(srcUrl);
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        let pad = 0;
+        let bottomExtra = 0;
+
+        if (frameValue === "polaroid") {
+            pad = Math.max(14, Math.round(img.width * 0.045));
+            bottomExtra = Math.max(26, Math.round(img.height * 0.12));
+            canvas.width = img.width + pad * 2;
+            canvas.height = img.height + pad * 2 + bottomExtra;
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, pad, pad, img.width, img.height);
+        } else {
+            pad = Math.max(12, Math.round(Math.min(img.width, img.height) * 0.04));
+            canvas.width = img.width + pad * 2;
+            canvas.height = img.height + pad * 2;
+
+            if (frameValue === "gold") ctx.fillStyle = "#d4ac2f";
+            else if (frameValue === "dark") ctx.fillStyle = "#2f3340";
+            else if (frameValue === "museum") ctx.fillStyle = "#e8dfcf";
+            else ctx.fillStyle = "#ffffff";
+
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (frameValue === "museum") {
+                ctx.strokeStyle = "#a28763";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(pad - 1, pad - 1, img.width + 2, img.height + 2);
+            }
+
+            ctx.drawImage(img, pad, pad, img.width, img.height);
+        }
+
+        return await blobDesdeCanvas(canvas, tipoMime);
+    } finally {
+        URL.revokeObjectURL(srcUrl);
+    }
+}
+
+function aplicarMarcoATodasLasFotos(frameValue) {
+    Array.from(inputImagenes.files || []).forEach(function(file) {
+        const key = claveFoto(file);
+        const prevEdit = edicionesPorFoto.get(key);
+
+        if (prevEdit) {
+            edicionesPorFoto.set(key, {
+                blob: prevEdit.blob || null,
+                previewUrl: prevEdit.previewUrl || null,
+                frame: frameValue,
+            });
+            return;
+        }
+
+        edicionesPorFoto.set(key, {
+            blob: null,
+            previewUrl: null,
+            frame: frameValue,
+        });
+    });
+}
+
 function obtenerOpcionesTamano() {
     return Array.from(tamanoSelect.options).map(function(opt) {
         return { value: opt.value, text: opt.textContent };
     });
 }
 
-function actualizarSelectGlobal() {
-    if (!tamanoGlobal) return;
-    const valorActual = tamanoGlobal.value;
-    const opciones = obtenerOpcionesTamano();
+function obtenerTamanoBaseSeleccionado() {
+    if (!tamanoSelect || !tamanoSelect.selectedOptions || tamanoSelect.selectedOptions.length === 0) {
+        return "";
+    }
+    return tamanoSelect.selectedOptions[0].value;
+}
 
-    tamanoGlobal.innerHTML = '<option value="">Selecciona un tamaño para todas</option>';
-    opciones.forEach(function(op) {
-        const option = document.createElement("option");
-        option.value = op.value;
-        option.textContent = op.text;
-        if (op.value === valorActual) {
-            option.selected = true;
+function sincronizarTamanoBaseEnAsignacion(sobrescribirTodo = false) {
+    if (!usaAsignacionPorFoto()) return;
+
+    const tamanoBase = obtenerTamanoBaseSeleccionado();
+    if (!tamanoBase) return;
+
+    Array.from(inputImagenes.files || []).forEach(function(file) {
+        const key = claveFoto(file);
+        if (sobrescribirTodo || !asignacionesPorFoto.has(key)) {
+            asignacionesPorFoto.set(key, tamanoBase);
         }
-        tamanoGlobal.appendChild(option);
+    });
+}
+
+function setTamanoSeleccionUnica(valor) {
+    Array.from(tamanoSelect.options).forEach(function(opt) {
+        opt.selected = !!valor && opt.value === valor;
+    });
+}
+
+function actualizarIndicadorTamanoBase() {
+    if (!tamanoBaseIndicator || !tamanoSelect) return;
+
+    const seleccionado = tamanoSelect.selectedOptions && tamanoSelect.selectedOptions[0]
+        ? tamanoSelect.selectedOptions[0].textContent
+        : "ninguno";
+
+    tamanoBaseIndicator.textContent = `Tamano base activo: ${seleccionado}`;
+}
+
+function renderTamanoChips() {
+    if (!tamanoChipsContainer || !tamanoSelect) return;
+
+    tamanoChipsContainer.innerHTML = "";
+
+    Array.from(tamanoSelect.options).forEach(function(opt) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "choice-chip";
+        chip.dataset.value = opt.value;
+        chip.textContent = opt.textContent;
+
+        const activo = !!opt.selected;
+        chip.classList.toggle("is-active", activo);
+        chip.setAttribute("aria-pressed", activo ? "true" : "false");
+
+        chip.addEventListener("click", function() {
+            if (opt.selected) {
+                setTamanoSeleccionUnica("");
+            } else {
+                setTamanoSeleccionUnica(opt.value);
+            }
+
+            if (usaAsignacionPorFoto() && opt.selected) {
+                sincronizarTamanoBaseEnAsignacion(true);
+            }
+
+            tamanoSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+
+        tamanoChipsContainer.appendChild(chip);
     });
 }
 
@@ -155,6 +469,7 @@ function renderAsignacionesFotos() {
 
     const files = Array.from(inputImagenes.files || []);
     const clavesActuales = new Set(files.map(claveFoto));
+    depurarRecursosDeFotos();
 
     Array.from(asignacionesPorFoto.keys()).forEach(function(key) {
         if (!clavesActuales.has(key)) {
@@ -166,6 +481,10 @@ function renderAsignacionesFotos() {
     asignacionFotosList.innerHTML = "";
 
     if (files.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "asignacion-empty";
+        empty.textContent = "Carga fotos para mostrar los selectores individuales por imagen.";
+        asignacionFotosList.appendChild(empty);
         emitirAsignacionesActualizadas();
         return;
     }
@@ -174,6 +493,16 @@ function renderAsignacionesFotos() {
         const key = claveFoto(file);
         const card = document.createElement("div");
         card.className = "asignacion-item";
+
+        const previewWrap = document.createElement("div");
+        previewWrap.className = "foto-preview-wrap";
+
+        const preview = document.createElement("img");
+        preview.className = "foto-preview";
+        preview.src = obtenerPreviewFoto(file);
+        preview.alt = `Vista previa de Foto ${idx + 1}`;
+        preview.loading = "lazy";
+        previewWrap.appendChild(preview);
 
         const titulo = document.createElement("div");
         titulo.className = "foto-titulo";
@@ -214,9 +543,35 @@ function renderAsignacionesFotos() {
             validarFormulario();
         });
 
+        const actions = document.createElement("div");
+        actions.className = "foto-actions";
+
+        const recortarBtn = document.createElement("button");
+        recortarBtn.type = "button";
+        recortarBtn.className = "foto-action-btn";
+        recortarBtn.textContent = "✂ Recortar imagen";
+        recortarBtn.setAttribute("aria-label", `Recortar Foto ${idx + 1}`);
+        recortarBtn.addEventListener("click", function() {
+            abrirModalRecorte(key);
+        });
+
+        const marcoBtn = document.createElement("button");
+        marcoBtn.type = "button";
+        marcoBtn.className = "foto-action-btn";
+        marcoBtn.textContent = "🖼 Aplicar marco";
+        marcoBtn.setAttribute("aria-label", `Aplicar marco a Foto ${idx + 1}`);
+        marcoBtn.addEventListener("click", function() {
+            abrirModalMarco(key);
+        });
+
+        actions.appendChild(recortarBtn);
+        actions.appendChild(marcoBtn);
+
+        card.appendChild(previewWrap);
         card.appendChild(titulo);
         card.appendChild(nombre);
         card.appendChild(select);
+        card.appendChild(actions);
         asignacionFotosList.appendChild(card);
     });
 
@@ -249,6 +604,26 @@ function renderMiniaturasSubidas(thumbnails) {
         card.appendChild(mensaje);
         previewContainer.appendChild(card);
     });
+}
+
+function mostrarSpinnerPedido() {
+    if (pedidoSpinnerOverlay) {
+        pedidoSpinnerOverlay.classList.add("active");
+        pedidoSpinnerOverlay.setAttribute("aria-hidden", "false");
+    }
+    if (btnFinalizarPedido) {
+        btnFinalizarPedido.disabled = true;
+    }
+}
+
+function ocultarSpinnerPedido() {
+    if (pedidoSpinnerOverlay) {
+        pedidoSpinnerOverlay.classList.remove("active");
+        pedidoSpinnerOverlay.setAttribute("aria-hidden", "true");
+    }
+    if (btnFinalizarPedido) {
+        btnFinalizarPedido.disabled = false;
+    }
 }
 
 // 🔹 Validación completa (datos + fotos + tamaño + papel)
@@ -291,6 +666,10 @@ function validarFormulario() {
 
     btnEnviar.disabled = !esValido;
 
+    if (bloquearMensajesValidacion) {
+        return esValido;
+    }
+
     // Mensajes de ayuda
     if (!fotosValidas && inputImagenes.files.length === 0) {
         errorMessage.textContent = "Selecciona al menos una foto para imprimir.";
@@ -301,7 +680,7 @@ function validarFormulario() {
     } else if (!papelValido) {
         errorMessage.textContent = "Elige un tipo de papel.";
     } else if (!esValido) {
-        errorMessage.textContent = "Completa todos los campos correctamente.";
+        errorMessage.textContent = "Completa todos los campos correctamente del formulario de datos personales.";
     } else {
         errorMessage.textContent = "";
     }
@@ -322,7 +701,9 @@ if (prefijoPaisSelect) {
 }
 inputImagenes.addEventListener("change", validarFormulario);
 tamanoSelect.addEventListener("change", function() {
-    actualizarSelectGlobal();
+    sincronizarTamanoBaseEnAsignacion(false);
+    actualizarIndicadorTamanoBase();
+    renderTamanoChips();
     renderAsignacionesFotos();
     validarFormulario();
 });
@@ -331,29 +712,16 @@ document.querySelectorAll('input[name="papel"]').forEach(radio => {
 });
 
 document.addEventListener("imagenesActualizadas", function() {
+    sincronizarTamanoBaseEnAsignacion(false);
     renderAsignacionesFotos();
     validarFormulario();
 });
 
-if (aplicarTamanoTodasBtn) {
-    aplicarTamanoTodasBtn.addEventListener("click", function() {
-        if (!tamanoGlobal || !tamanoGlobal.value) {
-            errorMessage.textContent = "Selecciona un tamaño para aplicar a todas las fotos.";
-            errorMessage.style.color = "red";
-            return;
-        }
-
-        Array.from(inputImagenes.files || []).forEach(function(file) {
-            asignacionesPorFoto.set(claveFoto(file), tamanoGlobal.value);
-        });
-        renderAsignacionesFotos();
-        validarFormulario();
-    });
-}
-
 if (toggleAsignacionFotos) {
     toggleAsignacionFotos.addEventListener("change", function() {
         actualizarVisibilidadAsignacion();
+        sincronizarTamanoBaseEnAsignacion(false);
+        renderAsignacionesFotos();
         validarFormulario();
     });
 }
@@ -362,8 +730,159 @@ window.obtenerResumenTamanosAsignados = obtenerResumenTamanosAsignados;
 window.usaAsignacionPorFoto = usaAsignacionPorFoto;
 autoDetectarPaisInicial();
 actualizarVisibilidadAsignacion();
-actualizarSelectGlobal();
+actualizarIndicadorTamanoBase();
+renderTamanoChips();
 renderAsignacionesFotos();
+
+if (cancelCropBtn) {
+    cancelCropBtn.addEventListener("click", function() {
+        destruirCropper();
+        cerrarModal(cropImageModal);
+    });
+}
+
+if (applyCropBtn) {
+    applyCropBtn.addEventListener("click", async function() {
+        if (!cropperInstance || !fotoKeyEnEdicion) return;
+
+        const fileBase = obtenerArchivoPorKey(fotoKeyEnEdicion);
+        if (!fileBase) return;
+
+        try {
+            const canvas = cropperInstance.getCroppedCanvas({
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: "high",
+            });
+            const blob = await blobDesdeCanvas(canvas, fileBase.type || "image/jpeg");
+
+            const prevEdit = edicionesPorFoto.get(fotoKeyEnEdicion);
+            if (prevEdit && prevEdit.previewUrl) {
+                URL.revokeObjectURL(prevEdit.previewUrl);
+            }
+
+            const previewUrl = URL.createObjectURL(blob);
+            edicionesPorFoto.set(fotoKeyEnEdicion, {
+                blob,
+                previewUrl,
+                frame: prevEdit && prevEdit.frame ? prevEdit.frame : "none",
+            });
+
+            renderAsignacionesFotos();
+            destruirCropper();
+            cerrarModal(cropImageModal);
+            errorMessage.textContent = "Recorte aplicado correctamente.";
+            errorMessage.style.color = "#00a76f";
+        } catch (error) {
+            errorMessage.textContent = "No se pudo aplicar el recorte.";
+            errorMessage.style.color = "red";
+        }
+    });
+}
+
+if (cancelFrameBtn) {
+    cancelFrameBtn.addEventListener("click", function() {
+        cerrarModal(frameImageModal);
+    });
+}
+
+if (applyFrameBtn) {
+    applyFrameBtn.addEventListener("click", function() {
+        if (!fotoKeyEnEdicion) return;
+
+        const prevEdit = edicionesPorFoto.get(fotoKeyEnEdicion);
+        if (prevEdit) {
+            edicionesPorFoto.set(fotoKeyEnEdicion, {
+                blob: prevEdit.blob || null,
+                previewUrl: prevEdit.previewUrl || null,
+                frame: frameSeleccionadoTemporal,
+            });
+        } else {
+            edicionesPorFoto.set(fotoKeyEnEdicion, {
+                blob: null,
+                previewUrl: null,
+                frame: frameSeleccionadoTemporal,
+            });
+        }
+
+        renderAsignacionesFotos();
+        cerrarModal(frameImageModal);
+        errorMessage.textContent = "Marco guardado correctamente.";
+        errorMessage.style.color = "#00a76f";
+    });
+}
+
+if (applyFrameAllBtn) {
+    applyFrameAllBtn.addEventListener("click", function() {
+        const totalFotos = inputImagenes.files ? inputImagenes.files.length : 0;
+        if (totalFotos === 0) return;
+
+        aplicarMarcoATodasLasFotos(frameSeleccionadoTemporal);
+        renderAsignacionesFotos();
+        cerrarModal(frameImageModal);
+
+        errorMessage.textContent = `Marco aplicado a ${totalFotos} foto(s).`;
+        errorMessage.style.color = "#00a76f";
+    });
+}
+
+if (clearFrameAllBtn) {
+    clearFrameAllBtn.addEventListener("click", function() {
+        const totalFotos = inputImagenes.files ? inputImagenes.files.length : 0;
+        if (totalFotos === 0) return;
+
+        aplicarMarcoATodasLasFotos("none");
+        frameSeleccionadoTemporal = "none";
+        renderAsignacionesFotos();
+        cerrarModal(frameImageModal);
+
+        errorMessage.textContent = `Marcos quitados de ${totalFotos} foto(s).`;
+        errorMessage.style.color = "#00a76f";
+    });
+}
+
+document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape") {
+        destruirCropper();
+        cerrarModal(cropImageModal);
+        cerrarModal(frameImageModal);
+    }
+});
+
+if (cropImageModal) {
+    cropImageModal.addEventListener("click", function(e) {
+        if (e.target === cropImageModal) {
+            destruirCropper();
+            cerrarModal(cropImageModal);
+        }
+    });
+}
+
+if (frameImageModal) {
+    frameImageModal.addEventListener("click", function(e) {
+        if (e.target === frameImageModal) {
+            cerrarModal(frameImageModal);
+        }
+    });
+}
+
+async function construirArchivoFinal(file) {
+    const key = claveFoto(file);
+    const edit = edicionesPorFoto.get(key);
+
+    if (!edit) {
+        return file;
+    }
+
+    let blobBase = edit.blob || file;
+    if (edit.frame && edit.frame !== "none") {
+        blobBase = await aplicarMarcoABlob(blobBase, edit.frame, file.type || "image/jpeg");
+    }
+
+    return new File([blobBase], file.name, {
+        type: file.type || blobBase.type || "image/jpeg",
+        lastModified: Date.now(),
+    });
+}
 
 // 🔹 Submit — valida y abre resumen; si ya fue confirmado, envía el pedido
 form.addEventListener("submit", async function(e) {
@@ -380,6 +899,8 @@ form.addEventListener("submit", async function(e) {
     }
     delete form.dataset.confirmed;
 
+    mostrarSpinnerPedido();
+    bloquearMensajesValidacion = true;
     btnEnviar.disabled = true;
     errorMessage.textContent = "Subiendo fotos…⏳";
     errorMessage.style.color = "#00ff4c";
@@ -421,9 +942,10 @@ form.addEventListener("submit", async function(e) {
     const papel = document.querySelector('input[name="papel"]:checked').value;
     formData.append('papel', papel);
 
-    // Fotos
+    // Fotos (con recorte/marco aplicado si existe edición)
     for (const foto of inputImagenes.files) {
-        formData.append('fotos', foto);
+        const fotoFinal = await construirArchivoFinal(foto);
+        formData.append('fotos', fotoFinal);
     }
 
     try {
@@ -431,15 +953,19 @@ form.addEventListener("submit", async function(e) {
         clienteChannel.postMessage({ tipo: "nuevo_cliente", cliente: clienteGuardado });
         renderMiniaturasSubidas(clienteGuardado.thumbnails || []);
 
-        errorMessage.textContent = " ¡Pedido enviado con éxito! 🎉";
-        errorMessage.style.color = "#00ff4c";
         form.reset();
-        // Limpiar selección de tamaño y papel
-        tamanoSelect.selectedIndex = -1;
+        // Limpiar selección y actualizar UI sin disparar mensajes de validación
         asignacionesPorFoto.clear();
-        document.querySelectorAll('input[name="papel"]').forEach(r => r.checked = false);
-        if (tamanoGlobal) tamanoGlobal.value = "";
+        Array.from(previewUrlPorFoto.keys()).forEach(limpiarPreviewUrl);
+        Array.from(edicionesPorFoto.keys()).forEach(limpiarEdicionFoto);
+        Array.from(tamanoSelect.options).forEach(function(opt) {
+            opt.selected = false;
+        });
+        actualizarIndicadorTamanoBase();
+        renderTamanoChips();
+        actualizarVisibilidadAsignacion();
         renderAsignacionesFotos();
+
         // Cerrar/resetear modal factura
         const facturaOverlay = document.getElementById("facturaOverlay");
         if (facturaOverlay) facturaOverlay.classList.remove("active");
@@ -447,10 +973,17 @@ form.addEventListener("submit", async function(e) {
         if (btnResumen) btnResumen.disabled = true;
         btnEnviar.disabled = true;
 
+        errorMessage.textContent = "Pedido enviado con exito!";
+        errorMessage.style.color = "#00ff4c";
+        bloquearMensajesValidacion = false;
+        ocultarSpinnerPedido();
+
     } catch (error) {
+        bloquearMensajesValidacion = false;
         errorMessage.textContent = error.message;
         errorMessage.style.color = "red";
         btnEnviar.disabled = false;
+        ocultarSpinnerPedido();
         console.error("Error al guardar:", error);
     }
 });

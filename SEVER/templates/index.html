@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Image Manager — sube, organiza e imprime tus fotos en distintos tamaños y papeles fotográficos.">
 <title>Image Manager — Carga e impresión de fotos</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style/style.css') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='style/reponsive_index.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/style.css', v='20260323a') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/reponsive_index.css', v='20260323a') }}" />
+<link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" />
 </head>
 <body>
 <!-- Skip-link para navegación por teclado (eficiencia) -->
@@ -62,9 +63,9 @@
  <button class="dark-mode-btn" aria-label="Alternar modo oscuro">🌓</button>
 
     <fieldset class="fieldset-tamanos">
-        <legend><h2>Elige los tamaños:</h2></legend>
+        <legend><h2>Elige  tamanaños a todas las fotos:</h2></legend>
         <label for="tamaño" class="sr-only">Tamaños de impresión</label>
-        <select id="tamaño" name="tamano[]" multiple aria-describedby="tamanoHelp" required>
+        <select id="tamaño" name="tamano[]" class="tamano-select-native" multiple aria-describedby="tamanoHelp" required>
             <option value="instax">Instax (5x8cm)</option>
             <option value="polaroid">Polaroid (8x8cm)</option>
             <option value="10x10">10x10cm</option>
@@ -76,7 +77,9 @@
             <option value="20x25">20x25cm (8R)</option>
             <option value="20x30">20x30cm</option>
         </select>
-        <p id="tamanoHelp" class="campo-ayuda">Mantén Ctrl (o Cmd) presionado para seleccionar varios tamaños.</p>
+        <div id="tamanoChips" class="tamano-choice-chips" role="group" aria-label="Selecciona un tamaño base"></div>
+        <p id="tamanoBaseIndicator" class="tamano-base-indicator" role="status" aria-live="polite">Tamaño base activo: ninguno</p>
+        <p id="tamanoHelp" class="campo-ayuda">Elige un solo tamaño base. Toca el mismo chip otra vez para quitar la selección.</p>
 
         <div class="toggle-asignacion-wrap">
             <label class="toggle-asignacion" for="toggleAsignacionFotos">
@@ -87,15 +90,7 @@
 
         <section class="asignacion-tamanos" id="asignacionTamanos" aria-labelledby="asignacionTamanosTitle" hidden>
             <h3 id="asignacionTamanosTitle">Asigna un tamaño a cada foto</h3>
-            <p class="campo-ayuda">Puedes asignar tamaños diferentes por foto o usar el atajo para aplicar uno a todas.</p>
-
-            <div class="asignacion-toolbar">
-                <label for="tamanoGlobal" class="sr-only">Tamaño para aplicar a todas las fotos</label>
-                <select id="tamanoGlobal" aria-label="Seleccionar tamaño para aplicar a todas las fotos">
-                    <option value="">Selecciona un tamaño para todas</option>
-                </select>
-                <button type="button" id="aplicarTamanoTodas" class="aplicar-todas-btn">Aplicar a todas</button>
-            </div>
+            <p class="campo-ayuda">Selecciona manualmente el tamaño de cada foto para control total por imagen.</p>
 
             <div id="asignacionFotosList" class="asignacion-fotos-list" aria-live="polite"></div>
         </section>
@@ -186,6 +181,43 @@
   </div>
 </div>
 
+<div class="pedido-spinner-overlay" id="pedidoSpinnerOverlay" aria-hidden="true">
+    <div class="pedido-spinner-wrap" role="status" aria-live="assertive" aria-label="Enviando pedido">
+        <div class="pedido-spinner"></div>
+        <p class="pedido-spinner-text">Enviando pedido...</p>
+    </div>
+</div>
+
+<div class="image-action-modal" id="cropImageModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="cropImageTitle">
+    <div class="image-action-modal-content">
+        <h3 id="cropImageTitle" class="image-action-title">Recortar imagen</h3>
+        <p class="image-action-help">Arrastra para mover el encuadre y usa la rueda para hacer zoom.</p>
+        <div class="cropper-stage">
+            <img id="cropImageTarget" alt="Vista para recorte" />
+        </div>
+        <div class="image-action-buttons">
+            <button type="button" class="image-action-btn cancel" id="cancelCropBtn" aria-label="Cancelar recorte">✕ Cancelar</button>
+            <button type="button" class="image-action-btn apply" id="applyCropBtn" aria-label="Aplicar recorte">✓ Aplicar recorte</button>
+        </div>
+    </div>
+</div>
+
+<div class="image-action-modal" id="frameImageModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="frameImageTitle">
+    <div class="image-action-modal-content">
+        <h3 id="frameImageTitle" class="image-action-title">Aplicar marco</h3>
+        <div class="frame-preview-stage">
+            <img id="frameImagePreview" alt="Vista previa con marco" />
+        </div>
+        <div class="frame-options" id="frameOptions" role="radiogroup" aria-label="Estilos de marco"></div>
+        <div class="image-action-buttons">
+            <button type="button" class="image-action-btn cancel" id="cancelFrameBtn" aria-label="Cancelar marco">✕ Cancelar</button>
+            <button type="button" class="image-action-btn secondary" id="applyFrameAllBtn" aria-label="Aplicar marco seleccionado a todas las fotos">↻ Aplicar a todas</button>
+            <button type="button" class="image-action-btn warning" id="clearFrameAllBtn" aria-label="Quitar marcos de todas las fotos">🧹 Quitar marcos</button>
+            <button type="button" class="image-action-btn apply" id="applyFrameBtn" aria-label="Guardar marco">✓ Guardar marco</button>
+        </div>
+    </div>
+</div>
+
 <footer role="contentinfo">
     <p>&copy; 2026 Todos los derechos reservados</p>
     <a class="direccion" href="https://www.google.com/maps/place/Manta+Color/data=!4m2!3m1!1s0x0:0x91e1a40e9dd4f55b?sa=X&ved=1t:2428&ictx=111"
@@ -194,6 +226,7 @@
 </footer>
 <script type = "module" src="{{ url_for('static', filename='script/main.js') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/db.js') }}"></script>
+<script src="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.js"></script>
 <script type="module" src="{{ url_for('static', filename='script/formulario_clientes.js') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/precios_fotos.js') }}?v=2"></script>
 <script src="{{ url_for('static', filename='script/dark-mode-index.js') }}"></script>
