@@ -16,9 +16,7 @@ const tamanoSelect = document.getElementById("tamaño");
 const tamanoChipsContainer = document.getElementById("tamanoChips");
 const tamanoBaseIndicator = document.getElementById("tamanoBaseIndicator");
 const toggleAsignacionFotos = document.getElementById("toggleAsignacionFotos");
-const asignacionTamanosSection = document.getElementById("asignacionTamanos");
 const previewContainer = document.getElementById("previewContainer");
-const asignacionFotosList = document.getElementById("asignacionFotosList");
 const pedidoSpinnerOverlay = document.getElementById("pedidoSpinnerOverlay");
 const btnFinalizarPedido = document.getElementById("btnFinalizarPedido");
 const cropImageModal = document.getElementById("cropImageModal");
@@ -32,6 +30,16 @@ const cancelFrameBtn = document.getElementById("cancelFrameBtn");
 const applyFrameAllBtn = document.getElementById("applyFrameAllBtn");
 const clearFrameAllBtn = document.getElementById("clearFrameAllBtn");
 const applyFrameBtn = document.getElementById("applyFrameBtn");
+const facturaOverlay = document.getElementById("facturaOverlay");
+const facturaInfo = document.getElementById("facturaInfo");
+const facturaBody = document.getElementById("facturaBody");
+const pedidoExitoOverlay = document.getElementById("pedidoExitoOverlay");
+const pedidoExitoNumero = document.getElementById("pedidoExitoNumero");
+const pedidoExitoInfo = document.getElementById("pedidoExitoInfo");
+const pedidoExitoBody = document.getElementById("pedidoExitoBody");
+const pedidoExitoClose = document.getElementById("pedidoExitoClose");
+const pedidoExitoEstado = document.getElementById("pedidoExitoEstado");
+const pedidoExitoMasFotos = document.getElementById("pedidoExitoMasFotos");
 
 const asignacionesPorFoto = new Map();
 const edicionesPorFoto = new Map();
@@ -48,6 +56,8 @@ let cropperInstance = null;
 let fotoKeyEnEdicion = "";
 let frameSeleccionadoTemporal = "none";
 let bloquearMensajesValidacion = false;
+let restaurarClientePendiente = null;
+let pedidoSeguimientoPendiente = { id: "", correo: "" };
 
 btnEnviar.disabled = true;
 
@@ -56,9 +66,8 @@ function usaAsignacionPorFoto() {
 }
 
 function actualizarVisibilidadAsignacion() {
-    if (!asignacionTamanosSection || !toggleAsignacionFotos) return;
+    if (!toggleAsignacionFotos) return;
     const activa = usaAsignacionPorFoto();
-    asignacionTamanosSection.hidden = !activa;
     toggleAsignacionFotos.setAttribute("aria-expanded", activa ? "true" : "false");
 }
 
@@ -465,10 +474,14 @@ function emitirAsignacionesActualizadas() {
 }
 
 function renderAsignacionesFotos() {
-    if (!asignacionFotosList) return;
+    if (!previewContainer) return;
 
     const files = Array.from(inputImagenes.files || []);
     const clavesActuales = new Set(files.map(claveFoto));
+    const filesPorClave = new Map(files.map(function(file, index) {
+        return [claveFoto(file), { file, index }];
+    }));
+
     depurarRecursosDeFotos();
 
     Array.from(asignacionesPorFoto.keys()).forEach(function(key) {
@@ -477,44 +490,45 @@ function renderAsignacionesFotos() {
         }
     });
 
+    Array.from(previewContainer.querySelectorAll(".card-advanced-controls")).forEach(function(node) {
+        node.remove();
+    });
+
     const opciones = obtenerOpcionesTamano();
-    asignacionFotosList.innerHTML = "";
 
     if (files.length === 0) {
-        const empty = document.createElement("div");
-        empty.className = "asignacion-empty";
-        empty.textContent = "Carga fotos para mostrar los selectores individuales por imagen.";
-        asignacionFotosList.appendChild(empty);
         emitirAsignacionesActualizadas();
         return;
     }
 
-    files.forEach(function(file, idx) {
-        const key = claveFoto(file);
-        const card = document.createElement("div");
-        card.className = "asignacion-item";
+    Array.from(previewContainer.querySelectorAll(".card[data-foto-key]")).forEach(function(card) {
+        const key = card.dataset.fotoKey || "";
+        const data = filesPorClave.get(key);
+        if (!data) return;
 
-        const previewWrap = document.createElement("div");
-        previewWrap.className = "foto-preview-wrap";
+        const preview = card.querySelector("img");
+        if (preview) {
+            preview.src = obtenerPreviewFoto(data.file);
+        }
 
-        const preview = document.createElement("img");
-        preview.className = "foto-preview";
-        preview.src = obtenerPreviewFoto(file);
-        preview.alt = `Vista previa de Foto ${idx + 1}`;
-        preview.loading = "lazy";
-        previewWrap.appendChild(preview);
+        if (!usaAsignacionPorFoto()) {
+            return;
+        }
+
+        const advanced = document.createElement("div");
+        advanced.className = "card-advanced-controls";
 
         const titulo = document.createElement("div");
-        titulo.className = "foto-titulo";
-        titulo.textContent = `Foto ${idx + 1}`;
+        titulo.className = "card-advanced-title";
+        titulo.textContent = `Edicion Foto ${data.index + 1}`;
 
         const nombre = document.createElement("div");
-        nombre.className = "foto-nombre";
-        nombre.textContent = file.name;
+        nombre.className = "card-advanced-name";
+        nombre.textContent = data.file.name;
 
         const select = document.createElement("select");
-        select.className = "foto-tamano-select";
-        select.setAttribute("aria-label", `Seleccionar tamaño para Foto ${idx + 1}`);
+        select.className = "foto-tamano-select card-advanced-size";
+        select.setAttribute("aria-label", `Seleccionar tamaño para Foto ${data.index + 1}`);
 
         const placeholder = document.createElement("option");
         placeholder.value = "";
@@ -544,13 +558,13 @@ function renderAsignacionesFotos() {
         });
 
         const actions = document.createElement("div");
-        actions.className = "foto-actions";
+        actions.className = "foto-actions card-advanced-actions";
 
         const recortarBtn = document.createElement("button");
         recortarBtn.type = "button";
         recortarBtn.className = "foto-action-btn";
-        recortarBtn.textContent = "✂ Recortar imagen";
-        recortarBtn.setAttribute("aria-label", `Recortar Foto ${idx + 1}`);
+        recortarBtn.textContent = "✂ Recortar";
+        recortarBtn.setAttribute("aria-label", `Recortar Foto ${data.index + 1}`);
         recortarBtn.addEventListener("click", function() {
             abrirModalRecorte(key);
         });
@@ -558,8 +572,8 @@ function renderAsignacionesFotos() {
         const marcoBtn = document.createElement("button");
         marcoBtn.type = "button";
         marcoBtn.className = "foto-action-btn";
-        marcoBtn.textContent = "🖼 Aplicar marco";
-        marcoBtn.setAttribute("aria-label", `Aplicar marco a Foto ${idx + 1}`);
+        marcoBtn.textContent = "🖼 Marco";
+        marcoBtn.setAttribute("aria-label", `Aplicar marco a Foto ${data.index + 1}`);
         marcoBtn.addEventListener("click", function() {
             abrirModalMarco(key);
         });
@@ -567,12 +581,11 @@ function renderAsignacionesFotos() {
         actions.appendChild(recortarBtn);
         actions.appendChild(marcoBtn);
 
-        card.appendChild(previewWrap);
-        card.appendChild(titulo);
-        card.appendChild(nombre);
-        card.appendChild(select);
-        card.appendChild(actions);
-        asignacionFotosList.appendChild(card);
+        advanced.appendChild(titulo);
+        advanced.appendChild(nombre);
+        advanced.appendChild(select);
+        advanced.appendChild(actions);
+        card.appendChild(advanced);
     });
 
     emitirAsignacionesActualizadas();
@@ -624,6 +637,23 @@ function ocultarSpinnerPedido() {
     if (btnFinalizarPedido) {
         btnFinalizarPedido.disabled = false;
     }
+}
+
+function abrirModalExitoPedido(clienteId, correoCliente, infoHtml, bodyHtml) {
+    if (!pedidoExitoOverlay) return;
+    pedidoSeguimientoPendiente = {
+        id: clienteId ? String(clienteId) : "",
+        correo: String(correoCliente || "").trim(),
+    };
+    if (pedidoExitoNumero) pedidoExitoNumero.textContent = String(clienteId || "-");
+    if (pedidoExitoInfo) pedidoExitoInfo.innerHTML = infoHtml || "";
+    if (pedidoExitoBody) pedidoExitoBody.innerHTML = bodyHtml || "";
+    pedidoExitoOverlay.classList.add("active");
+}
+
+function cerrarModalExitoPedido() {
+    if (!pedidoExitoOverlay) return;
+    pedidoExitoOverlay.classList.remove("active");
 }
 
 // 🔹 Validación completa (datos + fotos + tamaño + papel)
@@ -713,8 +743,11 @@ document.querySelectorAll('input[name="papel"]').forEach(radio => {
 
 document.addEventListener("imagenesActualizadas", function() {
     sincronizarTamanoBaseEnAsignacion(false);
-    renderAsignacionesFotos();
     validarFormulario();
+});
+
+document.addEventListener("galeriaRenderizada", function() {
+    renderAsignacionesFotos();
 });
 
 if (toggleAsignacionFotos) {
@@ -845,6 +878,7 @@ document.addEventListener("keydown", function(e) {
         destruirCropper();
         cerrarModal(cropImageModal);
         cerrarModal(frameImageModal);
+        cerrarModalExitoPedido();
     }
 });
 
@@ -861,6 +895,50 @@ if (frameImageModal) {
     frameImageModal.addEventListener("click", function(e) {
         if (e.target === frameImageModal) {
             cerrarModal(frameImageModal);
+        }
+    });
+}
+
+if (pedidoExitoClose) {
+    pedidoExitoClose.addEventListener("click", function() {
+        cerrarModalExitoPedido();
+    });
+}
+
+if (pedidoExitoEstado) {
+    pedidoExitoEstado.addEventListener("click", function() {
+        const id = pedidoSeguimientoPendiente.id;
+        const correo = pedidoSeguimientoPendiente.correo;
+        if (!id || !correo) {
+            cerrarModalExitoPedido();
+            return;
+        }
+
+        const params = new URLSearchParams({
+            pedido: id,
+            correo,
+        });
+        window.location.href = `/seguimiento?${params.toString()}`;
+    });
+}
+
+if (pedidoExitoOverlay) {
+    pedidoExitoOverlay.addEventListener("click", function(e) {
+        if (e.target === pedidoExitoOverlay) {
+            cerrarModalExitoPedido();
+        }
+    });
+}
+
+if (pedidoExitoMasFotos) {
+    pedidoExitoMasFotos.addEventListener("click", function() {
+        if (typeof restaurarClientePendiente === "function") {
+            restaurarClientePendiente();
+        }
+        cerrarModalExitoPedido();
+        if (inputImagenes) {
+            inputImagenes.focus();
+            inputImagenes.click();
         }
     });
 }
@@ -949,9 +1027,31 @@ form.addEventListener("submit", async function(e) {
     }
 
     try {
+        const infoResumenHtml = facturaInfo ? facturaInfo.innerHTML : "";
+        const bodyResumenHtml = facturaBody ? facturaBody.innerHTML : "";
+        const clientePersistido = {
+            nombre: nameInput.value,
+            apellido: apellidoInput.value,
+            correo: correoInput.value,
+            telefono: telefonoInput.value,
+            prefijoPais: prefijoPaisSelect ? prefijoPaisSelect.value : "",
+        };
+
         const clienteGuardado = await guardarCliente(formData);
         clienteChannel.postMessage({ tipo: "nuevo_cliente", cliente: clienteGuardado });
         renderMiniaturasSubidas(clienteGuardado.thumbnails || []);
+
+        restaurarClientePendiente = function() {
+            if (nameInput) nameInput.value = clientePersistido.nombre || "";
+            if (apellidoInput) apellidoInput.value = clientePersistido.apellido || "";
+            if (correoInput) correoInput.value = clientePersistido.correo || "";
+            if (telefonoInput) telefonoInput.value = clientePersistido.telefono || "";
+            if (prefijoPaisSelect && clientePersistido.prefijoPais) {
+                prefijoPaisSelect.value = clientePersistido.prefijoPais;
+            }
+            actualizarAyudaTelefono();
+            validarFormulario();
+        };
 
         form.reset();
         // Limpiar selección y actualizar UI sin disparar mensajes de validación
@@ -967,7 +1067,6 @@ form.addEventListener("submit", async function(e) {
         renderAsignacionesFotos();
 
         // Cerrar/resetear modal factura
-        const facturaOverlay = document.getElementById("facturaOverlay");
         if (facturaOverlay) facturaOverlay.classList.remove("active");
         const btnResumen = document.getElementById("btnVerResumen");
         if (btnResumen) btnResumen.disabled = true;
@@ -977,6 +1076,7 @@ form.addEventListener("submit", async function(e) {
         errorMessage.style.color = "#00ff4c";
         bloquearMensajesValidacion = false;
         ocultarSpinnerPedido();
+        abrirModalExitoPedido(clienteGuardado.id, clienteGuardado.correo, infoResumenHtml, bodyResumenHtml);
 
     } catch (error) {
         bloquearMensajesValidacion = false;

@@ -182,6 +182,11 @@ def home():
         return redirect(url_for('auth.redirect_by_role'))
     return render_template('index.html')
 
+
+@app.route('/seguimiento')
+def seguimiento():
+    return render_template('seguimiento.html')
+
 # crea una ruta para la página de administración
 @app.route('/admin')
 @login_required
@@ -558,6 +563,101 @@ def calcular_precio_total(tamano_keys_str, cantidad, tamano_texto=None):
         pu = _aplicar_descuentos(clave, cantidad, precio_base)
         total += round(pu * cantidad, 2)
     return round(total, 2)
+
+
+def _nombre_tamano_por_clave(clave):
+    t = FotoTamano.query.filter_by(clave=clave).first()
+    if t and t.nombre:
+        return t.nombre
+    return clave
+
+
+def _detalle_pedido(tamano_keys_str, tamano_texto, cantidad_total):
+    detalle = []
+    tokens = [k.strip() for k in str(tamano_keys_str or "").split(',') if k.strip()]
+
+    if tokens and any(':' in token for token in tokens):
+        for token in tokens:
+            if ':' not in token:
+                continue
+            clave_raw, cantidad_raw = token.split(':', 1)
+            clave = clave_raw.strip()
+            try:
+                cantidad_clave = int(cantidad_raw.strip())
+            except (TypeError, ValueError):
+                continue
+
+            if cantidad_clave <= 0:
+                continue
+
+            precio_base = _precio_base_tamano(clave)
+            if precio_base is None:
+                continue
+
+            pu = _aplicar_descuentos(clave, cantidad_clave, precio_base)
+            detalle.append({
+                "clave": clave,
+                "nombre": _nombre_tamano_por_clave(clave),
+                "cantidad": cantidad_clave,
+                "precio_unitario": round(pu, 2),
+                "subtotal": round(pu * cantidad_clave, 2),
+            })
+        return detalle
+
+    claves = []
+    if tokens:
+        claves = tokens
+    elif tamano_texto:
+        claves = _extraer_claves_desde_texto(tamano_texto)
+
+    for clave in claves:
+        precio_base = _precio_base_tamano(clave)
+        if precio_base is None:
+            continue
+        pu = _aplicar_descuentos(clave, cantidad_total, precio_base)
+        detalle.append({
+            "clave": clave,
+            "nombre": _nombre_tamano_por_clave(clave),
+            "cantidad": cantidad_total,
+            "precio_unitario": round(pu, 2),
+            "subtotal": round(pu * cantidad_total, 2),
+        })
+
+    return detalle
+
+
+@app.route('/api/seguimiento/<int:cliente_id>', methods=['GET'])
+def api_seguimiento_cliente(cliente_id):
+    correo = (request.args.get('correo') or '').strip().lower()
+    if not correo:
+        return jsonify({"error": "correo requerido"}), 400
+
+    cliente = db.session.get(Cliente, cliente_id)
+    if not cliente:
+        return jsonify({"error": "Pedido no encontrado"}), 404
+
+    if (cliente.correo or '').strip().lower() != correo:
+        return jsonify({"error": "Datos de verificacion invalidos"}), 403
+
+    detalle = _detalle_pedido(cliente.tamano_keys, cliente.tamano, len(cliente.fotos))
+    total = calcular_precio_total(cliente.tamano_keys, len(cliente.fotos), cliente.tamano)
+
+    return jsonify({
+        "pedido": {
+            "id": cliente.id,
+            "nombre": cliente.nombre,
+            "apellido": cliente.apellido,
+            "correo": cliente.correo,
+            "telefono": cliente.telefono,
+            "fechaRegistro": cliente.fecha_registro,
+            "estado": cliente.estado or "pendiente",
+            "pagado": bool(cliente.pagado),
+            "papel": cliente.papel or "No especificado",
+            "numFotos": len(cliente.fotos),
+            "detalle": detalle,
+            "total": round(total, 2),
+        }
+    }), 200
 
 
 @app.route('/api/tamanos', methods=['GET'])

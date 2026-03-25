@@ -572,6 +572,35 @@ select:focus {
     object-fit: cover;
 }
 
+.card-advanced-controls {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e4eaf7;
+}
+
+.card-advanced-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1a3870;
+}
+
+.card-advanced-name {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #60739a;
+    word-break: break-all;
+}
+
+.card-advanced-size {
+    width: 100%;
+    max-width: none;
+    margin: 8px 0 0;
+}
+
+.card-advanced-actions {
+    margin-top: 8px;
+}
+
 .delete-image-button {
     position: absolute;
     top: 20px;
@@ -1010,6 +1039,38 @@ button:active {
     border-top: 1px solid #eee;
 }
 
+.pedido-exito-modal {
+    max-width: 620px;
+}
+
+.pedido-exito-header {
+    background: linear-gradient(135deg, #0c8d62, #1db85f);
+}
+
+.pedido-exito-alerta {
+    margin: 4px 24px 0;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #fff4df;
+    border: 1px solid #f4d39c;
+    color: #7b4a00;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.pedido-exito-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 14px 24px 20px;
+}
+
+.pedido-exito-actions .image-action-btn {
+    min-width: 210px;
+}
+
 .pedido-spinner-overlay {
     display: none;
     position: fixed;
@@ -1399,6 +1460,15 @@ footer {
     background: #1a1a25;
     color: white;
 }
+.dark-mode .card-advanced-controls {
+    border-top-color: #364667;
+}
+.dark-mode .card-advanced-title {
+    color: #dbe5ff;
+}
+.dark-mode .card-advanced-name {
+    color: #b6c3df;
+}
 .dark-mode .asignacion-tamanos {
     background: #121d31;
     border-color: #2f4268;
@@ -1574,6 +1644,11 @@ footer {
 .dark-mode .factura-modal {
     background-color: #1a1a25;
     color: #e8e8f0;
+}
+.dark-mode .pedido-exito-alerta {
+    background: #34260f;
+    border-color: #765422;
+    color: #ffd58a;
 }
 .dark-mode .factura-header {
     background: #333;

@@ -20,12 +20,13 @@
     <nav class="instrucciones-pedido" aria-label="Pasos del pedido">
   <h3>📋 ¿Cómo hacer tu pedido?</h3>
   <ol class="pasos" role="list">
-    <li class="paso"><span class="paso-num" aria-hidden="true">1</span> Sube tus fotos (PNG, JPG o GIF)</li>
-    <li class="paso"><span class="paso-num" aria-hidden="true">2</span> Elige los tamaños de impresión</li>
-    <li class="paso"><span class="paso-num" aria-hidden="true">3</span> Selecciona el tipo de papel</li>
-    <li class="paso"><span class="paso-num" aria-hidden="true">4</span> Completa tus datos personales</li>
-    <li class="paso"><span class="paso-num" aria-hidden="true">5</span> Presiona <strong>Revisar pedido</strong> para ver el resumen de precios</li>
-    <li class="paso"><span class="paso-num" aria-hidden="true">6</span> Confirma con <strong>Finalizar pedido</strong> para enviar tu pedido</li>
+        <li class="paso"><span class="paso-num" aria-hidden="true">1</span> Sube tus fotos (PNG, JPG o GIF)</li>
+        <li class="paso"><span class="paso-num" aria-hidden="true">2</span> Elige el tamaño base (o activa edición por foto en la galería)</li>
+        <li class="paso"><span class="paso-num" aria-hidden="true">3</span> Selecciona el tipo de papel</li>
+        <li class="paso"><span class="paso-num" aria-hidden="true">4</span> Completa tus datos personales</li>
+        <li class="paso"><span class="paso-num" aria-hidden="true">5</span> Presiona <strong>Revisar pedido</strong> para validar cantidades y precios</li>
+        <li class="paso"><span class="paso-num" aria-hidden="true">6</span> Confirma con <strong>Finalizar pedido</strong> para crear tu orden</li>
+        <li class="paso"><span class="paso-num" aria-hidden="true">7</span> En el modal final, revisa tu resumen y toca <strong>Revisar estado del pedido</strong></li>
   </ol>
 </nav>
     <label for="inputImagenes" class="sr-only"><span>📸</span> imágenes (PNG, JPG o GIF, máx. 150 archivos de 10 MB c/u)</label>
@@ -83,17 +84,10 @@
 
         <div class="toggle-asignacion-wrap">
             <label class="toggle-asignacion" for="toggleAsignacionFotos">
-                <input type="checkbox" id="toggleAsignacionFotos" aria-controls="asignacionTamanos" aria-expanded="false">
-                <span>Configurar tamaño por foto (mostrar/ocultar)</span>
+                <input type="checkbox" id="toggleAsignacionFotos" aria-controls="previewContainer" aria-expanded="false">
+                <span>Configurar tamano y edicion por foto en la galeria</span>
             </label>
         </div>
-
-        <section class="asignacion-tamanos" id="asignacionTamanos" aria-labelledby="asignacionTamanosTitle" hidden>
-            <h3 id="asignacionTamanosTitle">Asigna un tamaño a cada foto</h3>
-            <p class="campo-ayuda">Selecciona manualmente el tamaño de cada foto para control total por imagen.</p>
-
-            <div id="asignacionFotosList" class="asignacion-fotos-list" aria-live="polite"></div>
-        </section>
     </fieldset>
 
     <fieldset class="fieldset-papel">
@@ -179,6 +173,23 @@
       * Instax y Polaroid: precio a consultar. Descuentos aplicados según cantidad.
     </div>
   </div>
+</div>
+
+<div class="factura-overlay" id="pedidoExitoOverlay" role="dialog" aria-modal="true" aria-labelledby="pedidoExitoTitle">
+    <div class="factura-modal pedido-exito-modal">
+        <div class="factura-header pedido-exito-header">
+            <div class="factura-logo">🏆 Confirmacion</div>
+            <div class="factura-title" id="pedidoExitoTitle">¡Pedido #<span id="pedidoExitoNumero">-</span> Creado con Exito!</div>
+            <button class="factura-close" id="pedidoExitoClose" aria-label="Cerrar confirmacion de pedido">&times;</button>
+        </div>
+        <div class="factura-info" id="pedidoExitoInfo"></div>
+        <div class="factura-body" id="pedidoExitoBody" aria-live="polite"></div>
+        <div class="pedido-exito-alerta">⚠️ ACERQUESE A PAGAR EN CAJA PARA PROCESAR SU PEDIDO</div>
+        <div class="pedido-exito-actions">
+            <button type="button" id="pedidoExitoMasFotos" class="image-action-btn secondary" aria-label="Enviar mas fotos a esta misma orden">Enviar mas fotos a esta misma orden</button>
+            <button type="button" id="pedidoExitoEstado" class="image-action-btn apply" aria-label="Revisar estado del pedido">Revisar estado del pedido</button>
+        </div>
+    </div>
 </div>
 
 <div class="pedido-spinner-overlay" id="pedidoSpinnerOverlay" aria-hidden="true">

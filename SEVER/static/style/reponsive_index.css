@@ -120,6 +120,14 @@
         font-size: 22px;
     }
 
+    .pedido-exito-actions {
+        padding: 12px 14px 16px;
+    }
+
+    .pedido-exito-actions .image-action-btn {
+        min-width: 0;
+    }
+
     .cropper-stage,
     .frame-preview-stage {
         min-height: 220px;

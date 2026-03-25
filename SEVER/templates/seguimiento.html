@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seguimiento de Pedido</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style/style.css', v='20260323a') }}" />
+<style>
+    :root {
+        --seg-bg: linear-gradient(135deg, #edf2ff 0%, #f4fbff 40%, #fef6ef 100%);
+        --seg-card: #ffffff;
+        --seg-text: #1c2333;
+        --seg-muted: #5d6a84;
+        --seg-border: #d8e4fb;
+        --seg-focus: #0d6efd;
+        --seg-success: #0d9f6e;
+        --seg-warning-bg: #fff7e8;
+        --seg-warning-border: #f3d099;
+        --seg-warning-text: #835300;
+        --seg-danger-bg: #fff0f0;
+        --seg-danger-border: #f7b8b8;
+        --seg-danger-text: #a11d2f;
+        --seg-info-bg: #eef6ff;
+        --seg-info-border: #bad7ff;
+        --seg-info-text: #16478a;
+    }
+
+    body {
+        min-height: 100vh;
+        margin: 0;
+        background: var(--seg-bg);
+        color: var(--seg-text);
+    }
+
+    .seg-topbar {
+        width: min(920px, 95%);
+        margin: 20px auto 0;
+        display: flex;
+        justify-content: flex-start;
+    }
+
+    .seg-back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        border: 1px solid var(--seg-border);
+        background: #fff;
+        color: #1b427b;
+        text-decoration: none;
+        padding: 8px 14px;
+        font-weight: 700;
+        font-size: 14px;
+    }
+
+    .seg-back-link:hover {
+        border-color: #9fc2f7;
+        background: #f6faff;
+    }
+
+    .seguimiento-wrap {
+        width: min(920px, 95%);
+        margin: 30px auto;
+        background: var(--seg-card);
+        border-radius: 18px;
+        box-shadow: 0 20px 50px rgba(22, 51, 96, 0.18);
+        overflow: hidden;
+    }
+
+    .seguimiento-header {
+        background: linear-gradient(135deg, #0c8d62, #1db85f);
+        color: #fff;
+        padding: 24px 24px;
+    }
+
+    .seguimiento-subtitle {
+        margin: 8px 0 0;
+        color: rgba(255, 255, 255, 0.92);
+        font-size: 15px;
+    }
+
+    .seguimiento-body {
+        padding: 24px;
+    }
+
+    .seguimiento-estado {
+        margin: 12px 0 16px;
+        font-weight: 700;
+        color: #18406e;
+    }
+
+    .seguimiento-form {
+        display: grid;
+        gap: 12px;
+        margin-top: 8px;
+        padding: 18px;
+        border: 1px solid var(--seg-border);
+        border-radius: 14px;
+        background: #fbfdff;
+    }
+
+    .campo-ayuda-inline {
+        margin: -4px 0 2px;
+        color: var(--seg-muted);
+        font-size: 13px;
+    }
+
+    .seguimiento-form label {
+        font-weight: 700;
+        color: #16355f;
+        font-size: 14px;
+    }
+
+    .seguimiento-form input,
+    .seguimiento-form button {
+        width: 100%;
+    }
+
+    .seguimiento-form input {
+        margin: 0;
+        border: 1.5px solid #c8d8f4;
+        background: #fff;
+        border-radius: 10px;
+        padding: 11px 12px;
+        font-size: 15px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .seguimiento-form input::placeholder {
+        color: #8591aa;
+    }
+
+    .seguimiento-form input:focus-visible {
+        outline: none;
+        border-color: var(--seg-focus);
+        box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.15);
+    }
+
+    .input-error {
+        border-color: #db4165 !important;
+        background: #fff8fa !important;
+    }
+
+    .input-ok {
+        border-color: #1ea879 !important;
+        background: #f5fff9 !important;
+    }
+
+    .seguimiento-form button {
+        margin-top: 4px;
+        min-height: 46px;
+        font-weight: 700;
+    }
+
+    .seguimiento-form button[disabled] {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    .seguimiento-mensaje {
+        margin-top: 12px;
+        border-radius: 10px;
+        padding: 10px 12px;
+        border: 1px solid transparent;
+        font-size: 14px;
+        font-weight: 600;
+        min-height: 20px;
+    }
+
+    .seguimiento-mensaje.info {
+        background: var(--seg-info-bg);
+        border-color: var(--seg-info-border);
+        color: var(--seg-info-text);
+    }
+
+    .seguimiento-mensaje.error {
+        background: var(--seg-danger-bg);
+        border-color: var(--seg-danger-border);
+        color: var(--seg-danger-text);
+    }
+
+    .seguimiento-mensaje.success {
+        background: #eefcf5;
+        border-color: #9fe2c5;
+        color: #0e8c61;
+    }
+
+    .seguimiento-mensaje:empty {
+        display: none;
+    }
+
+    .estado-chip {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 5px 12px;
+        font-size: 12px;
+        font-weight: 700;
+        background: #ebf3ff;
+        color: #154078;
+    }
+
+    .estado-chip.pendiente {
+        background: #edf4ff;
+        color: #16477f;
+    }
+
+    .estado-chip.procesando {
+        background: #fff5e8;
+        color: #8a5311;
+    }
+
+    .estado-chip.entregado {
+        background: #eafbf1;
+        color: #0f7a4d;
+    }
+
+    .estado-chip.cancelado {
+        background: #ffeeee;
+        color: #9b1c2e;
+    }
+
+    #seguimientoResultado {
+        margin-top: 16px;
+        border: 1px solid var(--seg-border);
+        border-radius: 14px;
+        padding: 16px;
+        background: #ffffff;
+    }
+
+    #seguimientoResultado h2 {
+        margin-top: 0;
+    }
+
+    .pedido-exito-alerta {
+        margin: 8px 0 0;
+        background: var(--seg-warning-bg);
+        border-color: var(--seg-warning-border);
+        color: var(--seg-warning-text);
+    }
+
+    .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    @media (max-width: 680px) {
+        .seguimiento-body,
+        .seguimiento-header {
+            padding: 16px;
+        }
+
+        .seguimiento-form {
+            padding: 14px;
+        }
+    }
+</style>
+</head>
+<body>
+<div class="seg-topbar">
+    <a href="/" class="seg-back-link" aria-label="Volver al formulario principal">
+        ← Volver al inicio
+    </a>
+</div>
+<main class="seguimiento-wrap" aria-labelledby="seguimientoTitle">
+    <div class="seguimiento-header">
+        <h1 id="seguimientoTitle" class="titulo" style="margin:0; color:#fff; -webkit-text-fill-color:#fff;">Seguimiento de Pedido</h1>
+        <p class="seguimiento-subtitle">Consulta tu estado en tiempo real con tu numero de pedido y correo.</p>
+    </div>
+
+    <div class="seguimiento-body">
+        <p>Ingresa los datos exactamente como los registraste al finalizar el pedido.</p>
+
+        <form id="seguimientoForm" class="seguimiento-form" novalidate>
+            <label for="pedidoId">Numero de pedido</label>
+            <input id="pedidoId" name="pedidoId" type="text" inputmode="numeric" pattern="^[0-9]{1,10}$" required placeholder="Ej: 12345" aria-describedby="pedidoIdHelp" autocomplete="off" />
+            <p id="pedidoIdHelp" class="campo-ayuda-inline">Solo numeros, sin simbolos ni espacios.</p>
+
+            <label for="correo">Correo</label>
+            <input id="correo" name="correo" type="email" required placeholder="correo@ejemplo.com" aria-describedby="correoHelp" autocomplete="email" />
+            <p id="correoHelp" class="campo-ayuda-inline">Debe coincidir con el correo usado en tu pedido.</p>
+
+            <button id="btnConsultarEstado" type="submit">Consultar estado</button>
+        </form>
+
+        <div id="seguimientoMensaje" class="seguimiento-mensaje info" role="status" aria-live="polite" aria-atomic="true">Listo para consultar tu pedido.</div>
+        <div id="seguimientoErrores" class="sr-only" role="alert" aria-live="assertive"></div>
+
+        <section id="seguimientoResultado" hidden>
+            <h2>Pedido #<span id="rPedido">-</span></h2>
+            <p class="seguimiento-estado">Estado: <span class="estado-chip" id="rEstado">-</span></p>
+
+            <div class="factura-info" id="rInfo"></div>
+            <div class="factura-body" id="rBody"></div>
+            <div class="pedido-exito-alerta">⚠ ACERQUESE A PAGAR EN CAJA PARA PROCESAR SU PEDIDO</div>
+        </section>
+    </div>
+</main>
+
+<script>
+(function () {
+    const form = document.getElementById('seguimientoForm');
+    const pedidoId = document.getElementById('pedidoId');
+    const correo = document.getElementById('correo');
+    const btnConsultarEstado = document.getElementById('btnConsultarEstado');
+    const msg = document.getElementById('seguimientoMensaje');
+    const msgErrores = document.getElementById('seguimientoErrores');
+    const out = document.getElementById('seguimientoResultado');
+
+    const rPedido = document.getElementById('rPedido');
+    const rEstado = document.getElementById('rEstado');
+    const rInfo = document.getElementById('rInfo');
+    const rBody = document.getElementById('rBody');
+
+    function setMensaje(texto, tipo) {
+        msg.textContent = texto;
+        msg.className = `seguimiento-mensaje ${tipo}`;
+        if (tipo === 'error') {
+            msgErrores.textContent = texto;
+        } else {
+            msgErrores.textContent = '';
+        }
+    }
+
+    function setLoading(activo) {
+        if (!btnConsultarEstado) return;
+        btnConsultarEstado.disabled = activo;
+        btnConsultarEstado.textContent = activo ? 'Consultando...' : 'Consultar estado';
+        if (activo) {
+            setMensaje('Consultando tu pedido, espera un momento...', 'info');
+        }
+    }
+
+    function limpiarEstadosInputs() {
+        pedidoId.classList.remove('input-error', 'input-ok');
+        correo.classList.remove('input-error', 'input-ok');
+    }
+
+    function validarCampos() {
+        limpiarEstadosInputs();
+        const id = String(pedidoId.value || '').trim();
+        const mail = String(correo.value || '').trim();
+        const errores = [];
+
+        if (!/^[0-9]{1,10}$/.test(id)) {
+            errores.push('El numero de pedido debe contener solo numeros.');
+            pedidoId.classList.add('input-error');
+        } else {
+            pedidoId.classList.add('input-ok');
+        }
+
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
+            errores.push('Ingresa un correo valido.');
+            correo.classList.add('input-error');
+        } else {
+            correo.classList.add('input-ok');
+        }
+
+        return {
+            esValido: errores.length === 0,
+            errores,
+            id,
+            mail,
+        };
+    }
+
+    function aplicarColorEstado(estado) {
+        const clase = String(estado || '').toLowerCase();
+        rEstado.className = 'estado-chip';
+        if (clase) {
+            rEstado.classList.add(clase);
+        }
+    }
+
+    function formatearFecha(fechaRegistro) {
+        if (!fechaRegistro) return '-';
+        const d = new Date(fechaRegistro);
+        if (!isNaN(d.getTime())) {
+            return d.toLocaleDateString('es-EC', { day: '2-digit', month: 'long', year: 'numeric' });
+        }
+        return String(fechaRegistro).split(',')[0] || fechaRegistro;
+    }
+
+    function pintarResultado(pedido) {
+        rPedido.textContent = pedido.id;
+        rEstado.textContent = pedido.estado;
+        aplicarColorEstado(pedido.estado);
+
+        const fecha = formatearFecha(pedido.fechaRegistro);
+        rInfo.innerHTML = `
+            <div class="factura-info-row"><span>Fecha</span><span>${fecha}</span></div>
+            <div class="factura-info-row"><span>Fotos</span><span>${pedido.numFotos} imagen${pedido.numFotos !== 1 ? 'es' : ''}</span></div>
+            <div class="factura-info-row"><span>Papel</span><span class="factura-papel">${pedido.papel || 'No especificado'}</span></div>
+        `;
+
+        const filas = (pedido.detalle || []).map(function (item) {
+            return `
+                <tr>
+                    <td>${item.nombre}</td>
+                    <td class="text-center">${item.cantidad}</td>
+                    <td class="text-right">$${Number(item.precio_unitario || 0).toFixed(2)}</td>
+                    <td class="text-right subtotal-col">$${Number(item.subtotal || 0).toFixed(2)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        rBody.innerHTML = `
+            <table class="factura-tabla">
+                <thead>
+                    <tr>
+                        <th>Tamano</th>
+                        <th class="text-center">Cant.</th>
+                        <th class="text-right">P/U</th>
+                        <th class="text-right">Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody>${filas || '<tr><td colspan="4" class="text-center">Sin detalle disponible</td></tr>'}</tbody>
+            </table>
+            <div class="factura-total">
+                <span>TOTAL ESTIMADO</span>
+                <span class="factura-total-valor">$${Number(pedido.total || 0).toFixed(2)}</span>
+            </div>
+        `;
+
+        out.hidden = false;
+        setMensaje('Pedido encontrado. Revisa el estado y detalle abajo.', 'success');
+    }
+
+    async function consultar() {
+        const validacion = validarCampos();
+        if (!validacion.esValido) {
+            setMensaje(validacion.errores.join(' '), 'error');
+            out.hidden = true;
+            return;
+        }
+
+        try {
+            setLoading(true);
+
+            const params = new URLSearchParams({ correo: validacion.mail });
+            const res = await fetch(`/api/seguimiento/${encodeURIComponent(validacion.id)}?${params.toString()}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                setMensaje(data.error || 'No se pudo consultar el pedido.', 'error');
+                out.hidden = true;
+                return;
+            }
+
+            pintarResultado(data.pedido || {});
+        } catch (err) {
+            setMensaje('Error de conexion al consultar el estado.', 'error');
+            out.hidden = true;
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        consultar();
+    });
+
+    const qs = new URLSearchParams(window.location.search);
+    const pedidoQuery = qs.get('pedido');
+    const correoQuery = qs.get('correo');
+    if (pedidoQuery) pedidoId.value = String(pedidoQuery).replace(/\D/g, '').slice(0, 10);
+    if (correoQuery) correo.value = String(correoQuery).trim();
+
+    pedidoId.addEventListener('input', function () {
+        const limpio = String(pedidoId.value || '').replace(/\D/g, '').slice(0, 10);
+        if (pedidoId.value !== limpio) {
+            pedidoId.value = limpio;
+        }
+    });
+
+    [pedidoId, correo].forEach(function (input) {
+        input.addEventListener('blur', function () {
+            validarCampos();
+        });
+    });
+
+    if (pedidoQuery && correoQuery) {
+        consultar();
+    }
+})();
+</script>
+</body>
+</html>

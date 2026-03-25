@@ -20,6 +20,10 @@ let archivosGlobal = []; // Acumula todos los archivos seleccionados, incluso de
 let previewsGlobal = [];
 let paginaActual = 1;
 
+function claveFoto(file) {
+    return `${file.name}__${file.size}__${file.lastModified}`;
+}
+
 function mostrarError(texto, esAdvertencia = false) {
     errorMessage.textContent = texto;
     if (esAdvertencia) {
@@ -33,6 +37,20 @@ function emitirImagenesActualizadas() {
     document.dispatchEvent(new CustomEvent("imagenesActualizadas", {
         detail: {
             total: archivosGlobal.length
+        }
+    }));
+}
+
+function emitirGaleriaRenderizada() {
+    const inicio = (paginaActual - 1) * ITEMS_POR_PAGINA;
+    const fin = Math.min(inicio + ITEMS_POR_PAGINA, previewsGlobal.length);
+
+    document.dispatchEvent(new CustomEvent("galeriaRenderizada", {
+        detail: {
+            paginaActual,
+            inicio,
+            fin,
+            total: previewsGlobal.length,
         }
     }));
 }
@@ -112,6 +130,7 @@ function eliminarPreview(archivo) {
 function crearCardPreview(item) {
     const card = document.createElement("div");
     card.className = "card";
+    card.dataset.fotoKey = claveFoto(item.archivo);
 
     const botonEliminar = document.createElement("button");
     botonEliminar.type = "button";
@@ -155,6 +174,7 @@ function renderizarPaginaActual() {
 
     actualizarControlesPaginacion();
     actualizarMensajeVistaPrevia();
+    emitirGaleriaRenderizada();
 }
 
 // Agrega las previews de los archivos nuevos al contenedor (sin limpiar los anteriores)
