@@ -238,16 +238,16 @@
 		}
 	</style>
 </head>
-<body>
+<body data-auth-roles="admin,cajero">
 	<a class="skip-link" href="#contenido-cajero">Saltar al contenido principal</a>
 
 	<header>
 		<div>
 			<h2 style="margin:0">Panel Cajero</h2>
 			<p>Cobra rapido: busca pedido, marca pagado y continua con el siguiente.</p>
-			<div class="meta">Usuario: {{ session.get('username', '') }} | Rol: {{ session.get('role', '') }}</div>
+			<div class="meta">Usuario: <span data-auth-username>Usuario</span> | Rol: <span data-auth-role>cajero</span></div>
 		</div>
-		<a class="btn" href="{{ url_for('auth.logout') }}">Salir</a>
+		<a class="btn" href="{{ url_for('auth.logout') }}" data-auth-logout="tab">Salir</a>
 	</header>
 
 	<main id="contenido-cajero" class="wrap" tabindex="-1" role="main">
@@ -316,6 +316,7 @@
 		</section>
 	</main>
 
+	<script src="{{ url_for('static', filename='script/session_auth_client.js') }}"></script>
 	<script>
 		const PAGE_SIZE = 20;
 		let pedidosAll = [];

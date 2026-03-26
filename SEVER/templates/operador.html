@@ -279,17 +279,17 @@
         }
     </style>
 </head>
-<body>
+<body data-auth-roles="admin,operador">
     <a class="skip-link" href="#contenido-principal">Saltar al contenido principal</a>
 
     <header class="topbar" role="banner">
         <div>
             <h1>Panel Operador</h1>
             <p>Flujo rapido: buscar, filtrar, actualizar estado y descargar pedidos pagados.</p>
-            <div class="meta">Usuario: {{ session.get('username', '') }} | Rol: {{ session.get('role', '') }}</div>
+            <div class="meta">Usuario: <span data-auth-username>Usuario</span> | Rol: <span data-auth-role>operador</span></div>
         </div>
         <div class="topbar-actions">
-            <a class="btn" href="{{ url_for('auth.logout') }}">Salir</a>
+            <a class="btn" href="{{ url_for('auth.logout') }}" data-auth-logout="tab">Salir</a>
         </div>
     </header>
 
@@ -359,6 +359,7 @@
         </section>
     </main>
 
+    <script src="{{ url_for('static', filename='script/session_auth_client.js') }}"></script>
     <script>
         const estados = ["pendiente", "procesando", "entregado", "cancelado"];
         const PAGE_SIZE = 20;

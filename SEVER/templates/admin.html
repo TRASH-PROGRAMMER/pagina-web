@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style/resposive_admin.css') }}">
   
 </head>
-<body>
+<body data-auth-roles="admin">
 
 <!-- SIDEBAR -->
 <aside class="sidebar">
@@ -47,8 +47,8 @@
     <div class="admin-avatar">
       <div class="avatar-circle">AD</div>
       <div>
-        <div style="font-size:13px;color:var(--text);font-weight:500;">{{ session.get('username', 'admin') }}</div>
-        <div style="font-size:11px;">rol: {{ session.get('role', 'admin') }}</div>
+        <div data-auth-username style="font-size:13px;color:var(--text);font-weight:500;">Usuario</div>
+        <div style="font-size:11px;">rol: <span data-auth-role>admin</span></div>
       </div>
     </div>
   </div>
@@ -64,7 +64,7 @@
     </div>
     <div class="topbar-actions">
       <button class="btn btn-ghost" onclick="exportCSV()">↓ Exportar CSV</button>
-      <a class="btn btn-ghost" href="{{ url_for('auth.logout') }}">Salir</a>
+      <a class="btn btn-ghost" href="{{ url_for('auth.logout') }}" data-auth-logout="tab">Salir</a>
     </div>
   </div>
 
@@ -797,6 +797,7 @@
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='script/session_auth_client.js') }}"></script>
 <script src="{{ url_for('static', filename='script/dasbord_admin.js') }}"></script>
 </body>
 </html>

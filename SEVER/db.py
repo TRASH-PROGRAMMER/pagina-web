@@ -64,3 +64,22 @@ class User(db.Model):
     activo        = db.Column(db.Boolean, nullable=False, default=True)
     created_at    = db.Column(db.DateTime(timezone=True), nullable=False,
                               server_default=func.now())
+
+
+class AuthSession(db.Model):
+    __tablename__ = 'auth_sessions'
+    id            = db.Column(db.Integer, primary_key=True)
+    user_id       = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    role          = db.Column(db.String(20), nullable=False)
+    token_hash    = db.Column(db.String(128), nullable=False, unique=True)
+    token_hint    = db.Column(db.String(12), nullable=True)
+    user_agent    = db.Column(db.String(255), nullable=True)
+    ip_addr       = db.Column(db.String(64), nullable=True)
+    created_at    = db.Column(db.DateTime(timezone=True), nullable=False,
+                              server_default=func.now())
+    last_seen_at  = db.Column(db.DateTime(timezone=True), nullable=False,
+                              server_default=func.now())
+    expires_at    = db.Column(db.DateTime(timezone=True), nullable=False)
+    revoked_at    = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    user          = db.relationship('User', backref='auth_sessions', lazy=True)

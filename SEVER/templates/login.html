@@ -92,7 +92,7 @@
   </style>
 </head>
 <body>
-  <form class="card" method="post" autocomplete="off">
+  <form class="card" method="post" autocomplete="off" id="loginForm" novalidate>
     <h1>Iniciar sesion</h1>
     <p>Accede segun tu rol: admin, operador o cajero.</p>
 
@@ -101,6 +101,8 @@
         <div class="error">{{ messages[0] }}</div>
       {% endif %}
     {% endwith %}
+
+    <div class="error" id="loginError" style="display:none" role="alert" aria-live="assertive"></div>
 
     <label for="username">Usuario</label>
     <input id="username" name="username" required>
@@ -111,5 +113,65 @@
     <button type="submit">Entrar al sistema</button>
     <div class="hint">Pide al administrador tus credenciales.</div>
   </form>
+
+  <script>
+    (function() {
+      const TOKEN_KEY = "im.auth.token";
+      const USER_KEY = "im.auth.user";
+      const form = document.getElementById("loginForm");
+      const errorBox = document.getElementById("loginError");
+      const usernameInput = document.getElementById("username");
+      const passwordInput = document.getElementById("password");
+
+      function showError(message) {
+        if (!errorBox) return;
+        errorBox.textContent = message;
+        errorBox.style.display = "block";
+      }
+
+      function clearError() {
+        if (!errorBox) return;
+        errorBox.textContent = "";
+        errorBox.style.display = "none";
+      }
+
+      if (!form) return;
+
+      form.addEventListener("submit", async function(event) {
+        event.preventDefault();
+        clearError();
+
+        const username = (usernameInput && usernameInput.value || "").trim();
+        const password = passwordInput && passwordInput.value || "";
+
+        if (!username || !password) {
+          showError("Ingresa usuario y contrasena");
+          return;
+        }
+
+        try {
+          const res = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json"
+            },
+            body: JSON.stringify({ username, password })
+          });
+
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || "No se pudo iniciar sesion");
+          }
+
+          sessionStorage.setItem(TOKEN_KEY, data.token || "");
+          sessionStorage.setItem(USER_KEY, JSON.stringify(data.user || {}));
+          window.location.href = data.redirect || "/";
+        } catch (error) {
+          showError(error.message || "Error de inicio de sesion");
+        }
+      });
+    })();
+  </script>
 </body>
 </html>

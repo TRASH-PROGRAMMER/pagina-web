@@ -416,6 +416,7 @@ async function abrirModalMarco(key) {
 async function cargarImagenDesdeUrl(url) {
     return new Promise(function(resolve, reject) {
         const img = new Image();
+        img.crossOrigin = "anonymous";
         img.onload = function() { resolve(img); };
         img.onerror = reject;
         img.src = url;

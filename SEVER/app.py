@@ -16,9 +16,7 @@ for env_candidate in [
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_session import Session
 from werkzeug.security import generate_password_hash
-from werkzeug.utils import secure_filename
-from uuid import uuid4
-from db import Cliente, Foto, FotoTamano, MarcoDiseno, User, db
+from db import AuthSession, Cliente, Foto, FotoTamano, MarcoDiseno, User, db
 from auth import auth_bp, login_required, role_required
 import cloudinary
 import cloudinary.uploader
@@ -95,12 +93,6 @@ def allowed_frame_file(file_obj):
         return False
 
     return True
-
-
-def _frame_upload_dir():
-    folder = os.path.join(app.root_path, 'static', 'uploads', 'frames')
-    os.makedirs(folder, exist_ok=True)
-    return folder
 
 
 def _thumbnail_url(public_id=None, fallback_url=""):
@@ -227,8 +219,6 @@ with app.app_context():
 
 @app.route('/')
 def home():
-    if session.get('user_id'):
-        return redirect(url_for('auth.redirect_by_role'))
     return render_template('index.html')
 
 
@@ -238,22 +228,16 @@ def seguimiento():
 
 # crea una ruta para la página de administración
 @app.route('/admin')
-@login_required
-@role_required('admin')
 def admin():
     return render_template('admin.html')
 # imprime un mensaje en la consola para indicar que el programa está funcionando
 print("El programa está funcionando")
 @app.route('/operador')
-@login_required
-@role_required('admin', 'operador')
 def operador():
     return render_template('operador.html')
 
 
 @app.route('/cajero')
-@login_required
-@role_required('admin', 'cajero')
 def cajero():
     return render_template('cajero.html')
 @app.route('/api/clientes', methods=['POST'])
@@ -853,13 +837,23 @@ def admin_crear_marco():
     if not allowed_frame_file(archivo):
         return jsonify({"error": "Solo se aceptan archivos PNG o SVG con transparencia"}), 400
 
-    filename = secure_filename(archivo.filename)
-    extension = filename.rsplit('.', 1)[1].lower()
-    unique_name = f"frame_{uuid4().hex}.{extension}"
-    destino = os.path.join(_frame_upload_dir(), unique_name)
-    archivo.save(destino)
+    try:
+        resultado = cloudinary.uploader.upload(
+            archivo,
+            folder="image_manager/frames",
+            resource_type="image",
+            use_filename=False,
+            unique_filename=True,
+            overwrite=False,
+        )
+    except Exception as e:
+        print(f"Error subiendo marco a Cloudinary: {e}")
+        return jsonify({"error": "No se pudo subir el marco. Intenta de nuevo"}), 500
 
-    imagen_url = f"/static/uploads/frames/{unique_name}"
+    imagen_url = resultado.get("secure_url") or ""
+    if not imagen_url:
+        return jsonify({"error": "Cloudinary no devolvio una URL valida"}), 500
+
     marco = MarcoDiseno(nombre=nombre, imagen_url=imagen_url, activo=activo)
     db.session.add(marco)
     db.session.commit()
