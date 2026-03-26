@@ -30,10 +30,11 @@
         margin: 0;
         background: var(--seg-bg);
         color: var(--seg-text);
+        padding: 0 0 24px;
     }
 
     .seg-topbar {
-        width: min(920px, 95%);
+        width: min(980px, 94%);
         margin: 20px auto 0;
         display: flex;
         justify-content: flex-start;
@@ -59,8 +60,8 @@
     }
 
     .seguimiento-wrap {
-        width: min(920px, 95%);
-        margin: 30px auto;
+        width: min(980px, 94%);
+        margin: 24px auto 0;
         background: var(--seg-card);
         border-radius: 18px;
         box-shadow: 0 20px 50px rgba(22, 51, 96, 0.18);
@@ -81,6 +82,12 @@
 
     .seguimiento-body {
         padding: 24px;
+    }
+
+    .seguimiento-body > p {
+        margin: 0 0 14px;
+        color: #2c3953;
+        font-size: 20px;
     }
 
     .seguimiento-estado {
@@ -150,6 +157,13 @@
         margin-top: 4px;
         min-height: 46px;
         font-weight: 700;
+        border-radius: 10px;
+        box-shadow: 0 8px 18px rgba(22, 102, 214, 0.2);
+    }
+
+    .seguimiento-form button:hover {
+        transform: translateY(-1px);
+        opacity: 1;
     }
 
     .seguimiento-form button[disabled] {
@@ -225,10 +239,44 @@
         border-radius: 14px;
         padding: 16px;
         background: #ffffff;
+        display: grid;
+        gap: 10px;
     }
 
     #seguimientoResultado h2 {
-        margin-top: 0;
+        margin: 0;
+        font-size: clamp(28px, 3vw, 36px);
+    }
+
+    .seguimiento-wrap .factura-info {
+        border-bottom: 1px dashed #dbe8ff;
+        padding: 12px 0;
+    }
+
+    .seguimiento-wrap .factura-info-row {
+        padding: 6px 0;
+        color: #445172;
+        gap: 12px;
+    }
+
+    .seguimiento-wrap .factura-body {
+        padding: 4px 0 0;
+    }
+
+    .seguimiento-table-scroll {
+        width: 100%;
+        overflow-x: auto;
+        border-radius: 10px;
+        border: 1px solid #e6eefc;
+    }
+
+    .seguimiento-wrap .factura-tabla {
+        min-width: 560px;
+        background: #fff;
+    }
+
+    .seguimiento-wrap .factura-total {
+        margin-top: 14px;
     }
 
     .pedido-exito-alerta {
@@ -251,6 +299,11 @@
     }
 
     @media (max-width: 680px) {
+        .seg-topbar,
+        .seguimiento-wrap {
+            width: 96%;
+        }
+
         .seguimiento-body,
         .seguimiento-header {
             padding: 16px;
@@ -258,6 +311,53 @@
 
         .seguimiento-form {
             padding: 14px;
+        }
+
+        .seguimiento-body > p {
+            font-size: 17px;
+        }
+
+        #seguimientoResultado {
+            padding: 13px;
+        }
+
+        .seguimiento-wrap .factura-total {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .seguimiento-wrap .factura-total-valor {
+            font-size: 21px;
+        }
+    }
+
+    @media (max-width: 460px) {
+        .seg-topbar {
+            margin-top: 12px;
+        }
+
+        .seg-back-link {
+            font-size: 13px;
+            padding: 7px 12px;
+        }
+
+        .seguimiento-header {
+            padding: 14px;
+        }
+
+        .seguimiento-subtitle {
+            font-size: 14px;
+        }
+
+        .seguimiento-form input {
+            padding: 10px 11px;
+            font-size: 14px;
+        }
+
+        .seguimiento-wrap .factura-tabla {
+            min-width: 500px;
+            font-size: 12px;
         }
     }
 </style>
@@ -411,17 +511,19 @@
         }).join('');
 
         rBody.innerHTML = `
-            <table class="factura-tabla">
-                <thead>
-                    <tr>
-                        <th>Tamano</th>
-                        <th class="text-center">Cant.</th>
-                        <th class="text-right">P/U</th>
-                        <th class="text-right">Subtotal</th>
-                    </tr>
-                </thead>
-                <tbody>${filas || '<tr><td colspan="4" class="text-center">Sin detalle disponible</td></tr>'}</tbody>
-            </table>
+            <div class="seguimiento-table-scroll">
+                <table class="factura-tabla">
+                    <thead>
+                        <tr>
+                            <th>Tamano</th>
+                            <th class="text-center">Cant.</th>
+                            <th class="text-right">P/U</th>
+                            <th class="text-right">Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>${filas || '<tr><td colspan="4" class="text-center">Sin detalle disponible</td></tr>'}</tbody>
+                </table>
+            </div>
             <div class="factura-total">
                 <span>TOTAL ESTIMADO</span>
                 <span class="factura-total-valor">$${Number(pedido.total || 0).toFixed(2)}</span>
