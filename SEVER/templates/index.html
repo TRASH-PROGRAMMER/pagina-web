@@ -19,15 +19,22 @@
     <h2>Subir hasta 150 imágenes en segundos</h2>
     <nav class="instrucciones-pedido" aria-label="Pasos del pedido">
   <h3>📋 ¿Cómo hacer tu pedido?</h3>
-  <ol class="pasos" role="list">
-        <li class="paso"><span class="paso-num" aria-hidden="true">1</span> Sube tus fotos (PNG, JPG o GIF)</li>
-        <li class="paso"><span class="paso-num" aria-hidden="true">2</span> Elige el tamaño base (o activa edición por foto en la galería)</li>
-        <li class="paso"><span class="paso-num" aria-hidden="true">3</span> Selecciona el tipo de papel</li>
-        <li class="paso"><span class="paso-num" aria-hidden="true">4</span> Completa tus datos personales</li>
-        <li class="paso"><span class="paso-num" aria-hidden="true">5</span> Presiona <strong>Revisar pedido</strong> para validar cantidades y precios</li>
-        <li class="paso"><span class="paso-num" aria-hidden="true">6</span> Confirma con <strong>Finalizar pedido</strong> para crear tu orden</li>
-        <li class="paso"><span class="paso-num" aria-hidden="true">7</span> En el modal final, revisa tu resumen y toca <strong>Revisar estado del pedido</strong></li>
-  </ol>
+    <div class="pasos-carousel-wrap" role="region" aria-label="Carrusel de pasos" aria-describedby="pasosCarouselHint">
+        <button type="button" class="pasos-nav pasos-prev" id="pasosPrev" aria-label="Paso anterior">‹</button>
+        <ol class="pasos pasos-carousel" id="pasosCarousel" role="list" tabindex="0">
+            <li class="paso"><span class="paso-num" aria-hidden="true">1</span> Sube tus fotos (PNG, JPG o GIF)</li>
+            <li class="paso"><span class="paso-num" aria-hidden="true">2</span> Elige el tamaño base (o activa edición por foto en la galería)</li>
+            <li class="paso"><span class="paso-num" aria-hidden="true">3</span> Selecciona el tipo de papel</li>
+            <li class="paso"><span class="paso-num" aria-hidden="true">4</span> Completa tus datos personales</li>
+            <li class="paso"><span class="paso-num" aria-hidden="true">5</span> Revisar pedido para validar cantidades y precios</li>
+            <li class="paso"><span class="paso-num" aria-hidden="true">6</span> Confirma a Finalizar pedido para crear tu orden</li>
+            <li class="paso"><span class="paso-num" aria-hidden="true">7</span> Revisa tu resumen dar click a Revisar estado del pedido</li>
+        </ol>
+        <button type="button" class="pasos-nav pasos-next" id="pasosNext" aria-label="Siguiente paso">›</button>
+    </div>
+    <p id="pasosCarouselHint" class="campo-ayuda">Desliza con el dedo en móvil, o usa flechas izquierda/derecha y los botones para navegar.</p>
+    <div class="pasos-dots" id="pasosDots" role="tablist" aria-label="Navegar entre pasos"></div>
+    <p id="pasoActualLive" class="sr-only" aria-live="polite" aria-atomic="true"></p>
 </nav>
     <label for="inputImagenes" class="sr-only"><span>📸</span> imágenes (PNG, JPG o GIF, máx. 150 archivos de 10 MB c/u)</label>
     <input type="file" id="inputImagenes" accept="image/png,image/jpeg,image/gif" multiple
@@ -218,6 +225,7 @@
         <h3 id="frameImageTitle" class="image-action-title">Aplicar marco</h3>
         <div class="frame-preview-stage">
             <img id="frameImagePreview" alt="Vista previa con marco" />
+            <img id="frameOverlayPreview" alt="Superposición del marco" hidden />
         </div>
         <div class="frame-options" id="frameOptions" role="radiogroup" aria-label="Estilos de marco"></div>
         <div class="image-action-buttons">
@@ -240,6 +248,7 @@
 <script src="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.js"></script>
 <script type="module" src="{{ url_for('static', filename='script/formulario_clientes.js') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/precios_fotos.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='script/pasos_carousel.js') }}"></script>
 <script src="{{ url_for('static', filename='script/dark-mode-index.js') }}"></script>
 </body>
 </html>

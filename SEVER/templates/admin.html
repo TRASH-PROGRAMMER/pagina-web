@@ -36,7 +36,7 @@
     </a>
 
     <div class="nav-section-label">Configuración</div>
-    <a class="nav-item" href="#panelOpciones">
+    <a class="nav-item" id="navOpciones" href="#">
       <span class="icon">◈</span> Opciones
     </a>
     <a class="nav-item" href="{{ url_for('home') }}">
@@ -238,42 +238,106 @@
       <nav class="clientes-cards-pagination" id="clientesCardsPagination" aria-label="Paginacion de clientes" hidden></nav>
     </div>
 
-    <div class="panel panel-opciones dashboard-only" id="panelOpciones">
+    <div class="panel panel-opciones" id="panelOpciones" hidden>
       <div class="section-header">
         <div class="section-title">Configuración - Opciones</div>
       </div>
 
-      <form id="formTamano" class="tamano-form" autocomplete="off">
-        <label>
-          Clave
-          <input type="text" id="tamanoClave" placeholder="ej: 12x18" maxlength="50" required>
-        </label>
-        <label>
-          Nombre visible
-          <input type="text" id="tamanoNombre" placeholder="ej: 12x18cm" maxlength="100" required>
-        </label>
-        <label>
-          Precio base
-          <input type="number" id="tamanoPrecio" min="0" step="0.01" placeholder="0.00" required>
-        </label>
-        <button type="submit" class="btn btn-ghost">Guardar tamaño</button>
-      </form>
+      <div class="opciones-accordion" id="opcionesAccordion">
+        <section class="opciones-accordion-item is-open">
+          <button type="button" class="opciones-accordion-trigger" aria-expanded="true" aria-controls="opcionesPanelTamanos">
+            <span>Gestión de tamaños y precios</span>
+            <span class="opciones-accordion-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div class="opciones-accordion-panel" id="opcionesPanelTamanos">
+            <form id="formTamano" class="tamano-form" autocomplete="off">
+              <label>
+                Clave
+                <input type="text" id="tamanoClave" placeholder="ej: 12x18" maxlength="50" required>
+              </label>
+              <label>
+                Nombre visible
+                <input type="text" id="tamanoNombre" placeholder="ej: 12x18cm" maxlength="100" required>
+              </label>
+              <label>
+                Precio base
+                <input type="number" id="tamanoPrecio" min="0" step="0.01" placeholder="0.00" required>
+              </label>
+              <button type="submit" class="btn btn-ghost">Guardar tamaño</button>
+            </form>
 
-      <div id="tamanoMensaje" class="tamano-mensaje" aria-live="polite"></div>
+            <div id="tamanoMensaje" class="tamano-mensaje" aria-live="polite"></div>
 
-      <div class="tamano-table-wrap">
-        <table id="tamanosTable" class="tamanos-table">
-          <thead>
-            <tr>
-              <th>Clave</th>
-              <th>Nombre</th>
-              <th>Precio base</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="tamanosBody"></tbody>
-        </table>
+            <div class="tamano-table-wrap">
+              <table id="tamanosTable" class="tamanos-table">
+                <thead>
+                  <tr>
+                    <th>Clave</th>
+                    <th>Nombre</th>
+                    <th>Precio base</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tamanosBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="opciones-accordion-item">
+          <button type="button" class="opciones-accordion-trigger" aria-expanded="false" aria-controls="opcionesPanelMarcos">
+            <span>Gestión de marcos personalizados</span>
+            <span class="opciones-accordion-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div class="opciones-accordion-panel" id="opcionesPanelMarcos" hidden>
+            <div class="marcos-toolbar">
+              <button type="button" class="btn btn-ghost" id="btnToggleFormMarco">Añadir nuevo marco</button>
+            </div>
+
+            <form id="formMarco" class="marco-form" autocomplete="off" enctype="multipart/form-data" hidden>
+              <label>
+                Nombre del diseño
+                <input type="text" id="marcoNombre" maxlength="120" placeholder="Ej: Navidad Clásico" required>
+              </label>
+              <label>
+                Subir imagen del marco (PNG/SVG)
+                <input type="file" id="marcoImagen" accept=".png,.svg,image/png,image/svg+xml" required>
+              </label>
+
+              <label class="switch-field" for="marcoActivo">
+                <span>Estado (Activo / Inactivo)</span>
+                <span class="switch-toggle-wrap">
+                  <input type="checkbox" id="marcoActivo" checked>
+                  <span class="switch-toggle" aria-hidden="true"></span>
+                </span>
+              </label>
+
+              <div class="marco-form-actions">
+                <button type="submit" class="btn btn-ghost">Guardar marco</button>
+                <button type="button" class="tamano-btn" id="cancelFormMarco">Cancelar</button>
+              </div>
+              <p class="marco-ayuda">Solo se aceptan archivos con transparencia (PNG o SVG).</p>
+            </form>
+
+            <div id="marcoMensaje" class="tamano-mensaje" aria-live="polite"></div>
+
+            <div class="tamano-table-wrap">
+              <table id="marcosTable" class="tamanos-table">
+                <thead>
+                  <tr>
+                    <th>Vista</th>
+                    <th>Diseño</th>
+                    <th>Formato</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="marcosBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -464,6 +528,42 @@
   .panel-opciones {
     margin-top: 18px;
   }
+  .opciones-accordion {
+    display: grid;
+    gap: 10px;
+  }
+  .opciones-accordion-item {
+    border: 1px solid #2a2a3a;
+    border-radius: 10px;
+    background: #0f1018;
+    overflow: hidden;
+  }
+  .opciones-accordion-trigger {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #171829;
+    border: none;
+    color: #e8e8f0;
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 12px 14px;
+    cursor: pointer;
+  }
+  .opciones-accordion-chevron {
+    transition: transform .2s ease;
+    color: #7c6cfc;
+  }
+  .opciones-accordion-item.is-open .opciones-accordion-chevron {
+    transform: rotate(180deg);
+  }
+  .opciones-accordion-panel {
+    padding: 12px 12px 14px;
+    border-top: 1px solid #2a2a3a;
+  }
   .tamano-form {
     display: grid;
     grid-template-columns: 1fr 2fr 1fr auto;
@@ -491,6 +591,128 @@
     margin: 10px 0 4px;
     color: #9ca3b0;
     font-size: 13px;
+  }
+  .marcos-toolbar {
+    margin-top: 10px;
+  }
+  .marco-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px dashed #2a2a3a;
+    border-radius: 10px;
+    background: #111321;
+  }
+  .marco-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #9ca3b0;
+    font-size: 12px;
+  }
+  .marco-form input[type="text"],
+  .marco-form input[type="file"] {
+    background: #12121c;
+    border: 1px solid #2a2a3a;
+    color: #e8e8f0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .switch-field {
+    grid-column: 1 / span 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #12121c;
+  }
+  .switch-toggle-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .switch-toggle-wrap input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
+  .switch-toggle {
+    position: relative;
+    width: 46px;
+    height: 26px;
+    border-radius: 999px;
+    border: 1px solid #3a3b56;
+    background: #1a1a28;
+    transition: background .2s ease;
+  }
+  .switch-toggle::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #d9dbeb;
+    transition: transform .2s ease;
+  }
+  .switch-toggle-wrap input:checked + .switch-toggle {
+    background: rgba(34, 197, 94, 0.25);
+    border-color: #1f8a48;
+  }
+  .switch-toggle-wrap input:checked + .switch-toggle::after {
+    transform: translateX(20px);
+    background: #7bf0a7;
+  }
+  .marco-form-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .marco-form-actions,
+  .marco-ayuda {
+    grid-column: 1 / span 2;
+  }
+  .marco-ayuda {
+    margin: 0;
+    color: #9ca3b0;
+    font-size: 12px;
+  }
+  .marco-thumb {
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+    border-radius: 8px;
+    border: 1px solid #2a2a3a;
+    background: #0d0f1a;
+    padding: 4px;
+  }
+  .estado-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 4px 9px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    border: 1px solid transparent;
+  }
+  .estado-chip.activo {
+    color: #b7ffd0;
+    border-color: #1f8a48;
+    background: rgba(34, 197, 94, 0.18);
+  }
+  .estado-chip.inactivo {
+    color: #ffd4d4;
+    border-color: #8b3737;
+    background: rgba(239, 68, 68, 0.16);
   }
   .tamano-table-wrap {
     overflow-x: auto;
@@ -557,6 +779,14 @@
   @media (max-width: 900px) {
     .tamano-form {
       grid-template-columns: 1fr 1fr;
+    }
+    .marco-form {
+      grid-template-columns: 1fr;
+    }
+    .switch-field,
+    .marco-form-actions,
+    .marco-ayuda {
+      grid-column: auto;
     }
   }
 

@@ -63,6 +63,37 @@
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     }
 
+    .pasos-carousel-wrap {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .pasos-nav {
+        display: none;
+    }
+
+    .pasos-carousel .paso {
+        flex-basis: calc(100% - 4px);
+        font-size: 13px;
+        padding: 12px 14px;
+        line-height: 1.5;
+        min-height: 70px;
+    }
+
+    .pasos-dots {
+        gap: 10px;
+        margin-top: 16px;
+    }
+
+    .pasos-dot {
+        width: 14px;
+        height: 14px;
+    }
+
+    .pasos-dot[aria-selected="true"] {
+        width: 32px;
+    }
+
     /* Choice chips solo en móvil */
     .tamano-select-native {
         position: absolute;
@@ -120,6 +151,67 @@
         font-size: 22px;
     }
 
+    .factura-overlay {
+        padding: 8px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        align-items: flex-start;
+    }
+
+    .factura-modal,
+    .pedido-exito-modal {
+        width: 100%;
+        max-width: 100%;
+        max-height: calc(100dvh - 16px);
+        margin: 0;
+        border-radius: 14px;
+        overflow: hidden;
+    }
+
+    .factura-header {
+        padding: 14px 16px;
+    }
+
+    .factura-title {
+        font-size: 20px;
+        line-height: 1.2;
+        padding-right: 34px;
+    }
+
+    .factura-info,
+    .factura-body,
+    .factura-footer-note {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    .factura-body {
+        padding-bottom: 14px;
+        overflow-x: auto;
+        max-height: 48dvh;
+    }
+
+    .factura-tabla {
+        min-width: 420px;
+    }
+
+    .factura-total {
+        gap: 8px;
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .factura-total-valor {
+        font-size: 22px;
+    }
+
+    .pedido-exito-alerta {
+        margin: 4px 14px 0;
+        padding: 10px 12px;
+        font-size: 12px;
+        line-height: 1.35;
+    }
+
     .pedido-exito-actions {
         padding: 12px 14px 16px;
     }
@@ -135,6 +227,23 @@
 }
 
 @media (max-width: 420px) {
+    .factura-title {
+        font-size: 18px;
+    }
+
+    .factura-close {
+        top: 10px;
+        right: 10px;
+        width: 30px;
+        height: 30px;
+        font-size: 20px;
+    }
+
+    .factura-tabla {
+        min-width: 380px;
+        font-size: 12px;
+    }
+
     .tamano-choice-chips .choice-chip {
         flex: 1 1 calc(50% - 8px);
         min-width: 0;

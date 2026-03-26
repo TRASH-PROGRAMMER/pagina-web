@@ -42,6 +42,18 @@ class FotoTamano(db.Model):
                               server_default=func.now(), onupdate=func.now())
 
 
+class MarcoDiseno(db.Model):
+    __tablename__ = 'marcos_diseno'
+    id            = db.Column(db.Integer, primary_key=True)
+    nombre        = db.Column(db.String(120), nullable=False)
+    imagen_url    = db.Column(db.String(500), nullable=False)
+    activo        = db.Column(db.Boolean, nullable=False, default=True)
+    created_at    = db.Column(db.DateTime(timezone=True), nullable=False,
+                              server_default=func.now())
+    updated_at    = db.Column(db.DateTime(timezone=True), nullable=False,
+                              server_default=func.now(), onupdate=func.now())
+
+
 class User(db.Model):
     __tablename__ = 'users'
     id            = db.Column(db.Integer, primary_key=True)

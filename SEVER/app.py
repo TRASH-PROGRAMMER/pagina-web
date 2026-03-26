@@ -16,7 +16,9 @@ for env_candidate in [
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_session import Session
 from werkzeug.security import generate_password_hash
-from db import Cliente, Foto, FotoTamano, User, db
+from werkzeug.utils import secure_filename
+from uuid import uuid4
+from db import Cliente, Foto, FotoTamano, MarcoDiseno, User, db
 from auth import auth_bp, login_required, role_required
 import cloudinary
 import cloudinary.uploader
@@ -56,6 +58,8 @@ cloudinary.config(
 )
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+FRAME_ALLOWED_EXTENSIONS = {'png', 'svg'}
+FRAME_ALLOWED_MIMETYPES = {'image/png', 'image/svg+xml'}
 
 DEFAULT_TAMANOS = [
     {"clave": "instax", "nombre": "Instax (5x8cm)", "precio_base": 0.00},
@@ -73,6 +77,30 @@ DEFAULT_TAMANOS = [
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def allowed_frame_file(file_obj):
+    if not file_obj or not file_obj.filename:
+        return False
+
+    if '.' not in file_obj.filename:
+        return False
+
+    extension = file_obj.filename.rsplit('.', 1)[1].lower()
+    if extension not in FRAME_ALLOWED_EXTENSIONS:
+        return False
+
+    mime = (file_obj.mimetype or '').lower().strip()
+    if mime and mime not in FRAME_ALLOWED_MIMETYPES:
+        return False
+
+    return True
+
+
+def _frame_upload_dir():
+    folder = os.path.join(app.root_path, 'static', 'uploads', 'frames')
+    os.makedirs(folder, exist_ok=True)
+    return folder
 
 
 def _thumbnail_url(public_id=None, fallback_url=""):
@@ -93,6 +121,17 @@ def _thumbnail_url(public_id=None, fallback_url=""):
         except Exception as e:
             print(f"Error creando thumbnail para {public_id}: {e}")
     return fallback_url or ""
+
+
+def _marco_to_dict(marco):
+    return {
+        "id": marco.id,
+        "nombre": marco.nombre,
+        "imagen_url": marco.imagen_url,
+        "activo": bool(marco.activo),
+        "created_at": marco.created_at.isoformat() if marco.created_at else None,
+        "updated_at": marco.updated_at.isoformat() if marco.updated_at else None,
+    }
 
 db.init_app(app)
 app.register_blueprint(auth_bp)
@@ -126,6 +165,16 @@ with app.app_context():
             "ALTER TABLE foto_tamanos ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT TRUE"))
         conn.execute(db.text(
             "ALTER TABLE foto_tamanos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"))
+        conn.execute(db.text(
+            "ALTER TABLE marcos_diseno ADD COLUMN IF NOT EXISTS nombre VARCHAR(120)"))
+        conn.execute(db.text(
+            "ALTER TABLE marcos_diseno ADD COLUMN IF NOT EXISTS imagen_url VARCHAR(500)"))
+        conn.execute(db.text(
+            "ALTER TABLE marcos_diseno ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT TRUE"))
+        conn.execute(db.text(
+            "ALTER TABLE marcos_diseno ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()"))
+        conn.execute(db.text(
+            "ALTER TABLE marcos_diseno ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"))
         conn.commit()
 
     # Seed inicial de tamanos si la tabla está vacía
@@ -449,6 +498,11 @@ def _catalogo_version():
     return row.isoformat() if row else "0"
 
 
+def _catalogo_marcos_version():
+    row = db.session.query(db.func.max(MarcoDiseno.updated_at)).scalar()
+    return row.isoformat() if row else "0"
+
+
 def _precio_base_tamano(clave):
     t = FotoTamano.query.filter_by(clave=clave, activo=True).first()
     if t:
@@ -759,6 +813,82 @@ def admin_desactivar_tamano(tamano_id):
     t.activo = False
     db.session.commit()
     return jsonify({"tamano": _tamano_to_dict(t), "version": _catalogo_version()}), 200
+
+
+@app.route('/api/marcos', methods=['GET'])
+def obtener_marcos_publicos():
+    marcos = MarcoDiseno.query.filter_by(activo=True).order_by(MarcoDiseno.id.desc()).all()
+    return jsonify({
+        "version": _catalogo_marcos_version(),
+        "marcos": [_marco_to_dict(m) for m in marcos],
+    }), 200
+
+
+@app.route('/api/admin/marcos', methods=['GET'])
+@login_required
+@role_required('admin')
+def admin_listar_marcos():
+    marcos = MarcoDiseno.query.order_by(MarcoDiseno.id.desc()).all()
+    return jsonify({
+        "version": _catalogo_marcos_version(),
+        "marcos": [_marco_to_dict(m) for m in marcos],
+    }), 200
+
+
+@app.route('/api/admin/marcos', methods=['POST'])
+@login_required
+@role_required('admin')
+def admin_crear_marco():
+    nombre = (request.form.get('nombre') or '').strip()
+    archivo = request.files.get('imagen')
+    estado_raw = (request.form.get('activo') or 'true').strip().lower()
+    activo = estado_raw in {'true', '1', 'on', 'si', 'sí'}
+
+    if not nombre:
+        return jsonify({"error": "El nombre del diseño es requerido"}), 400
+
+    if not archivo or not archivo.filename:
+        return jsonify({"error": "La imagen del marco es requerida"}), 400
+
+    if not allowed_frame_file(archivo):
+        return jsonify({"error": "Solo se aceptan archivos PNG o SVG con transparencia"}), 400
+
+    filename = secure_filename(archivo.filename)
+    extension = filename.rsplit('.', 1)[1].lower()
+    unique_name = f"frame_{uuid4().hex}.{extension}"
+    destino = os.path.join(_frame_upload_dir(), unique_name)
+    archivo.save(destino)
+
+    imagen_url = f"/static/uploads/frames/{unique_name}"
+    marco = MarcoDiseno(nombre=nombre, imagen_url=imagen_url, activo=activo)
+    db.session.add(marco)
+    db.session.commit()
+
+    return jsonify({
+        "marco": _marco_to_dict(marco),
+        "version": _catalogo_marcos_version(),
+    }), 201
+
+
+@app.route('/api/admin/marcos/<int:marco_id>/estado', methods=['PATCH'])
+@login_required
+@role_required('admin')
+def admin_actualizar_estado_marco(marco_id):
+    marco = db.session.get(MarcoDiseno, marco_id)
+    if not marco:
+        return jsonify({"error": "Marco no encontrado"}), 404
+
+    data = request.get_json() or {}
+    if 'activo' not in data:
+        return jsonify({"error": "Campo activo requerido"}), 400
+
+    marco.activo = bool(data.get('activo'))
+    db.session.commit()
+
+    return jsonify({
+        "marco": _marco_to_dict(marco),
+        "version": _catalogo_marcos_version(),
+    }), 200
 
 
 @app.route('/api/precios', methods=['POST'])

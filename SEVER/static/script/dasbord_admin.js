@@ -15,6 +15,7 @@ clienteChannel.onmessage = function(event) {
 };
 
 let tamanosAdmin = [];
+let marcosAdmin = [];
 let tamanoEditandoId = null;
 let clientesCache = [];
 let fotosModalActuales = [];
@@ -32,10 +33,24 @@ function mostrarMensajeTamano(texto, ok = true) {
     msg.style.color = ok ? "#22c55e" : "#ff7a7a";
 }
 
+function mostrarMensajeMarco(texto, ok = true) {
+    const msg = document.getElementById("marcoMensaje");
+    if (!msg) return;
+    msg.textContent = texto;
+    msg.style.color = ok ? "#22c55e" : "#ff7a7a";
+}
+
 function formatearPrecio(valor) {
     const n = Number(valor);
     if (Number.isNaN(n)) return "0.00";
     return n.toFixed(2);
+}
+
+function extensionMarcoDesdeUrl(url) {
+    const path = String(url || "").split("?")[0];
+    const partes = path.split(".");
+    if (partes.length < 2) return "-";
+    return (partes.pop() || "-").toUpperCase();
 }
 
 function setActiveNav(navId) {
@@ -49,19 +64,47 @@ function setActiveNav(navId) {
 function setAdminMainView(view) {
     const dashboardBlocks = document.querySelectorAll(".dashboard-only");
     const clientesSection = document.getElementById("clientesCardsContainer");
+    const opcionesSection = document.getElementById("panelOpciones");
     const title = document.querySelector(".topbar-title");
 
     if (view === "clientes") {
         dashboardBlocks.forEach(function(el) { el.classList.add("dashboard-hidden"); });
         if (clientesSection) clientesSection.hidden = false;
+        if (opcionesSection) opcionesSection.hidden = true;
         if (title) title.innerHTML = "<span>Clientes</span> / Vista en tarjetas";
         setActiveNav("navClientes");
+    } else if (view === "opciones") {
+        dashboardBlocks.forEach(function(el) { el.classList.add("dashboard-hidden"); });
+        if (clientesSection) clientesSection.hidden = true;
+        if (opcionesSection) opcionesSection.hidden = false;
+        if (title) title.innerHTML = "<span>Configuracion</span> / Opciones";
+        setActiveNav("navOpciones");
     } else {
         dashboardBlocks.forEach(function(el) { el.classList.remove("dashboard-hidden"); });
         if (clientesSection) clientesSection.hidden = true;
+        if (opcionesSection) opcionesSection.hidden = true;
         if (title) title.innerHTML = "<span>Dashboard</span> / Vista general";
         setActiveNav("navDashboard");
     }
+}
+
+function initOpcionesAccordion() {
+    const triggers = document.querySelectorAll(".opciones-accordion-trigger");
+    if (!triggers.length) return;
+
+    triggers.forEach(function(trigger) {
+        const panelId = trigger.getAttribute("aria-controls");
+        const panel = panelId ? document.getElementById(panelId) : null;
+        const item = trigger.closest(".opciones-accordion-item");
+        if (!panel || !item) return;
+
+        trigger.addEventListener("click", function() {
+            const isOpen = item.classList.contains("is-open");
+            item.classList.toggle("is-open", !isOpen);
+            trigger.setAttribute("aria-expanded", isOpen ? "false" : "true");
+            panel.hidden = isOpen;
+        });
+    });
 }
 
 function renderClienteCard(c) {
@@ -265,6 +308,103 @@ async function cargarTamanosAdmin() {
     } catch (error) {
         console.error("Error cargando tamaños:", error);
         mostrarMensajeTamano(error.message, false);
+    }
+}
+
+function setFormMarcoVisible(visible) {
+    const form = document.getElementById("formMarco");
+    const btn = document.getElementById("btnToggleFormMarco");
+    if (!form || !btn) return;
+
+    form.hidden = !visible;
+    btn.textContent = visible ? "Ocultar formulario" : "Añadir nuevo marco";
+}
+
+function renderMarcosAdmin() {
+    const tbody = document.getElementById("marcosBody");
+    if (!tbody) return;
+
+    tbody.innerHTML = "";
+
+    marcosAdmin.forEach(function(marco) {
+        const tr = document.createElement("tr");
+
+        const tdPreview = document.createElement("td");
+        const img = document.createElement("img");
+        img.className = "marco-thumb";
+        img.src = marco.imagen_url;
+        img.alt = `Marco ${marco.nombre}`;
+        img.loading = "lazy";
+        tdPreview.appendChild(img);
+
+        const tdNombre = document.createElement("td");
+        tdNombre.textContent = marco.nombre;
+
+        const tdFormato = document.createElement("td");
+        tdFormato.textContent = extensionMarcoDesdeUrl(marco.imagen_url);
+
+        const tdEstado = document.createElement("td");
+        const chip = document.createElement("span");
+        chip.className = `estado-chip ${marco.activo ? "activo" : "inactivo"}`;
+        chip.textContent = marco.activo ? "Activo" : "Inactivo";
+        tdEstado.appendChild(chip);
+
+        const tdAcciones = document.createElement("td");
+        const wrap = document.createElement("div");
+        wrap.className = "tamano-actions";
+
+        const estadoBtn = document.createElement("button");
+        estadoBtn.type = "button";
+        estadoBtn.className = marco.activo ? "tamano-btn danger" : "tamano-btn";
+        estadoBtn.textContent = marco.activo ? "Desactivar" : "Activar";
+        estadoBtn.addEventListener("click", function() {
+            cambiarEstadoMarco(marco.id, !marco.activo);
+        });
+
+        wrap.appendChild(estadoBtn);
+        tdAcciones.appendChild(wrap);
+
+        tr.appendChild(tdPreview);
+        tr.appendChild(tdNombre);
+        tr.appendChild(tdFormato);
+        tr.appendChild(tdEstado);
+        tr.appendChild(tdAcciones);
+        tbody.appendChild(tr);
+    });
+}
+
+async function cargarMarcosAdmin() {
+    const tbody = document.getElementById("marcosBody");
+    if (!tbody) return;
+
+    try {
+        const res = await fetch("/api/admin/marcos");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudieron cargar los marcos");
+
+        marcosAdmin = Array.isArray(data.marcos) ? data.marcos : [];
+        renderMarcosAdmin();
+    } catch (error) {
+        console.error("Error cargando marcos:", error);
+        mostrarMensajeMarco(error.message, false);
+    }
+}
+
+async function cambiarEstadoMarco(id, activo) {
+    try {
+        const res = await fetch(`/api/admin/marcos/${id}/estado`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ activo })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudo actualizar el estado del marco");
+
+        mostrarMensajeMarco(`Marco ${activo ? "activado" : "desactivado"}`);
+        await cargarMarcosAdmin();
+    } catch (error) {
+        console.error("Error actualizando estado del marco:", error);
+        mostrarMensajeMarco(error.message, false);
     }
 }
 
@@ -822,6 +962,7 @@ document.addEventListener("DOMContentLoaded", async function() {
     const navDashboard = document.getElementById("navDashboard");
     const navPedidos = document.getElementById("navPedidos");
     const navClientes = document.getElementById("navClientes");
+    const navOpciones = document.getElementById("navOpciones");
 
     if (navDashboard) {
         navDashboard.addEventListener("click", function(e) {
@@ -847,6 +988,13 @@ document.addEventListener("DOMContentLoaded", async function() {
             } else {
                 renderClientesCards(clientesCache);
             }
+        });
+    }
+
+    if (navOpciones) {
+        navOpciones.addEventListener("click", function(e) {
+            e.preventDefault();
+            setAdminMainView("opciones");
         });
     }
 
@@ -905,6 +1053,73 @@ document.addEventListener("DOMContentLoaded", async function() {
         });
     }
 
+    const btnToggleFormMarco = document.getElementById("btnToggleFormMarco");
+    const cancelFormMarco = document.getElementById("cancelFormMarco");
+    const formMarco = document.getElementById("formMarco");
+
+    if (btnToggleFormMarco) {
+        btnToggleFormMarco.addEventListener("click", function() {
+            const visible = !!(formMarco && !formMarco.hidden);
+            setFormMarcoVisible(!visible);
+        });
+    }
+
+    if (cancelFormMarco) {
+        cancelFormMarco.addEventListener("click", function() {
+            if (formMarco) formMarco.reset();
+            const activo = document.getElementById("marcoActivo");
+            if (activo) activo.checked = true;
+            setFormMarcoVisible(false);
+        });
+    }
+
+    if (formMarco) {
+        formMarco.addEventListener("submit", async function(e) {
+            e.preventDefault();
+
+            const nombre = (document.getElementById("marcoNombre")?.value || "").trim();
+            const inputImagen = document.getElementById("marcoImagen");
+            const activo = !!document.getElementById("marcoActivo")?.checked;
+            const archivo = inputImagen && inputImagen.files ? inputImagen.files[0] : null;
+
+            if (!nombre || !archivo) {
+                mostrarMensajeMarco("Completa el nombre y selecciona un archivo PNG o SVG", false);
+                return;
+            }
+
+            const nombreArchivo = (archivo.name || "").toLowerCase();
+            const esPngOSvg = nombreArchivo.endsWith(".png") || nombreArchivo.endsWith(".svg");
+            if (!esPngOSvg) {
+                mostrarMensajeMarco("Solo se aceptan marcos en formato PNG o SVG", false);
+                return;
+            }
+
+            try {
+                const payload = new FormData();
+                payload.append("nombre", nombre);
+                payload.append("imagen", archivo);
+                payload.append("activo", activo ? "true" : "false");
+
+                const res = await fetch("/api/admin/marcos", {
+                    method: "POST",
+                    body: payload
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || "No se pudo guardar el marco");
+
+                formMarco.reset();
+                const activoInput = document.getElementById("marcoActivo");
+                if (activoInput) activoInput.checked = true;
+                setFormMarcoVisible(false);
+                mostrarMensajeMarco("Marco guardado correctamente");
+                await cargarMarcosAdmin();
+            } catch (error) {
+                console.error("Error guardando marco:", error);
+                mostrarMensajeMarco(error.message, false);
+            }
+        });
+    }
+
     const formEditTamano = document.getElementById("formEditTamano");
     const editTamanoClose = document.getElementById("editTamanoClose");
     const editTamanoCancel = document.getElementById("editTamanoCancel");
@@ -949,6 +1164,10 @@ document.addEventListener("DOMContentLoaded", async function() {
     }
 
     await cargarTamanosAdmin();
+    await cargarMarcosAdmin();
+    setFormMarcoVisible(false);
+    initOpcionesAccordion();
+    setAdminMainView("dashboard");
 });
 
 // ─── Exponer funciones al scope global (usadas en onclick del HTML) ───────────
@@ -962,6 +1181,7 @@ window.cerrarModal   = cerrarModal;
 window.editarTamano  = editarTamano;
 window.desactivarTamano = desactivarTamano;
 window.activarTamano = activarTamano;
+window.cambiarEstadoMarco = cambiarEstadoMarco;
 
 // ─── Chart.js: Pedidos últimos 7 días (tiempo real) ──────────────────────────
 let pedidosChart = null;

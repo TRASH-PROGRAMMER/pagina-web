@@ -21,10 +21,12 @@ const pedidoSpinnerOverlay = document.getElementById("pedidoSpinnerOverlay");
 const btnFinalizarPedido = document.getElementById("btnFinalizarPedido");
 const cropImageModal = document.getElementById("cropImageModal");
 const cropImageTarget = document.getElementById("cropImageTarget");
+const cropImageHelp = cropImageModal ? cropImageModal.querySelector(".image-action-help") : null;
 const cancelCropBtn = document.getElementById("cancelCropBtn");
 const applyCropBtn = document.getElementById("applyCropBtn");
 const frameImageModal = document.getElementById("frameImageModal");
 const frameImagePreview = document.getElementById("frameImagePreview");
+const frameOverlayPreview = document.getElementById("frameOverlayPreview");
 const frameOptions = document.getElementById("frameOptions");
 const cancelFrameBtn = document.getElementById("cancelFrameBtn");
 const applyFrameAllBtn = document.getElementById("applyFrameAllBtn");
@@ -44,13 +46,19 @@ const pedidoExitoMasFotos = document.getElementById("pedidoExitoMasFotos");
 const asignacionesPorFoto = new Map();
 const edicionesPorFoto = new Map();
 const previewUrlPorFoto = new Map();
-const frameCatalogo = [
+const frameCatalogoBase = [
     { value: "none", label: "🚫 Ninguno" },
     { value: "polaroid", label: "📸 Polaroid" },
     { value: "gold", label: "🏆 Dorado" },
     { value: "dark", label: "⬛ Oscuro" },
     { value: "museum", label: "🖼️ Museo" },
 ];
+let frameCatalogo = frameCatalogoBase.slice();
+const imagenesMarcosCache = new Map();
+const proporcionesTamanoFijas = Object.freeze({
+    instax: 5 / 8,
+    polaroid: 1,
+});
 
 let cropperInstance = null;
 let fotoKeyEnEdicion = "";
@@ -204,9 +212,57 @@ function destruirCropper() {
     }
 }
 
+function esMarcoPersonalizado(frameValue) {
+    return String(frameValue || "").startsWith("custom:");
+}
+
+function obtenerMarcoCatalogo(frameValue) {
+    return frameCatalogo.find(function(item) {
+        return item.value === frameValue;
+    }) || null;
+}
+
+async function cargarMarcosPersonalizados() {
+    try {
+        const res = await fetch("/api/marcos");
+        if (!res.ok) {
+            throw new Error("No se pudo cargar el catalogo de marcos");
+        }
+
+        const data = await res.json();
+        const marcos = Array.isArray(data.marcos) ? data.marcos : [];
+        const marcosDinamicos = marcos.map(function(m) {
+            return {
+                value: `custom:${m.id}`,
+                label: `✨ ${m.nombre}`,
+                imageUrl: m.imagen_url,
+                kind: "custom",
+            };
+        });
+
+        frameCatalogo = frameCatalogoBase.concat(marcosDinamicos);
+    } catch (_error) {
+        // Mantiene el catálogo base si la API no está disponible.
+        frameCatalogo = frameCatalogoBase.slice();
+    }
+}
+
 function actualizarClaseMarcoPreview(frameValue) {
     if (!frameImagePreview) return;
-    frameImagePreview.dataset.frame = frameValue;
+
+    const marco = obtenerMarcoCatalogo(frameValue);
+    const personalizado = !!(marco && marco.kind === "custom");
+    frameImagePreview.dataset.frame = personalizado ? "none" : frameValue;
+
+    if (frameOverlayPreview) {
+        if (personalizado && marco.imageUrl) {
+            frameOverlayPreview.src = marco.imageUrl;
+            frameOverlayPreview.hidden = false;
+        } else {
+            frameOverlayPreview.hidden = true;
+            frameOverlayPreview.removeAttribute("src");
+        }
+    }
 }
 
 function renderOpcionesMarco(frameActual) {
@@ -223,7 +279,7 @@ function renderOpcionesMarco(frameActual) {
         const isActive = item.value === frameActual;
         btn.classList.toggle("is-active", isActive);
         btn.setAttribute("aria-checked", isActive ? "true" : "false");
-        btn.setAttribute("aria-label", `Marco ${item.label}`);
+        btn.setAttribute("aria-label", `Marco ${item.label.replace(/[^\w\sáéíóúÁÉÍÓÚñÑ-]/g, "").trim()}`);
 
         btn.addEventListener("click", function() {
             frameSeleccionadoTemporal = item.value;
@@ -235,10 +291,73 @@ function renderOpcionesMarco(frameActual) {
     });
 }
 
+function obtenerTamanoSeleccionadoParaFoto(key) {
+    if (!key) return obtenerTamanoBaseSeleccionado();
+
+    const tamanoPorFoto = asignacionesPorFoto.get(key);
+    if (tamanoPorFoto) return tamanoPorFoto;
+
+    return obtenerTamanoBaseSeleccionado();
+}
+
+function obtenerRelacionTamano(claveTamano) {
+    const clave = String(claveTamano || "").trim().toLowerCase();
+    if (!clave) return null;
+
+    if (Object.prototype.hasOwnProperty.call(proporcionesTamanoFijas, clave)) {
+        return proporcionesTamanoFijas[clave];
+    }
+
+    const match = clave.match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/i);
+    if (!match) return null;
+
+    const ancho = Number(match[1]);
+    const alto = Number(match[2]);
+    if (!Number.isFinite(ancho) || !Number.isFinite(alto) || ancho <= 0 || alto <= 0) {
+        return null;
+    }
+
+    return ancho / alto;
+}
+
+function ajustarRelacionSegunOrientacion(relacion, ancho, alto) {
+    if (!Number.isFinite(relacion) || relacion <= 0) return NaN;
+    if (!Number.isFinite(ancho) || !Number.isFinite(alto) || ancho <= 0 || alto <= 0) {
+        return relacion;
+    }
+
+    if (ancho >= alto && relacion < 1) {
+        return 1 / relacion;
+    }
+    if (alto > ancho && relacion > 1) {
+        return 1 / relacion;
+    }
+
+    return relacion;
+}
+
+function nombreTamanoPorClave(claveTamano) {
+    const clave = String(claveTamano || "").trim();
+    if (!clave || !tamanoSelect) return clave;
+
+    const option = Array.from(tamanoSelect.options).find(function(opt) {
+        return opt.value === clave;
+    });
+    return option ? option.textContent : clave;
+}
+
 function abrirModalRecorte(key) {
     const file = obtenerArchivoPorKey(key);
     if (!file || !cropImageTarget || typeof Cropper === "undefined") {
         errorMessage.textContent = "No se pudo abrir el recorte. Recarga la pagina e intenta de nuevo.";
+        errorMessage.style.color = "red";
+        return;
+    }
+
+    const tamanoClave = obtenerTamanoSeleccionadoParaFoto(key);
+    const relacionBase = obtenerRelacionTamano(tamanoClave);
+    if (!tamanoClave || !Number.isFinite(relacionBase) || relacionBase <= 0) {
+        errorMessage.textContent = "Selecciona un tamano valido antes de recortar para mantener la proporcion.";
         errorMessage.style.color = "red";
         return;
     }
@@ -249,8 +368,20 @@ function abrirModalRecorte(key) {
     destruirCropper();
     cropImageTarget.onload = function() {
         destruirCropper();
+        const relacionFinal = ajustarRelacionSegunOrientacion(
+            relacionBase,
+            cropImageTarget.naturalWidth,
+            cropImageTarget.naturalHeight
+        );
+
+        if (cropImageHelp) {
+            const tamanoNombre = nombreTamanoPorClave(tamanoClave);
+            cropImageHelp.textContent = `Recorte proporcional bloqueado a ${tamanoNombre}. Arrastra para mover el encuadre y usa la rueda para hacer zoom.`;
+        }
+
         cropperInstance = new Cropper(cropImageTarget, {
             viewMode: 1,
+            aspectRatio: relacionFinal,
             dragMode: "move",
             autoCropArea: 0.86,
             responsive: true,
@@ -266,13 +397,16 @@ function abrirModalRecorte(key) {
     abrirModal(cropImageModal);
 }
 
-function abrirModalMarco(key) {
+async function abrirModalMarco(key) {
     const file = obtenerArchivoPorKey(key);
     if (!file || !frameImagePreview) return;
 
+    await cargarMarcosPersonalizados();
+
     fotoKeyEnEdicion = key;
     const edit = edicionesPorFoto.get(key);
-    frameSeleccionadoTemporal = edit && edit.frame ? edit.frame : "none";
+    const frameEditado = edit && edit.frame ? edit.frame : "none";
+    frameSeleccionadoTemporal = obtenerMarcoCatalogo(frameEditado) ? frameEditado : "none";
     frameImagePreview.src = obtenerPreviewFoto(file);
     actualizarClaseMarcoPreview(frameSeleccionadoTemporal);
     renderOpcionesMarco(frameSeleccionadoTemporal);
@@ -286,6 +420,19 @@ async function cargarImagenDesdeUrl(url) {
         img.onerror = reject;
         img.src = url;
     });
+}
+
+async function cargarImagenMarcoConCache(url) {
+    if (!url) {
+        throw new Error("URL de marco no disponible");
+    }
+    if (imagenesMarcosCache.has(url)) {
+        return imagenesMarcosCache.get(url);
+    }
+
+    const imagen = await cargarImagenDesdeUrl(url);
+    imagenesMarcosCache.set(url, imagen);
+    return imagen;
 }
 
 async function blobDesdeCanvas(canvas, tipo = "image/jpeg", calidad = 0.92) {
@@ -308,6 +455,24 @@ async function aplicarMarcoABlob(baseBlob, frameValue, tipoMime) {
         const img = await cargarImagenDesdeUrl(srcUrl);
         const canvas = document.createElement("canvas");
         const ctx = canvas.getContext("2d");
+        if (!ctx) return baseBlob;
+
+        const marco = obtenerMarcoCatalogo(frameValue);
+        if (marco && marco.kind === "custom" && marco.imageUrl) {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            try {
+                const overlay = await cargarImagenMarcoConCache(marco.imageUrl);
+                ctx.drawImage(overlay, 0, 0, canvas.width, canvas.height);
+            } catch (_error) {
+                return baseBlob;
+            }
+
+            return await blobDesdeCanvas(canvas, tipoMime);
+        }
+
         let pad = 0;
         let bottomExtra = 0;
 
@@ -762,6 +927,7 @@ if (toggleAsignacionFotos) {
 window.obtenerResumenTamanosAsignados = obtenerResumenTamanosAsignados;
 window.usaAsignacionPorFoto = usaAsignacionPorFoto;
 autoDetectarPaisInicial();
+cargarMarcosPersonalizados();
 actualizarVisibilidadAsignacion();
 actualizarIndicadorTamanoBase();
 renderTamanoChips();
