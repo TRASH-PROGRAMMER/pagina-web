@@ -1,4 +1,4 @@
-// ─── BroadcastChannel: escuchar nuevos clientes desde index ─────────────────
+﻿// â”€â”€â”€ BroadcastChannel: escuchar nuevos clientes desde index â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const clienteChannel = new BroadcastChannel("clientes_channel");
 clienteChannel.onmessage = function(event) {
     if (event.data?.tipo === "nuevo_cliente") {
@@ -20,6 +20,8 @@ let tamanoEditandoId = null;
 let clientesCache = [];
 let fotosModalActuales = [];
 let nombrePedidoModal = "pedido";
+let carruselIndiceActual = 0;
+let modoCarruselActivo = false;
 let currentAlphaRangeCards = "todos";
 let currentCardsPage = 1;
 const CARDS_PAGE_SIZE = 6;
@@ -301,12 +303,12 @@ async function cargarTamanosAdmin() {
     try {
         const res = await fetch("/api/admin/tamanos");
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "No se pudieron cargar los tamaños");
+        if (!res.ok) throw new Error(data.error || "No se pudieron cargar los tamaÃ±os");
 
         tamanosAdmin = Array.isArray(data.tamanos) ? data.tamanos : [];
         renderTamanosAdmin();
     } catch (error) {
-        console.error("Error cargando tamaños:", error);
+        console.error("Error cargando tamaÃ±os:", error);
         mostrarMensajeTamano(error.message, false);
     }
 }
@@ -317,7 +319,7 @@ function setFormMarcoVisible(visible) {
     if (!form || !btn) return;
 
     form.hidden = !visible;
-    btn.textContent = visible ? "Ocultar formulario" : "Añadir nuevo marco";
+    btn.textContent = visible ? "Ocultar formulario" : "AÃ±adir nuevo marco";
 }
 
 function renderMarcosAdmin() {
@@ -439,17 +441,17 @@ async function editarTamano(id) {
 }
 
 async function desactivarTamano(id) {
-    if (!confirm("¿Deseas desactivar este tamaño?")) return;
+    if (!confirm("Â¿Deseas desactivar este tamaÃ±o?")) return;
 
     try {
         const res = await fetch(`/api/admin/tamanos/${id}/desactivar`, { method: "PATCH" });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "No se pudo desactivar");
 
-        mostrarMensajeTamano("Tamaño desactivado");
+        mostrarMensajeTamano("TamaÃ±o desactivado");
         await cargarTamanosAdmin();
     } catch (error) {
-        console.error("Error desactivando tamaño:", error);
+        console.error("Error desactivando tamaÃ±o:", error);
         mostrarMensajeTamano(error.message, false);
     }
 }
@@ -464,15 +466,15 @@ async function activarTamano(id) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "No se pudo activar");
 
-        mostrarMensajeTamano("Tamaño activado");
+        mostrarMensajeTamano("TamaÃ±o activado");
         await cargarTamanosAdmin();
     } catch (error) {
-        console.error("Error activando tamaño:", error);
+        console.error("Error activando tamaÃ±o:", error);
         mostrarMensajeTamano(error.message, false);
     }
 }
 
-// ─── Filtro alfabético activo ─────────────────────────────────────────────────
+// â”€â”€â”€ Filtro alfabÃ©tico activo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let currentAlphaRange = 'todos';
 
 function toISODate(value) {
@@ -488,7 +490,7 @@ function toISODate(value) {
     return `${year}-${month}-${day}`;
 }
 
-// ─── Filtrar tabla por búsqueda + rango alfabético + fecha/estado/precio ────
+// â”€â”€â”€ Filtrar tabla por bÃºsqueda + rango alfabÃ©tico + fecha/estado/precio â”€â”€â”€â”€
 function renderOrdersTablePagination(totalPages, totalResults) {
     const pagination = document.getElementById("ordersTablePagination");
     if (!pagination) return;
@@ -608,7 +610,7 @@ function filterTable(resetPage = true) {
     renderOrdersTablePagination(totalPages, filtrados.length);
 }
 
-// ─── Filtrar por rango de letras ──────────────────────────────────────────────
+// â”€â”€â”€ Filtrar por rango de letras â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function filterByAlpha(range) {
     currentAlphaRange = range;
     currentTablePage = 1;
@@ -620,10 +622,10 @@ function filterByAlpha(range) {
     filterTable(false);
 }
 
-// ─── Eliminar fila ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Eliminar fila â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function deleteRow(btn) {
     const row = btn.closest("tr");
-    if (!row || !confirm("¿Eliminar este pedido?")) return;
+    if (!row || !confirm("Â¿Eliminar este pedido?")) return;
 
     const id = Number(row.dataset.id);
     const estadoActual = (row.dataset.estado || 'pendiente').toLowerCase();
@@ -646,7 +648,7 @@ async function deleteRow(btn) {
     }
 }
 
-// ─── Cambiar estado ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Cambiar estado â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const estados = ["Pendiente", "Procesando", "Entregado", "Cancelado"];
 const clases  = ["status-pendiente", "status-procesando", "status-entregado", "status-cancelado"];
 
@@ -683,11 +685,11 @@ async function changeStatus(btn) {
         row.dataset.estado = nuevoEstado.toLowerCase();
         
         // Actualizar badge de pedidos pendientes
-        // Si el estado anterior era 'pendiente' y el nuevo no lo es → decrementar
+        // Si el estado anterior era 'pendiente' y el nuevo no lo es â†’ decrementar
         if (estadoActual === 'pendiente' && nuevoEstado.toLowerCase() !== 'pendiente') {
             actualizarBadge(-1);
         }
-        // Si el estado anterior no era 'pendiente' y el nuevo sí lo es → incrementar
+        // Si el estado anterior no era 'pendiente' y el nuevo sÃ­ lo es â†’ incrementar
         else if (estadoActual !== 'pendiente' && nuevoEstado.toLowerCase() === 'pendiente') {
             actualizarBadge(+1);
         }
@@ -699,7 +701,7 @@ async function changeStatus(btn) {
     }
 }
 
-// ─── Exportar CSV ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Exportar CSV â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function exportCSV() {
     const rows = document.querySelectorAll("#ordersTable tr");
     const lines = [];
@@ -722,7 +724,7 @@ function exportCSV() {
     URL.revokeObjectURL(url);
 }
 
-// ─── Badge Pedidos ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Badge Pedidos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function getBadge() {
     return document.getElementById("badgePedidos");
 }
@@ -733,27 +735,40 @@ function actualizarBadge(delta) {
     badge.textContent = Math.max(0, actual + delta);
 }
 
-// ─── Ver fotos en modal ───────────────────────────────────────────────────────
+// â”€â”€â”€ Ver fotos en modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function verFotos(fotosJSON, clienteNombre) {
-    const fotos = JSON.parse(fotosJSON);
+    let fotos = [];
+    try {
+        fotos = JSON.parse(fotosJSON || "[]");
+    } catch (_error) {
+        fotos = [];
+    }
+
     const modal = document.getElementById("fotoModal");
     const body  = document.getElementById("fotoModalBody");
     const title = document.getElementById("fotoModalTitle");
 
     fotosModalActuales = Array.isArray(fotos) ? fotos.slice() : [];
     nombrePedidoModal = (clienteNombre || "pedido").trim();
+    carruselIndiceActual = 0;
+    modoCarruselActivo = false;
 
-    title.textContent = `Fotos — ${clienteNombre}`;
+    title.textContent = `Fotos - ${nombrePedidoModal || "pedido"}`;
+    body.classList.remove("foto-modal-body-carrusel");
+    body.classList.add("foto-grid");
     body.innerHTML = "";
 
-    if (fotos.length === 0) {
+    if (fotosModalActuales.length === 0) {
         body.innerHTML = '<p style="color:#6b6b85;text-align:center">Sin fotos</p>';
     } else {
-        fotos.forEach(function(url) {
+        fotosModalActuales.forEach(function(url, idx) {
             const div = document.createElement("div");
             div.className = "foto-thumb";
-            // Las URLs ya son de Cloudinary (https://res.cloudinary.com/...)
-            div.innerHTML = `<img src="${url}" alt="foto" loading="lazy">`;
+            const img = document.createElement("img");
+            img.src = url;
+            img.alt = `Foto ${idx + 1}`;
+            img.loading = "lazy";
+            div.appendChild(img);
             div.onclick = function() {
                 window.open(url, '_blank');
             };
@@ -764,10 +779,95 @@ function verFotos(fotosJSON, clienteNombre) {
     modal.classList.add("active");
 }
 
-function cerrarModal() {
-    document.getElementById("fotoModal").classList.remove("active");
+function abrirCarruselCliente(clienteNombre, fotos, indiceInicial = 0) {
+    const modal = document.getElementById("fotoModal");
+    const body = document.getElementById("fotoModalBody");
+    const title = document.getElementById("fotoModalTitle");
+
+    fotosModalActuales = Array.isArray(fotos) ? fotos.slice() : [];
+    nombrePedidoModal = (clienteNombre || "cliente").trim();
+    modoCarruselActivo = true;
+    carruselIndiceActual = Math.max(0, Math.min(indiceInicial, Math.max(fotosModalActuales.length - 1, 0)));
+
+    title.textContent = `Fotos - ${nombrePedidoModal || "cliente"}`;
+
+    body.classList.remove("foto-grid");
+    body.classList.add("foto-modal-body-carrusel");
+
+    if (fotosModalActuales.length === 0) {
+        body.innerHTML = '<p style="color:#6b6b85;text-align:center">Sin fotos</p>';
+        modal.classList.add("active");
+        return;
+    }
+
+    body.innerHTML = `
+        <div class="foto-carrusel-wrap" role="region" aria-label="Carrusel de fotos del cliente">
+            <button type="button" class="foto-carrusel-btn prev" id="fotoCarruselPrev" aria-label="Foto anterior">&#8249;</button>
+            <div class="foto-carrusel-frame">
+                <img id="fotoCarruselImg" class="foto-carrusel-img" alt="Foto del cliente" loading="lazy">
+            </div>
+            <button type="button" class="foto-carrusel-btn next" id="fotoCarruselNext" aria-label="Foto siguiente">&#8250;</button>
+        </div>
+        <div class="foto-carrusel-counter" id="fotoCarruselCounter" aria-live="polite"></div>
+    `;
+
+    const prevBtn = document.getElementById("fotoCarruselPrev");
+    const nextBtn = document.getElementById("fotoCarruselNext");
+
+    if (prevBtn) {
+        prevBtn.addEventListener("click", mostrarFotoAnteriorCarrusel);
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener("click", mostrarFotoSiguienteCarrusel);
+    }
+
+    actualizarCarruselFotosModal();
+    modal.classList.add("active");
 }
 
+function actualizarCarruselFotosModal() {
+    if (!modoCarruselActivo) return;
+    const total = fotosModalActuales.length;
+    if (total === 0) return;
+
+    const img = document.getElementById("fotoCarruselImg");
+    const counter = document.getElementById("fotoCarruselCounter");
+    const prevBtn = document.getElementById("fotoCarruselPrev");
+    const nextBtn = document.getElementById("fotoCarruselNext");
+
+    const idx = ((carruselIndiceActual % total) + total) % total;
+    carruselIndiceActual = idx;
+
+    if (img) {
+        img.src = fotosModalActuales[idx];
+        img.alt = `Foto ${idx + 1} de ${total} - ${nombrePedidoModal || "cliente"}`;
+    }
+
+    if (counter) {
+        counter.textContent = `${idx + 1} de ${total}`;
+    }
+
+    if (prevBtn) prevBtn.disabled = total < 2;
+    if (nextBtn) nextBtn.disabled = total < 2;
+}
+
+function mostrarFotoAnteriorCarrusel() {
+    if (!modoCarruselActivo || fotosModalActuales.length < 2) return;
+    carruselIndiceActual = (carruselIndiceActual - 1 + fotosModalActuales.length) % fotosModalActuales.length;
+    actualizarCarruselFotosModal();
+}
+
+function mostrarFotoSiguienteCarrusel() {
+    if (!modoCarruselActivo || fotosModalActuales.length < 2) return;
+    carruselIndiceActual = (carruselIndiceActual + 1) % fotosModalActuales.length;
+    actualizarCarruselFotosModal();
+}
+
+function cerrarModal() {
+    modoCarruselActivo = false;
+    carruselIndiceActual = 0;
+    document.getElementById("fotoModal").classList.remove("active");
+}
 async function descargarImagenComoArchivo(url, nombreArchivo) {
     try {
         const response = await fetch(url, { mode: "cors" });
@@ -865,6 +965,19 @@ document.addEventListener("keydown", function(e) {
     if (e.key === "Escape") {
         cerrarModal();
         cerrarModalEditarTamano();
+        return;
+    }
+
+    const fotoModal = document.getElementById("fotoModal");
+    const modalAbierto = !!(fotoModal && fotoModal.classList.contains("active"));
+    if (!modalAbierto || !modoCarruselActivo) return;
+
+    if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        mostrarFotoAnteriorCarrusel();
+    } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        mostrarFotoSiguienteCarrusel();
     }
 });
 document.getElementById("fotoModal").addEventListener("click", function(e) {
@@ -878,7 +991,7 @@ if (editTamanoModal) {
     });
 }
 
-// ─── Render fila de pedido ────────────────────────────────────────────────────
+// â”€â”€â”€ Render fila de pedido â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderClienteRow(cliente, applyFilters = true) {
     const tbody = document.getElementById("tableBody");
     const tr = document.createElement("tr");
@@ -889,7 +1002,7 @@ function renderClienteRow(cliente, applyFilters = true) {
     const nombreCompleto = `${cliente.nombre} ${cliente.apellido}`;
     const numFotos = cliente.numFotos || fotos.length || 0;
     const precioNum = cliente.precioTotal != null ? Number(cliente.precioTotal) : null;
-    const precio = precioNum != null ? `$${precioNum.toFixed(2)}` : '—';
+    const precio = precioNum != null ? `$${precioNum.toFixed(2)}` : 'â€”';
 
     const estadoRaw = (cliente.estado || "pendiente").toLowerCase();
     const estadoIndex = estados.findIndex(function(e) { return e.toLowerCase() === estadoRaw; });
@@ -910,18 +1023,18 @@ function renderClienteRow(cliente, applyFilters = true) {
         <td>
             ${numFotos > 0
                 ? `<span class="fotos-link" onclick="verFotos('${fotosJSON}', '${nombreCompleto}')">${numFotos} foto${numFotos > 1 ? 's' : ''}</span>`
-                : '—'}
+                : 'â€”'}
         </td>
-        <td>${cliente.tamano || '—'}</td>
-        <td>${cliente.papel || '—'}</td>
+        <td>${cliente.tamano || 'â€”'}</td>
+        <td>${cliente.papel || 'â€”'}</td>
         <td style="color:#22c55e;font-weight:600;font-family:'Space Mono',monospace">${precio}</td>
         <td><span class="status ${estadoClass}">${estadoLabel}</span></td>
         <td style="color:var(--muted);font-size:12px">${cliente.fechaRegistro}</td>
         <td>
             <div class="acciones-pedido">
-                <button class="action-btn" onclick="changeStatus(this)">✎ Estado</button>
-                <button class="action-btn del" onclick="deleteRow(this)">✕</button>
-                <button class="action-btn" onclick="descargarPedido(this)">↓ Descargar</button>
+                <button class="action-btn" onclick="changeStatus(this)">âœŽ Estado</button>
+                <button class="action-btn del" onclick="deleteRow(this)">âœ•</button>
+                <button class="action-btn" onclick="descargarPedido(this)">â†“ Descargar</button>
             </div>
         </td>
     `;
@@ -932,7 +1045,7 @@ function renderClienteRow(cliente, applyFilters = true) {
     }
 }
 
-// ─── Cargar pedidos desde la API Flask al cargar la página ───────────────────
+// â”€â”€â”€ Cargar pedidos desde la API Flask al cargar la pÃ¡gina â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 document.addEventListener("DOMContentLoaded", async function() {
     try {
         const res = await fetch("/api/clientes");
@@ -1030,7 +1143,7 @@ document.addEventListener("DOMContentLoaded", async function() {
             const precio = Number(document.getElementById("tamanoPrecio")?.value || "0");
 
             if (!clave || !nombre || Number.isNaN(precio) || precio < 0) {
-                mostrarMensajeTamano("Completa clave, nombre y precio válidos", false);
+                mostrarMensajeTamano("Completa clave, nombre y precio vÃ¡lidos", false);
                 return;
             }
 
@@ -1041,13 +1154,13 @@ document.addEventListener("DOMContentLoaded", async function() {
                     body: JSON.stringify({ clave, nombre, precio_base: precio })
                 });
                 const data = await resCreate.json();
-                if (!resCreate.ok) throw new Error(data.error || "No se pudo guardar el tamaño");
+                if (!resCreate.ok) throw new Error(data.error || "No se pudo guardar el tamaÃ±o");
 
                 formTamano.reset();
-                mostrarMensajeTamano("Tamaño guardado correctamente");
+                mostrarMensajeTamano("TamaÃ±o guardado correctamente");
                 await cargarTamanosAdmin();
             } catch (error) {
-                console.error("Error guardando tamaño:", error);
+                console.error("Error guardando tamaÃ±o:", error);
                 mostrarMensajeTamano(error.message, false);
             }
         });
@@ -1140,7 +1253,7 @@ document.addEventListener("DOMContentLoaded", async function() {
             const precio = Number(document.getElementById("editTamanoPrecio")?.value || "0");
 
             if (!id || !nombre || Number.isNaN(precio) || precio < 0) {
-                mostrarMensajeTamano("Datos inválidos para edición", false);
+                mostrarMensajeTamano("Datos invÃ¡lidos para ediciÃ³n", false);
                 return;
             }
 
@@ -1151,13 +1264,13 @@ document.addEventListener("DOMContentLoaded", async function() {
                     body: JSON.stringify({ nombre, precio_base: precio })
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || "No se pudo editar el tamaño");
+                if (!res.ok) throw new Error(data.error || "No se pudo editar el tamaÃ±o");
 
-                mostrarMensajeTamano("Tamaño actualizado correctamente");
+                mostrarMensajeTamano("TamaÃ±o actualizado correctamente");
                 cerrarModalEditarTamano();
                 await cargarTamanosAdmin();
             } catch (error) {
-                console.error("Error editando tamaño:", error);
+                console.error("Error editando tamaÃ±o:", error);
                 mostrarMensajeTamano(error.message, false);
             }
         });
@@ -1170,7 +1283,7 @@ document.addEventListener("DOMContentLoaded", async function() {
     setAdminMainView("dashboard");
 });
 
-// ─── Exponer funciones al scope global (usadas en onclick del HTML) ───────────
+// â”€â”€â”€ Exponer funciones al scope global (usadas en onclick del HTML) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 window.filterTable   = filterTable;
 window.filterByAlpha = filterByAlpha;
 window.deleteRow     = deleteRow;
@@ -1183,7 +1296,7 @@ window.desactivarTamano = desactivarTamano;
 window.activarTamano = activarTamano;
 window.cambiarEstadoMarco = cambiarEstadoMarco;
 
-// ─── Chart.js: Pedidos últimos 7 días (tiempo real) ──────────────────────────
+// â”€â”€â”€ Chart.js: Pedidos Ãºltimos 7 dÃ­as (tiempo real) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let pedidosChart = null;
 
 async function cargarGraficoPedidos() {
@@ -1237,7 +1350,7 @@ async function cargarGraficoPedidos() {
             });
         }
     } catch (err) {
-        console.error('Error cargando gráfico:', err);
+        console.error('Error cargando grÃ¡fico:', err);
     }
 }
 
@@ -1247,7 +1360,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(cargarGraficoPedidos, 30000);
 });
 
-// ─── Estadísticas en tiempo real ──────────────────────────────────────────────
+// â”€â”€â”€ EstadÃ­sticas en tiempo real â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function cargarEstadisticas() {
     try {
         const res = await fetch('/api/estadisticas');
@@ -1256,22 +1369,22 @@ async function cargarEstadisticas() {
         const fmt = n => n.toLocaleString('es-MX');
 
         document.getElementById('statPedidosHoy').textContent = fmt(d.pedidos_hoy);
-        const flecha = d.cambio_pct >= 0 ? '↑' : '↓';
+        const flecha = d.cambio_pct >= 0 ? 'â†‘' : 'â†“';
         document.getElementById('statCambioPct').textContent = `${flecha} ${Math.abs(d.cambio_pct)}% vs ayer`;
 
         document.getElementById('statTotalFotos').textContent = fmt(d.total_fotos);
-        document.getElementById('statFotosSemana').textContent = `↑ ${fmt(d.fotos_semana)} esta semana`;
+        document.getElementById('statFotosSemana').textContent = `â†‘ ${fmt(d.fotos_semana)} esta semana`;
 
         document.getElementById('statClientesActivos').textContent = fmt(d.clientes_activos);
         document.getElementById('statNuevosHoy').textContent = `${d.nuevos_hoy} nuevo${d.nuevos_hoy !== 1 ? 's' : ''} hoy`;
 
         document.getElementById('statPendientes').textContent = fmt(d.pendientes);
     } catch (err) {
-        console.error('Error cargando estadísticas:', err);
+        console.error('Error cargando estadÃ­sticas:', err);
     }
 }
 
-// ─── Cargar stats de almacenamiento Cloudinary ──────────────────────────────
+// â”€â”€â”€ Cargar stats de almacenamiento Cloudinary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function cargarCloudinaryStats() {
     try {
         const res = await fetch('/api/cloudinary-stats');
@@ -1282,19 +1395,44 @@ async function cargarCloudinaryStats() {
             return;
         }
         
-        // Usar transformación count como proxy para almacenamiento
-        // (Cloudinary free plan no devuelve almacenamiento exacto, pero sí transformaciones)
-        const usado = stats.transformation_count || 0;
-        const limite = stats.transformation_count_limit || 1000;
-        const porcentaje = limite > 0 ? Math.min(100, (usado / limite) * 100) : 0;
-        
         const barraEl = document.getElementById('cloudinaryStorageBar');
         const textEl = document.getElementById('cloudinaryStorageText');
         const valueEl = document.getElementById('cloudinaryStorageValue');
+
+        const storageUsedBytes = Number(stats.storage_used_bytes);
+        const storageLimitBytes = Number(stats.storage_limit_bytes);
+        const hasStorageUsage = Number.isFinite(storageUsedBytes) && storageUsedBytes >= 0;
+        const hasStorageLimit = Number.isFinite(storageLimitBytes) && storageLimitBytes > 0;
+
+        const bytesToGb = (bytes) => bytes / (1024 * 1024 * 1024);
+        const fmtNum = (n, d = 1) => Number(n).toLocaleString('es-MX', {
+            minimumFractionDigits: d,
+            maximumFractionDigits: d
+        });
+
+        let porcentaje = 0;
+        let valueText = 'â€”';
+        let detailsText = 'Sin datos de uso disponibles.';
+
+        if (hasStorageUsage) {
+            const usadoGb = bytesToGb(storageUsedBytes);
+            const limiteGb = hasStorageLimit ? bytesToGb(storageLimitBytes) : 0;
+            porcentaje = hasStorageLimit ? Math.min(100, (storageUsedBytes / storageLimitBytes) * 100) : 0;
+            valueText = hasStorageLimit ? `${porcentaje.toFixed(1)}%` : `${fmtNum(usadoGb, 2)} GB`;
+            detailsText = hasStorageLimit
+                ? `${fmtNum(usadoGb, 2)} GB / ${fmtNum(limiteGb, 2)} GB (${porcentaje.toFixed(1)}%)`
+                : `${fmtNum(usadoGb, 2)} GB usados (Cloudinary no reporta limite)`;
+        } else {
+            // Fallback: Cloudinary no devolvio almacenamiento real; usamos transformaciones.
+            const usado = Number(stats.transformation_count || 0);
+            const limite = Number(stats.transformation_count_limit || 1000);
+            porcentaje = limite > 0 ? Math.min(100, (usado / limite) * 100) : 0;
+            valueText = `${porcentaje.toFixed(1)}%`;
+            detailsText = `${usado.toLocaleString('es-MX')} / ${limite.toLocaleString('es-MX')} transformaciones (${porcentaje.toFixed(1)}%)`;
+        }
         
         if (barraEl) {
             barraEl.style.width = porcentaje + '%';
-            // Cambiar color según uso
             if (porcentaje >= 80) {
                 barraEl.style.background = 'linear-gradient(90deg, #ff7a7a, #ff5555)'; // Rojo
             } else if (porcentaje >= 50) {
@@ -1305,11 +1443,14 @@ async function cargarCloudinaryStats() {
         }
         
         if (textEl) {
-            textEl.textContent = `${usado.toLocaleString('es-MX')} / ${limite.toLocaleString('es-MX')} (${porcentaje.toFixed(1)}%)`;
+            textEl.textContent = detailsText;
+            textEl.title = hasStorageUsage
+                ? 'Almacenamiento usado / limite del plan en Cloudinary'
+                : 'Cloudinary no devolvio almacenamiento; se muestra proxy de transformaciones';
         }
 
         if (valueEl) {
-            valueEl.textContent = `${porcentaje.toFixed(1)}%`;
+            valueEl.textContent = valueText;
         }
     } catch (err) {
         console.error('Error cargando stats de Cloudinary:', err);
@@ -1323,7 +1464,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(cargarCloudinaryStats, 60000);
 });
 
-// ─── Últimas subidas (tiempo real) ────────────────────────────────────────────
+// â”€â”€â”€ Ãšltimas subidas (tiempo real) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function tiempoRelativo(fechaStr) {
     try {
         // Manejar formato ISO (YYYY-MM-DDTHH:MM:SS) o formato personalizado (DD/MM/YYYY, HH:MM:SS)
@@ -1350,13 +1491,13 @@ function tiempoRelativo(fechaStr) {
         const horas = Math.floor(mins / 60);
         if (horas < 24) return `hace ${horas}h`;
         const dias = Math.floor(horas / 24);
-        return `hace ${dias} día${dias > 1 ? 's' : ''}`;
+        return `hace ${dias} dia${dias > 1 ? 's' : ''}`;
     } catch {
         return fechaStr;
     }
 }
 
-const iconos = ['📷', '🌄', '🎞️', '🖼️', '📸'];
+const iconos = ['&#128247;', '&#127748;', '&#127909;', '&#128444;', '&#128248;'];
 
 async function cargarUltimasSubidas() {
     try {
@@ -1365,25 +1506,42 @@ async function cargarUltimasSubidas() {
         const container = document.getElementById('uploadList');
         if (!container) return;
 
-        if (subidas.length === 0) {
+        const ultimosClientes = Array.isArray(subidas) ? subidas.slice(0, 5) : [];
+
+        if (ultimosClientes.length === 0) {
             container.innerHTML = '<p style="color:var(--muted);text-align:center;font-size:13px">Sin subidas recientes</p>';
             return;
         }
 
         container.innerHTML = '';
-        subidas.forEach(function(s, i) {
+        ultimosClientes.forEach(function(s, i) {
             const icono = iconos[i % iconos.length];
+            const fotosCliente = Array.isArray(s.fotos) ? s.fotos : [];
+            const thumbHtml = s.thumbnail
+                ? `<img src="${s.thumbnail}" alt="Miniatura de ${s.cliente}" class="upload-thumb-img" loading="lazy">`
+                : icono;
             const div = document.createElement('div');
             div.className = 'upload-item';
             div.innerHTML = `
-                <div class="upload-thumb">${icono}</div>
+                <div class="upload-thumb">${thumbHtml}</div>
                 <div class="upload-info">
                     <div class="upload-name">${s.numFotos} foto${s.numFotos > 1 ? 's' : ''}</div>
-                    <div class="upload-meta">${s.cliente} · ${tiempoRelativo(s.fecha)}</div>
+                    <div class="upload-meta">${s.cliente} - ${tiempoRelativo(s.fecha)}</div>
                 </div>
             `;
             div.style.cursor = 'pointer';
-            div.onclick = function() { window.open(s.url, '_blank'); };
+            div.setAttribute('tabindex', '0');
+            div.setAttribute('role', 'button');
+            div.setAttribute('aria-label', `Ver fotos de ${s.cliente}`);
+            div.onclick = function() {
+                abrirCarruselCliente(s.cliente, fotosCliente, 0);
+            };
+            div.onkeydown = function(evt) {
+                if (evt.key === 'Enter' || evt.key === ' ') {
+                    evt.preventDefault();
+                    abrirCarruselCliente(s.cliente, fotosCliente, 0);
+                }
+            };
             container.appendChild(div);
         });
     } catch (err) {
@@ -1397,7 +1555,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(cargarUltimasSubidas, 30000);
 });
 
-// Actualizar gráfico y subidas cuando llega un nuevo pedido por BroadcastChannel
+// Actualizar grÃ¡fico y subidas cuando llega un nuevo pedido por BroadcastChannel
 clienteChannel.addEventListener('message', function(event) {
     if (event.data?.tipo === 'nuevo_cliente') {
         cargarGraficoPedidos();
@@ -1418,7 +1576,7 @@ clienteChannel.addEventListener('message', function(event) {
                 statusBadge.className = `status status-${nuevoEstado}`;
                 row.dataset.estado = nuevoEstado.toLowerCase();
                 
-                // Actualizar badge si cambió de pendiente a otro estado
+                // Actualizar badge si cambiÃ³ de pendiente a otro estado
                 if (estadoActual === 'pendiente' && nuevoEstado !== 'pendiente') {
                     actualizarBadge(-1);
                 }
@@ -1436,3 +1594,4 @@ if (descargarPedidoBtn) {
         descargarFotosDelModal();
     });
 }
+

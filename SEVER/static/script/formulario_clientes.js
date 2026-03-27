@@ -3,25 +3,34 @@ import { guardarCliente } from './db.js';
 const clienteChannel = new BroadcastChannel("clientes_channel");
 
 const form = document.getElementById("formDatos");
-const btnEnviar = document.querySelector(".enviar-button");
+const btnEnviar = document.getElementById("btnVerResumen");
 const errorMessage = document.getElementById("mensajeError");
 const nameInput = document.getElementById("nombre");
+const nombreHelp = document.getElementById("nombreHelp");
 const apellidoInput = document.getElementById("apellido");
+const apellidoHelp = document.getElementById("apellidoHelp");
 const correoInput = document.getElementById("correo");
+const correoHelp = document.getElementById("correoHelp");
 const telefonoInput = document.getElementById("telefono");
 const prefijoPaisSelect = document.getElementById("prefijoPais");
 const telefonoHelp = document.getElementById("telefonoHelp");
 const inputImagenes = document.getElementById("inputImagenes");
+const inputImagenesHelp = document.getElementById("inputImagenesHelp");
 const tamanoSelect = document.getElementById("tamaño");
+const tamanoHelp = document.getElementById("tamanoHelp");
 const tamanoChipsContainer = document.getElementById("tamanoChips");
 const tamanoBaseIndicator = document.getElementById("tamanoBaseIndicator");
 const toggleAsignacionFotos = document.getElementById("toggleAsignacionFotos");
+const opcionesPapelGroup = document.querySelector(".opciones-papel");
+const papelHelp = document.getElementById("papelHelp");
 const previewContainer = document.getElementById("previewContainer");
 const pedidoSpinnerOverlay = document.getElementById("pedidoSpinnerOverlay");
 const btnFinalizarPedido = document.getElementById("btnFinalizarPedido");
 const cropImageModal = document.getElementById("cropImageModal");
 const cropImageTarget = document.getElementById("cropImageTarget");
 const cropImageHelp = cropImageModal ? cropImageModal.querySelector(".image-action-help") : null;
+const cropCompareBefore = document.getElementById("cropCompareBefore");
+const cropCompareAfter = document.getElementById("cropCompareAfter");
 const cancelCropBtn = document.getElementById("cancelCropBtn");
 const applyCropBtn = document.getElementById("applyCropBtn");
 const frameImageModal = document.getElementById("frameImageModal");
@@ -61,13 +70,40 @@ const proporcionesTamanoFijas = Object.freeze({
 });
 
 let cropperInstance = null;
+let rafComparadorRecorte = 0;
 let fotoKeyEnEdicion = "";
 let frameSeleccionadoTemporal = "none";
 let bloquearMensajesValidacion = false;
 let restaurarClientePendiente = null;
 let pedidoSeguimientoPendiente = { id: "", correo: "" };
+let ultimoEstadoValidacion = null;
+const estadoInteraccionValidacion = {
+    intentoEnvio: false,
+    blur: {
+        fotos: false,
+        tamano: false,
+        papel: false,
+        nombre: false,
+        apellido: false,
+        correo: false,
+        telefono: false,
+    },
+};
 
-btnEnviar.disabled = true;
+const nombreApellidoRegex = /^(?=.{2,60}$)[A-Za-zÀ-ÖØ-öø-ÿÑñ]+(?:[ '’-][A-Za-zÀ-ÖØ-öø-ÿÑñ]+)*$/;
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const phoneLocalRegex = /^\d{6,12}$/;
+const ordenErroresVisual = ["fotos", "tamano", "papel", "nombre", "apellido", "correo", "telefono"];
+const mensajesAyudaBase = Object.freeze({
+    nombre: "Usa letras y separadores internos validos (espacio, apostrofe o guion). Ej: Maria Jose, O'Connor, Marie-Claire.",
+    apellido: "Usa letras y separadores internos validos (espacio, apostrofe o guion). Ej: Lopez, Iñaki, D'Angelo.",
+    correo: "Formato recomendado: usuario@dominio.com",
+    imagenes: "Formatos: PNG, JPG, GIF. Maximo 150 imagenes, 10 MB por archivo.",
+    tamano: "Elige un solo tamano base. Toca el mismo chip otra vez para quitar la seleccion.",
+    papel: "Selecciona el tipo de papel para tu impresion.",
+});
+
+btnEnviar.disabled = false;
 
 function usaAsignacionPorFoto() {
     return !!(toggleAsignacionFotos && toggleAsignacionFotos.checked);
@@ -81,6 +117,224 @@ function actualizarVisibilidadAsignacion() {
 
 function obtenerPrefijoSeleccionado() {
     return prefijoPaisSelect ? String(prefijoPaisSelect.value || "").replace(/\D/g, "") : "";
+}
+
+function obtenerAyudaTelefonoBase() {
+    const prefijo = obtenerPrefijoSeleccionado() || "---";
+    return `Prefijo seleccionado: +${prefijo}. Escribe solo el numero local (6 a 12 digitos).`;
+}
+
+function actualizarEstadoCampo(input, helpElement, isValid, mensajeBase, mensajeError, mostrarError = false) {
+    if (!input || !helpElement) return;
+
+    const aplicarError = !!mostrarError && !isValid;
+
+    input.classList.toggle("input-validacion-error", aplicarError);
+    input.setAttribute("aria-invalid", aplicarError ? "true" : "false");
+
+    helpElement.classList.toggle("campo-ayuda-error", aplicarError);
+    helpElement.textContent = aplicarError ? mensajeError : mensajeBase;
+}
+
+function actualizarEstadoAyuda(helpElement, isValid, mensajeBase, mensajeError, mostrarError = false) {
+    if (!helpElement) return;
+
+    const aplicarError = !!mostrarError && !isValid;
+
+    helpElement.classList.toggle("campo-ayuda-error", aplicarError);
+    helpElement.textContent = aplicarError ? mensajeError : mensajeBase;
+}
+
+function actualizarEstadoGrupo(groupElement, isValid, mostrarError = false) {
+    if (!groupElement) return;
+    const aplicarError = !!mostrarError && !isValid;
+    groupElement.classList.toggle("group-validacion-error", aplicarError);
+}
+
+function marcarBlurCampo(campo) {
+    if (!Object.prototype.hasOwnProperty.call(estadoInteraccionValidacion.blur, campo)) return;
+    estadoInteraccionValidacion.blur[campo] = true;
+}
+
+function debeMostrarError(campo) {
+    return !!estadoInteraccionValidacion.intentoEnvio || !!estadoInteraccionValidacion.blur[campo];
+}
+
+function reiniciarInteraccionValidacion() {
+    estadoInteraccionValidacion.intentoEnvio = false;
+    Object.keys(estadoInteraccionValidacion.blur).forEach(function(campo) {
+        estadoInteraccionValidacion.blur[campo] = false;
+    });
+}
+
+function obtenerPrimerKeyError(errores) {
+    return ordenErroresVisual.find(function(key) {
+        return !!errores[key];
+    }) || "";
+}
+
+function primerSelectTamanoInvalido() {
+    const candidatos = Array.from(document.querySelectorAll(".foto-tamano-select"));
+    return candidatos.find(function(select) {
+        return !String(select.value || "").trim();
+    }) || null;
+}
+
+function enfocarElementoAccesible(elemento) {
+    if (!elemento) return;
+    try {
+        elemento.focus({ preventScroll: true });
+    } catch (_error) {
+        elemento.focus();
+    }
+}
+
+function elementoEsVisible(elemento) {
+    if (!elemento) return false;
+    return elemento.getClientRects().length > 0;
+}
+
+function obtenerObjetivoErrorPorClave(claveError) {
+    if (!claveError) return null;
+
+    if (claveError === "fotos") {
+        return inputImagenes;
+    }
+
+    if (claveError === "tamano") {
+        if (usaAsignacionPorFoto()) {
+            const selectInvalido = primerSelectTamanoInvalido();
+            if (selectInvalido) return selectInvalido;
+        }
+
+        const primerChip = tamanoChipsContainer ? tamanoChipsContainer.querySelector(".choice-chip") : null;
+        if (primerChip && elementoEsVisible(primerChip)) return primerChip;
+        if (tamanoSelect && elementoEsVisible(tamanoSelect)) return tamanoSelect;
+        if (primerChip) return primerChip;
+        return tamanoSelect;
+    }
+
+    if (claveError === "papel") {
+        return document.querySelector('input[name="papel"]:checked')
+            || document.querySelector('input[name="papel"]');
+    }
+
+    if (claveError === "nombre") return nameInput;
+    if (claveError === "apellido") return apellidoInput;
+    if (claveError === "correo") return correoInput;
+    if (claveError === "telefono") return telefonoInput;
+
+    return null;
+}
+
+function navegarAlPrimerError(estadoValidacion) {
+    if (!estadoValidacion || estadoValidacion.esValido) return;
+
+    const objetivo = obtenerObjetivoErrorPorClave(estadoValidacion.primerError);
+    if (!objetivo) return;
+
+    objetivo.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    window.setTimeout(function() {
+        enfocarElementoAccesible(objetivo);
+    }, 180);
+}
+
+function obtenerEstadoValidacion() {
+    const nombre = nameInput.value.trim();
+    const apellido = apellidoInput.value.trim();
+    const correo = correoInput.value.trim();
+
+    const nombreValido = nombreApellidoRegex.test(nombre);
+    const apellidoValido = nombreApellidoRegex.test(apellido);
+    const correoValido = emailRegex.test(correo);
+
+    normalizarTelefonoInput();
+    const prefijo = obtenerPrefijoSeleccionado();
+    const telefonoLocal = telefonoInput.value.trim();
+    const totalDigitos = `${prefijo}${telefonoLocal}`.length;
+    const telefonoValido = !!prefijo && phoneLocalRegex.test(telefonoLocal) && totalDigitos >= 7 && totalDigitos <= 15;
+
+    const totalFotos = inputImagenes.files ? inputImagenes.files.length : 0;
+    const fotosValidas = totalFotos > 0;
+
+    const fotos = Array.from(inputImagenes.files || []);
+    let tamanoValido = false;
+    if (usaAsignacionPorFoto()) {
+        tamanoValido = fotos.length > 0 && fotos.every(function(file) {
+            return !!asignacionesPorFoto.get(claveFoto(file));
+        });
+    } else {
+        tamanoValido = tamanoSelect.selectedOptions.length > 0;
+    }
+
+    const papelSeleccionado = document.querySelector('input[name="papel"]:checked');
+    const papelValido = !!papelSeleccionado;
+
+    let nombreError = "";
+    if (!nombre) {
+        nombreError = "Ingresa tus nombres.";
+    } else if (!nombreValido) {
+        nombreError = "Nombre invalido. Usa letras y separadores internos (espacio, apostrofe o guion), sin iniciar ni terminar con ellos.";
+    }
+
+    let apellidoError = "";
+    if (!apellido) {
+        apellidoError = "Ingresa tus apellidos.";
+    } else if (!apellidoValido) {
+        apellidoError = "Apellido invalido. Usa letras y separadores internos (espacio, apostrofe o guion), sin iniciar ni terminar con ellos.";
+    }
+
+    let correoError = "";
+    if (!correo) {
+        correoError = "Ingresa tu correo electronico.";
+    } else if (!correoValido) {
+        correoError = "Correo invalido. Ejemplo correcto: usuario@dominio.com";
+    }
+
+    let telefonoError = "";
+    if (!prefijo) {
+        telefonoError = "Selecciona un prefijo internacional.";
+    } else if (!telefonoLocal) {
+        telefonoError = "Ingresa tu numero local.";
+    } else if (!phoneLocalRegex.test(telefonoLocal)) {
+        telefonoError = "El numero local debe contener solo digitos (6 a 12).";
+    } else if (totalDigitos < 7 || totalDigitos > 15) {
+        telefonoError = "Con el prefijo internacional, el telefono completo debe tener entre 7 y 15 digitos.";
+    }
+
+    const fotosError = fotosValidas ? "" : "Selecciona al menos una foto para imprimir.";
+
+    let tamanoError = "";
+    if (!tamanoValido) {
+        tamanoError = usaAsignacionPorFoto()
+            ? "Asigna un tamano a cada foto para continuar."
+            : "Selecciona un tamano base para las fotos.";
+    }
+
+    const papelError = papelValido ? "" : "Selecciona un tipo de papel.";
+
+    const errores = {
+        fotos: fotosError,
+        tamano: tamanoError,
+        papel: papelError,
+        nombre: nombreError,
+        apellido: apellidoError,
+        correo: correoError,
+        telefono: telefonoError,
+    };
+
+    const esValido = !Object.values(errores).some(Boolean);
+
+    return {
+        esValido,
+        errores,
+        valores: {
+            fotosValidas,
+            tamanoValido,
+            papelValido,
+        },
+        primerError: obtenerPrimerKeyError(errores),
+    };
 }
 
 function detectarPrefijoPorNumero(numeroConPrefijo) {
@@ -100,8 +354,9 @@ function detectarPrefijoPorNumero(numeroConPrefijo) {
 
 function actualizarAyudaTelefono() {
     if (!telefonoHelp || !prefijoPaisSelect) return;
-    const prefijo = obtenerPrefijoSeleccionado();
-    telefonoHelp.textContent = `Prefijo seleccionado: +${prefijo}. Ingresa el número local sin el +.`;
+    if (!telefonoHelp.classList.contains("campo-ayuda-error")) {
+        telefonoHelp.textContent = obtenerAyudaTelefonoBase();
+    }
 }
 
 function autoDetectarPaisInicial() {
@@ -206,10 +461,43 @@ function cerrarModal(modal) {
 }
 
 function destruirCropper() {
+    if (rafComparadorRecorte) {
+        cancelAnimationFrame(rafComparadorRecorte);
+        rafComparadorRecorte = 0;
+    }
     if (cropperInstance) {
         cropperInstance.destroy();
         cropperInstance = null;
     }
+}
+
+function limpiarComparadorRecorte() {
+    if (cropCompareBefore) {
+        cropCompareBefore.removeAttribute("src");
+    }
+    if (cropCompareAfter) {
+        cropCompareAfter.removeAttribute("src");
+    }
+}
+
+function actualizarComparadorRecorte() {
+    if (!cropperInstance || !cropCompareAfter) return;
+    const canvas = cropperInstance.getCroppedCanvas({
+        maxWidth: 420,
+        maxHeight: 420,
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: "high",
+    });
+    if (!canvas) return;
+    cropCompareAfter.src = canvas.toDataURL("image/jpeg", 0.9);
+}
+
+function programarActualizacionComparadorRecorte() {
+    if (rafComparadorRecorte) return;
+    rafComparadorRecorte = requestAnimationFrame(function() {
+        rafComparadorRecorte = 0;
+        actualizarComparadorRecorte();
+    });
 }
 
 function esMarcoPersonalizado(frameValue) {
@@ -364,6 +652,12 @@ function abrirModalRecorte(key) {
 
     fotoKeyEnEdicion = key;
     const src = obtenerPreviewFoto(file);
+    if (cropCompareBefore) {
+        cropCompareBefore.src = src;
+    }
+    if (cropCompareAfter) {
+        cropCompareAfter.src = src;
+    }
 
     destruirCropper();
     cropImageTarget.onload = function() {
@@ -391,6 +685,12 @@ function abrirModalRecorte(key) {
             zoomable: true,
             scalable: false,
             rotatable: false,
+            ready: function() {
+                programarActualizacionComparadorRecorte();
+            },
+            crop: function() {
+                programarActualizacionComparadorRecorte();
+            },
         });
     };
     cropImageTarget.src = src;
@@ -580,6 +880,7 @@ function actualizarIndicadorTamanoBase() {
 function renderTamanoChips() {
     if (!tamanoChipsContainer || !tamanoSelect) return;
 
+    tamanoChipsContainer.setAttribute("aria-describedby", "tamanoHelp");
     tamanoChipsContainer.innerHTML = "";
 
     Array.from(tamanoSelect.options).forEach(function(opt) {
@@ -592,6 +893,8 @@ function renderTamanoChips() {
         const activo = !!opt.selected;
         chip.classList.toggle("is-active", activo);
         chip.setAttribute("aria-pressed", activo ? "true" : "false");
+        chip.setAttribute("aria-describedby", "tamanoHelp");
+        chip.setAttribute("aria-label", `Seleccionar tamano ${opt.textContent}`);
 
         chip.addEventListener("click", function() {
             if (opt.selected) {
@@ -723,6 +1026,11 @@ function renderAsignacionesFotos() {
             validarFormulario();
         });
 
+        select.addEventListener("blur", function() {
+            marcarBlurCampo("tamano");
+            validarFormulario();
+        });
+
         const actions = document.createElement("div");
         actions.className = "foto-actions card-advanced-actions";
 
@@ -824,64 +1132,71 @@ function cerrarModalExitoPedido() {
 
 // 🔹 Validación completa (datos + fotos + tamaño + papel)
 function validarFormulario() {
+    const estado = obtenerEstadoValidacion();
+    ultimoEstadoValidacion = estado;
 
-    const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,}$/;
-    const nombreValido = nameRegex.test(nameInput.value.trim());
-    const apellidoRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,}$/;
-    const apellidoValido = apellidoRegex.test(apellidoInput.value.trim());
+    const nombreError = estado.errores.nombre;
+    const apellidoError = estado.errores.apellido;
+    const correoError = estado.errores.correo;
+    const telefonoError = estado.errores.telefono;
+    const fotosError = estado.errores.fotos;
+    const tamanoError = estado.errores.tamano;
+    const papelError = estado.errores.papel;
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const correoValido = emailRegex.test(correoInput.value.trim());
+    const fotosValidas = estado.valores.fotosValidas;
+    const tamanoValido = estado.valores.tamanoValido;
+    const papelValido = estado.valores.papelValido;
 
-    normalizarTelefonoInput();
-    const prefijo = obtenerPrefijoSeleccionado();
-    const telefonoLocal = telefonoInput.value.trim();
-    const phoneRegex = /^\d{6,12}$/;
-    const totalDigitos = `${prefijo}${telefonoLocal}`.length;
-    const telefonoValido = !!prefijo && phoneRegex.test(telefonoLocal) && totalDigitos >= 7 && totalDigitos <= 15;
+    const mostrarNombreError = debeMostrarError("nombre");
+    const mostrarApellidoError = debeMostrarError("apellido");
+    const mostrarCorreoError = debeMostrarError("correo");
+    const mostrarTelefonoError = debeMostrarError("telefono");
+    const mostrarFotosError = debeMostrarError("fotos");
+    const mostrarTamanoError = debeMostrarError("tamano");
+    const mostrarPapelError = debeMostrarError("papel");
 
-    // Validar que haya al menos 1 foto
-    const fotosValidas = inputImagenes.files && inputImagenes.files.length > 0;
+    const aplicarErrorFotos = mostrarFotosError && !fotosValidas;
+    const aplicarErrorTamano = mostrarTamanoError && !tamanoValido;
+    const aplicarErrorPapel = mostrarPapelError && !papelValido;
 
-    const fotos = Array.from(inputImagenes.files || []);
-    let tamanoValido = false;
-    if (usaAsignacionPorFoto()) {
-        tamanoValido = fotos.length > 0 && fotos.every(function(file) {
-            return !!asignacionesPorFoto.get(claveFoto(file));
-        });
-    } else {
-        tamanoValido = tamanoSelect.selectedOptions.length > 0;
+    actualizarEstadoCampo(nameInput, nombreHelp, !nombreError, mensajesAyudaBase.nombre, nombreError, mostrarNombreError);
+    actualizarEstadoCampo(apellidoInput, apellidoHelp, !apellidoError, mensajesAyudaBase.apellido, apellidoError, mostrarApellidoError);
+    actualizarEstadoCampo(correoInput, correoHelp, !correoError, mensajesAyudaBase.correo, correoError, mostrarCorreoError);
+    actualizarEstadoCampo(telefonoInput, telefonoHelp, !telefonoError, obtenerAyudaTelefonoBase(), telefonoError, mostrarTelefonoError);
+
+    if (inputImagenes) {
+        inputImagenes.classList.toggle("input-validacion-error", aplicarErrorFotos);
+        inputImagenes.setAttribute("aria-invalid", aplicarErrorFotos ? "true" : "false");
     }
+    actualizarEstadoAyuda(inputImagenesHelp, fotosValidas, mensajesAyudaBase.imagenes, fotosError, mostrarFotosError);
 
-    // Validar que se haya elegido tipo de papel
-    const papelSeleccionado = document.querySelector('input[name="papel"]:checked');
-    const papelValido = !!papelSeleccionado;
+    if (tamanoSelect) {
+        tamanoSelect.classList.toggle("input-validacion-error", aplicarErrorTamano);
+        tamanoSelect.setAttribute("aria-invalid", aplicarErrorTamano ? "true" : "false");
+    }
+    if (tamanoChipsContainer) {
+        tamanoChipsContainer.classList.toggle("group-validacion-error", aplicarErrorTamano);
+        tamanoChipsContainer.setAttribute("aria-invalid", aplicarErrorTamano ? "true" : "false");
+    }
+    actualizarEstadoAyuda(tamanoHelp, tamanoValido, mensajesAyudaBase.tamano, tamanoError, mostrarTamanoError);
 
-    const esValido = nombreValido && apellidoValido && correoValido
-                  && telefonoValido && fotosValidas && tamanoValido && papelValido;
+    actualizarEstadoGrupo(opcionesPapelGroup, papelValido, mostrarPapelError);
+    if (opcionesPapelGroup) {
+        opcionesPapelGroup.setAttribute("aria-describedby", "papelHelp");
+        opcionesPapelGroup.setAttribute("aria-invalid", aplicarErrorPapel ? "true" : "false");
+    }
+    document.querySelectorAll('input[name="papel"]').forEach(function(radio) {
+        radio.setAttribute("aria-describedby", "papelHelp");
+        radio.setAttribute("aria-invalid", aplicarErrorPapel ? "true" : "false");
+    });
+    actualizarEstadoAyuda(papelHelp, papelValido, mensajesAyudaBase.papel, papelError, mostrarPapelError);
 
-    btnEnviar.disabled = !esValido;
+    const esValido = estado.esValido;
 
     if (bloquearMensajesValidacion) {
         return esValido;
     }
 
-    // Mensajes de ayuda
-    if (!fotosValidas && inputImagenes.files.length === 0) {
-        errorMessage.textContent = "Selecciona al menos una foto para imprimir.";
-    } else if (!tamanoValido) {
-        errorMessage.textContent = usaAsignacionPorFoto()
-            ? "Asigna un tamaño a cada foto para continuar."
-            : "Selecciona al menos un tamaño de foto.";
-    } else if (!papelValido) {
-        errorMessage.textContent = "Elige un tipo de papel.";
-    } else if (!esValido) {
-        errorMessage.textContent = "Completa todos los campos correctamente del formulario de datos personales.";
-    } else {
-        errorMessage.textContent = "";
-    }
-
-    errorMessage.style.color = "red";
     return esValido;
 }
 
@@ -889,13 +1204,52 @@ function validarFormulario() {
 [nameInput, apellidoInput, correoInput, telefonoInput].forEach(input => {
     input.addEventListener("input", validarFormulario);
 });
+
+if (nameInput) {
+    nameInput.addEventListener("blur", function() {
+        marcarBlurCampo("nombre");
+        validarFormulario();
+    });
+}
+
+if (apellidoInput) {
+    apellidoInput.addEventListener("blur", function() {
+        marcarBlurCampo("apellido");
+        validarFormulario();
+    });
+}
+
+if (correoInput) {
+    correoInput.addEventListener("blur", function() {
+        marcarBlurCampo("correo");
+        validarFormulario();
+    });
+}
+
+if (telefonoInput) {
+    telefonoInput.addEventListener("blur", function() {
+        marcarBlurCampo("telefono");
+        validarFormulario();
+    });
+}
+
 if (prefijoPaisSelect) {
     prefijoPaisSelect.addEventListener("change", function() {
         actualizarAyudaTelefono();
         validarFormulario();
     });
+    prefijoPaisSelect.addEventListener("blur", function() {
+        marcarBlurCampo("telefono");
+        validarFormulario();
+    });
 }
+
 inputImagenes.addEventListener("change", validarFormulario);
+inputImagenes.addEventListener("blur", function() {
+    marcarBlurCampo("fotos");
+    validarFormulario();
+});
+
 tamanoSelect.addEventListener("change", function() {
     sincronizarTamanoBaseEnAsignacion(false);
     actualizarIndicadorTamanoBase();
@@ -903,9 +1257,44 @@ tamanoSelect.addEventListener("change", function() {
     renderAsignacionesFotos();
     validarFormulario();
 });
+tamanoSelect.addEventListener("blur", function() {
+    marcarBlurCampo("tamano");
+    validarFormulario();
+});
+
+if (tamanoChipsContainer) {
+    tamanoChipsContainer.addEventListener("focusout", function(event) {
+        const siguiente = event.relatedTarget;
+        if (siguiente && tamanoChipsContainer.contains(siguiente)) {
+            return;
+        }
+        marcarBlurCampo("tamano");
+        validarFormulario();
+    });
+}
+
 document.querySelectorAll('input[name="papel"]').forEach(radio => {
     radio.addEventListener("change", validarFormulario);
+    radio.addEventListener("blur", function() {
+        const activo = document.activeElement;
+        if (activo && activo.getAttribute && activo.getAttribute("name") === "papel") {
+            return;
+        }
+        marcarBlurCampo("papel");
+        validarFormulario();
+    });
 });
+
+if (opcionesPapelGroup) {
+    opcionesPapelGroup.addEventListener("focusout", function(event) {
+        const siguiente = event.relatedTarget;
+        if (siguiente && opcionesPapelGroup.contains(siguiente)) {
+            return;
+        }
+        marcarBlurCampo("papel");
+        validarFormulario();
+    });
+}
 
 document.addEventListener("imagenesActualizadas", function() {
     sincronizarTamanoBaseEnAsignacion(false);
@@ -937,6 +1326,7 @@ renderAsignacionesFotos();
 if (cancelCropBtn) {
     cancelCropBtn.addEventListener("click", function() {
         destruirCropper();
+        limpiarComparadorRecorte();
         cerrarModal(cropImageModal);
     });
 }
@@ -969,6 +1359,7 @@ if (applyCropBtn) {
 
             renderAsignacionesFotos();
             destruirCropper();
+            limpiarComparadorRecorte();
             cerrarModal(cropImageModal);
             errorMessage.textContent = "Recorte aplicado correctamente.";
             errorMessage.style.color = "#00a76f";
@@ -1043,6 +1434,7 @@ if (clearFrameAllBtn) {
 document.addEventListener("keydown", function(e) {
     if (e.key === "Escape") {
         destruirCropper();
+        limpiarComparadorRecorte();
         cerrarModal(cropImageModal);
         cerrarModal(frameImageModal);
         cerrarModalExitoPedido();
@@ -1053,6 +1445,7 @@ if (cropImageModal) {
     cropImageModal.addEventListener("click", function(e) {
         if (e.target === cropImageModal) {
             destruirCropper();
+            limpiarComparadorRecorte();
             cerrarModal(cropImageModal);
         }
     });
@@ -1133,7 +1526,15 @@ async function construirArchivoFinal(file) {
 form.addEventListener("submit", async function(e) {
     e.preventDefault();
 
-    if (!validarFormulario()) return;
+    estadoInteraccionValidacion.intentoEnvio = true;
+    const esValido = validarFormulario();
+    if (!esValido) {
+        if (errorMessage) {
+            errorMessage.textContent = "";
+        }
+        navegarAlPrimerError(ultimoEstadoValidacion || obtenerEstadoValidacion());
+        return;
+    }
 
     // Si no está confirmado, abrir modal de resumen primero
     if (!form.dataset.confirmed) {
@@ -1221,6 +1622,7 @@ form.addEventListener("submit", async function(e) {
         };
 
         form.reset();
+        reiniciarInteraccionValidacion();
         // Limpiar selección y actualizar UI sin disparar mensajes de validación
         asignacionesPorFoto.clear();
         Array.from(previewUrlPorFoto.keys()).forEach(limpiarPreviewUrl);
@@ -1235,15 +1637,19 @@ form.addEventListener("submit", async function(e) {
 
         // Cerrar/resetear modal factura
         if (facturaOverlay) facturaOverlay.classList.remove("active");
-        const btnResumen = document.getElementById("btnVerResumen");
-        if (btnResumen) btnResumen.disabled = true;
-        btnEnviar.disabled = true;
+        btnEnviar.disabled = false;
 
         errorMessage.textContent = "Pedido enviado con exito!";
         errorMessage.style.color = "#00ff4c";
         bloquearMensajesValidacion = false;
         ocultarSpinnerPedido();
         abrirModalExitoPedido(clienteGuardado.id, clienteGuardado.correo, infoResumenHtml, bodyResumenHtml);
+        window.dispatchEvent(new CustomEvent("pedido:enviado", {
+            detail: {
+                clienteId: clienteGuardado.id,
+                correo: clienteGuardado.correo,
+            },
+        }));
 
     } catch (error) {
         bloquearMensajesValidacion = false;

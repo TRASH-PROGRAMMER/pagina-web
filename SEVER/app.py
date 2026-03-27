@@ -1,5 +1,13 @@
-import sys
+﻿import sys
 import os
+import json
+import re
+import time
+import shutil
+import subprocess
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from threading import Lock, Thread
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Cargar variables de entorno desde .ENV
@@ -16,7 +24,8 @@ for env_candidate in [
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_session import Session
 from werkzeug.security import generate_password_hash
-from db import AuthSession, Cliente, Foto, FotoTamano, MarcoDiseno, User, db
+from sqlalchemy.engine.url import make_url
+from db import AuthSession, Cliente, ClienteDraft, Foto, FotoTamano, MarcoDiseno, User, db
 from auth import auth_bp, login_required, role_required
 import cloudinary
 import cloudinary.uploader
@@ -26,14 +35,14 @@ import cloudinary.utils
 # Crea la app Flask
 app = Flask(__name__)
 
-# Configuración de PostgreSQL — usa psycopg (v3) en vez de psycopg2
+# ConfiguraciÃ³n de PostgreSQL â€” usa psycopg (v3) en vez de psycopg2
 DB_URL = os.environ.get(
     "DATABASE_URL",
     "postgresql+psycopg://postgres:postgres@localhost:5434/postgres"
 )
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['MAX_CONTENT_LENGTH'] = 150 * 10 * 1024 * 1024  # 150 fotos × 10 MB
+app.config['MAX_CONTENT_LENGTH'] = 150 * 10 * 1024 * 1024  # 150 fotos Ã— 10 MB
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-change-me')
 app.config['SESSION_TYPE'] = os.environ.get('SESSION_TYPE', 'filesystem')
 app.config['SESSION_FILE_DIR'] = os.environ.get(
@@ -47,7 +56,7 @@ app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production
 
 Session(app)
 
-# Configuración de Cloudinary
+# ConfiguraciÃ³n de Cloudinary
 cloudinary.config(
     cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
     api_key=os.environ.get('CLOUDINARY_API_KEY'),
@@ -71,6 +80,35 @@ DEFAULT_TAMANOS = [
     {"clave": "20x25", "nombre": "20x25cm (8R)", "precio_base": 3.65},
     {"clave": "20x30", "nombre": "20x30cm", "precio_base": 4.00},
 ]
+
+def _env_bool(name, default=False):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on", "si"}
+
+
+DRAFT_KEY_REGEX = re.compile(r'^[A-Za-z0-9_-]{8,80}$')
+MAX_DRAFT_PAYLOAD_BYTES = 700_000
+CLOUDINARY_CANCELLED_RETENTION_DAYS = int(os.environ.get("CLOUDINARY_CANCELLED_RETENTION_DAYS", "10"))
+CLOUDINARY_CANCELLED_CLEANUP_INTERVAL_SECONDS = int(
+    os.environ.get("CLOUDINARY_CANCELLED_CLEANUP_INTERVAL_SECONDS", str(6 * 60 * 60))
+)
+DB_BACKUP_ENABLED = _env_bool("DB_BACKUP_ENABLED", True)
+DB_BACKUP_INTERVAL_SECONDS = int(os.environ.get("DB_BACKUP_INTERVAL_SECONDS", str(24 * 60 * 60)))
+DB_BACKUP_RETENTION_DAYS = int(os.environ.get("DB_BACKUP_RETENTION_DAYS", "15"))
+DB_BACKUP_DIR = os.environ.get(
+    "DB_BACKUP_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "backups"),
+)
+DB_BACKUP_COMMAND = os.environ.get("DB_BACKUP_COMMAND", "pg_dump")
+PUBLIC_ID_FROM_URL_REGEX = re.compile(r'^v\d+$')
+
+_last_cancelled_cleanup_run_ts = 0.0
+_cancelled_cleanup_lock = Lock()
+_last_db_backup_run_ts = 0.0
+_db_backup_lock = Lock()
+_db_backup_thread_started = False
 
 
 def allowed_file(filename):
@@ -96,7 +134,7 @@ def allowed_frame_file(file_obj):
 
 
 def _thumbnail_url(public_id=None, fallback_url=""):
-    """Genera una miniatura pequeña de Cloudinary y usa fallback si algo falla."""
+    """Genera una miniatura pequeÃ±a de Cloudinary y usa fallback si algo falla."""
     if public_id:
         try:
             thumb_url, _ = cloudinary.utils.cloudinary_url(
@@ -125,13 +163,332 @@ def _marco_to_dict(marco):
         "updated_at": marco.updated_at.isoformat() if marco.updated_at else None,
     }
 
+
+def _validar_draft_key(draft_key):
+    return bool(draft_key and DRAFT_KEY_REGEX.match(draft_key))
+
+
+def _payload_size_ok(payload):
+    try:
+        encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    except Exception:
+        return False
+    return len(encoded) <= MAX_DRAFT_PAYLOAD_BYTES
+
+
+def _draft_to_dict(draft):
+    return {
+        "draftKey": draft.draft_key,
+        "payload": draft.payload or {},
+        "version": int(draft.version or 1),
+        "updatedAt": draft.updated_at.isoformat() if draft.updated_at else None,
+    }
+
+
+def _infer_public_id_from_url(url):
+    if not url:
+        return None
+
+    try:
+        url_text = str(url)
+        marker = "/upload/"
+        if marker not in url_text:
+            return None
+
+        path_after_upload = url_text.split(marker, 1)[1].strip("/")
+        if not path_after_upload:
+            return None
+
+        segments = [seg for seg in path_after_upload.split("/") if seg]
+        if not segments:
+            return None
+
+        version_idx = -1
+        for idx, segment in enumerate(segments):
+            if PUBLIC_ID_FROM_URL_REGEX.match(segment):
+                version_idx = idx
+                break
+
+        public_id_segments = segments[(version_idx + 1) if version_idx >= 0 else 0:]
+        if not public_id_segments:
+            return None
+
+        public_id_segments[-1] = re.sub(r'\.[A-Za-z0-9]+$', '', public_id_segments[-1])
+        public_id = "/".join(public_id_segments).strip("/")
+        return public_id or None
+    except Exception:
+        return None
+
+
+def _destroy_cloudinary_image(public_id):
+    if not public_id:
+        return False
+    try:
+        result = cloudinary.uploader.destroy(public_id, resource_type="image")
+        status = str((result or {}).get("result", "")).lower()
+        # Cloudinary reporta "not found" si el recurso ya fue eliminado.
+        return status in {"ok", "not found"}
+    except Exception as e:
+        print(f"Error eliminando recurso Cloudinary {public_id}: {e}")
+        return False
+
+
+def _cleanup_cancelled_order_photos(retention_days=CLOUDINARY_CANCELLED_RETENTION_DAYS):
+    if retention_days <= 0:
+        return {"clientes": 0, "fotos_eliminadas": 0, "fallos": 0}
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    clientes = Cliente.query.filter(
+        Cliente.estado == "cancelado",
+        Cliente.cancelled_at.isnot(None),
+        Cliente.cancelled_at <= cutoff,
+    ).all()
+
+    fotos_eliminadas = 0
+    fallos = 0
+
+    for cliente in clientes:
+        fotos_cliente = list(cliente.fotos or [])
+        for foto in fotos_cliente:
+            public_id = (foto.public_id or "").strip() or _infer_public_id_from_url(foto.filename)
+
+            if not public_id:
+                fallos += 1
+                continue
+
+            if _destroy_cloudinary_image(public_id):
+                db.session.delete(foto)
+                fotos_eliminadas += 1
+            else:
+                fallos += 1
+
+    if fotos_eliminadas > 0:
+        db.session.commit()
+
+    return {
+        "clientes": len(clientes),
+        "fotos_eliminadas": fotos_eliminadas,
+        "fallos": fallos,
+    }
+
+
+def _run_cancelled_cleanup_if_due(force=False):
+    global _last_cancelled_cleanup_run_ts
+
+    now_ts = time.time()
+    if not force and (now_ts - _last_cancelled_cleanup_run_ts) < CLOUDINARY_CANCELLED_CLEANUP_INTERVAL_SECONDS:
+        return
+
+    acquired = _cancelled_cleanup_lock.acquire(blocking=False)
+    if not acquired:
+        return
+
+    try:
+        now_ts = time.time()
+        if not force and (now_ts - _last_cancelled_cleanup_run_ts) < CLOUDINARY_CANCELLED_CLEANUP_INTERVAL_SECONDS:
+            return
+
+        resumen = _cleanup_cancelled_order_photos(CLOUDINARY_CANCELLED_RETENTION_DAYS)
+        _last_cancelled_cleanup_run_ts = time.time()
+
+        if resumen["fotos_eliminadas"] > 0 or resumen["fallos"] > 0:
+            print(
+                "[cleanup] pedidos cancelados: "
+                f"clientes={resumen['clientes']}, "
+                f"fotos_eliminadas={resumen['fotos_eliminadas']}, "
+                f"fallos={resumen['fallos']}"
+            )
+    finally:
+        _cancelled_cleanup_lock.release()
+
+
+def _backup_dir_path():
+    return Path(DB_BACKUP_DIR)
+
+
+def _initialize_db_backup_last_run_from_disk():
+    global _last_db_backup_run_ts
+    if _last_db_backup_run_ts > 0:
+        return
+
+    backup_dir = _backup_dir_path()
+    if not backup_dir.exists():
+        return
+
+    try:
+        backups = sorted(
+            backup_dir.glob("db_backup_*.sql"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if backups:
+            _last_db_backup_run_ts = backups[0].stat().st_mtime
+    except Exception:
+        return
+
+
+def _build_pg_dump_command(output_file):
+    db_url = make_url(DB_URL)
+    if not str(db_url.drivername or "").startswith("postgresql"):
+        raise RuntimeError("Backup automatico soporta solo PostgreSQL.")
+
+    if not db_url.database:
+        raise RuntimeError("DATABASE_URL no contiene nombre de base de datos.")
+
+    cmd = [
+        DB_BACKUP_COMMAND,
+        "--format=plain",
+        "--no-owner",
+        "--no-privileges",
+        "--encoding=UTF8",
+        "--file",
+        str(output_file),
+    ]
+
+    if db_url.host:
+        cmd.extend(["--host", str(db_url.host)])
+    if db_url.port:
+        cmd.extend(["--port", str(db_url.port)])
+    if db_url.username:
+        cmd.extend(["--username", str(db_url.username)])
+
+    cmd.append(str(db_url.database))
+
+    env = os.environ.copy()
+    if db_url.password is not None:
+        env["PGPASSWORD"] = str(db_url.password)
+
+    return cmd, env
+
+
+def _prune_old_db_backups():
+    deleted = 0
+    backup_dir = _backup_dir_path()
+    if not backup_dir.exists():
+        return deleted
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max(DB_BACKUP_RETENTION_DAYS, 1))
+    for backup_file in backup_dir.glob("db_backup_*.sql"):
+        try:
+            file_mtime = datetime.fromtimestamp(backup_file.stat().st_mtime, tz=timezone.utc)
+            if file_mtime < cutoff:
+                backup_file.unlink()
+                deleted += 1
+        except Exception as e:
+            print(f"Error eliminando backup antiguo {backup_file}: {e}")
+
+    return deleted
+
+
+def _perform_db_backup(trigger="scheduled"):
+    backup_dir = _backup_dir_path()
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    output_file = backup_dir / f"db_backup_{timestamp}.sql"
+
+    if shutil.which(DB_BACKUP_COMMAND) is None:
+        return {
+            "ok": False,
+            "trigger": trigger,
+            "error": f"No se encontro el comando '{DB_BACKUP_COMMAND}' en PATH.",
+        }
+
+    cmd, env = _build_pg_dump_command(output_file)
+    result = subprocess.run(
+        cmd,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15 * 60,
+    )
+
+    if result.returncode != 0:
+        if output_file.exists():
+            output_file.unlink()
+        return {
+            "ok": False,
+            "trigger": trigger,
+            "error": (result.stderr or result.stdout or "Fallo de pg_dump").strip(),
+        }
+
+    pruned = _prune_old_db_backups()
+    return {
+        "ok": True,
+        "trigger": trigger,
+        "path": str(output_file),
+        "pruned": pruned,
+    }
+
+
+def _run_db_backup_if_due(force=False, trigger="scheduled"):
+    global _last_db_backup_run_ts
+
+    if not DB_BACKUP_ENABLED:
+        return {"ok": False, "skipped": "disabled", "trigger": trigger}
+
+    _initialize_db_backup_last_run_from_disk()
+
+    interval = max(DB_BACKUP_INTERVAL_SECONDS, 60)
+    now_ts = time.time()
+    if not force and (now_ts - _last_db_backup_run_ts) < interval:
+        return {"ok": False, "skipped": "interval", "trigger": trigger}
+
+    acquired = _db_backup_lock.acquire(blocking=False)
+    if not acquired:
+        return {"ok": False, "skipped": "busy", "trigger": trigger}
+
+    try:
+        now_ts = time.time()
+        if not force and (now_ts - _last_db_backup_run_ts) < interval:
+            return {"ok": False, "skipped": "interval", "trigger": trigger}
+
+        backup_result = _perform_db_backup(trigger=trigger)
+        _last_db_backup_run_ts = time.time()
+
+        if backup_result.get("ok"):
+            print(f"[backup] respaldo creado: {backup_result.get('path')}")
+        else:
+            print(f"[backup] error: {backup_result.get('error')}")
+
+        return backup_result
+    finally:
+        _db_backup_lock.release()
+
+
+def _db_backup_worker():
+    poll_seconds = max(30, min(max(DB_BACKUP_INTERVAL_SECONDS, 60), 15 * 60))
+    while True:
+        try:
+            _run_db_backup_if_due(force=False, trigger="worker")
+        except Exception as e:
+            print(f"[backup] error en worker: {e}")
+        time.sleep(poll_seconds)
+
+
+def _start_db_backup_worker():
+    global _db_backup_thread_started
+    if not DB_BACKUP_ENABLED or _db_backup_thread_started:
+        return
+
+    is_debug_reloader_parent = (
+        os.environ.get("WERKZEUG_RUN_MAIN") is None and _env_bool("FLASK_DEBUG", False)
+    )
+    if is_debug_reloader_parent:
+        return
+
+    worker = Thread(target=_db_backup_worker, name="db-backup-worker", daemon=True)
+    worker.start()
+    _db_backup_thread_started = True
+    print("[backup] worker automatico iniciado")
+
 db.init_app(app)
 app.register_blueprint(auth_bp)
 
-# Crea las tablas si no existen + migración ligera
+# Crea las tablas si no existen + migraciÃ³n ligera
 with app.app_context():
     db.create_all()
-    # Agregar columnas nuevas si la tabla ya existía sin ellas
+    # Agregar columnas nuevas si la tabla ya existÃ­a sin ellas
     with db.engine.connect() as conn:
         conn.execute(db.text(
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS tamano VARCHAR(200)"))
@@ -144,9 +501,15 @@ with app.app_context():
         conn.execute(db.text(
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS pagado BOOLEAN DEFAULT FALSE"))
         conn.execute(db.text(
+            "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ"))
+        conn.execute(db.text(
             "UPDATE clientes SET estado='pendiente' WHERE estado IS NULL"))
         conn.execute(db.text(
             "UPDATE clientes SET pagado=FALSE WHERE pagado IS NULL"))
+        conn.execute(db.text(
+            "UPDATE clientes SET cancelled_at=NOW() WHERE estado='cancelado' AND cancelled_at IS NULL"))
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS idx_clientes_estado_cancelled_at ON clientes (estado, cancelled_at)"))
         conn.execute(db.text(
             "ALTER TABLE fotos ADD COLUMN IF NOT EXISTS public_id VARCHAR(255)"))
         conn.execute(db.text(
@@ -167,9 +530,28 @@ with app.app_context():
             "ALTER TABLE marcos_diseno ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()"))
         conn.execute(db.text(
             "ALTER TABLE marcos_diseno ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"))
+        conn.execute(db.text(
+            "CREATE TABLE IF NOT EXISTS cliente_drafts ("
+            "id SERIAL PRIMARY KEY, "
+            "draft_key VARCHAR(80) NOT NULL UNIQUE, "
+            "payload JSONB NOT NULL DEFAULT '{}'::jsonb, "
+            "version INTEGER NOT NULL DEFAULT 1, "
+            "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), "
+            "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()"
+            ")"))
+        conn.execute(db.text(
+            "ALTER TABLE cliente_drafts ADD COLUMN IF NOT EXISTS payload JSONB DEFAULT '{}'::jsonb"))
+        conn.execute(db.text(
+            "ALTER TABLE cliente_drafts ADD COLUMN IF NOT EXISTS version INTEGER DEFAULT 1"))
+        conn.execute(db.text(
+            "ALTER TABLE cliente_drafts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()"))
+        conn.execute(db.text(
+            "ALTER TABLE cliente_drafts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"))
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS idx_cliente_drafts_draft_key ON cliente_drafts (draft_key)"))
         conn.commit()
 
-    # Seed inicial de tamanos si la tabla está vacía
+    # Seed inicial de tamanos si la tabla estÃ¡ vacÃ­a
     if FotoTamano.query.count() == 0:
         for item in DEFAULT_TAMANOS:
             db.session.add(FotoTamano(
@@ -191,13 +573,13 @@ with app.app_context():
         {
             "username": os.environ.get("OPERADOR_USERNAME", "operador"),
             "email": os.environ.get("OPERADOR_EMAIL", "operador@imagemanager.local"),
-            "password": os.environ.get("OPERADOR_PASSWORD", "Cocolimon3455·#"),
+            "password": os.environ.get("OPERADOR_PASSWORD", "Cocolimon3455Â·#"),
             "role": "operador",
         },
         {
             "username": os.environ.get("CAJERO_USERNAME", "cajero"),
             "email": os.environ.get("CAJERO_EMAIL", "cajero@imagemanager.local"),
-            "password": os.environ.get("CAJERO_PASSWORD", "dloktrukgr345£!3"),
+            "password": os.environ.get("CAJERO_PASSWORD", "dloktrukgr345Â£!3"),
             "role": "cajero",
         },
     ]
@@ -217,6 +599,18 @@ with app.app_context():
 
     db.session.commit()
 
+    try:
+        _run_cancelled_cleanup_if_due(force=True)
+    except Exception as e:
+        print(f"Error en limpieza inicial de pedidos cancelados: {e}")
+
+    try:
+        _run_db_backup_if_due(force=False, trigger="startup")
+    except Exception as e:
+        print(f"Error en backup inicial de base de datos: {e}")
+
+_start_db_backup_worker()
+
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -226,12 +620,12 @@ def home():
 def seguimiento():
     return render_template('seguimiento.html')
 
-# crea una ruta para la página de administración
+# crea una ruta para la pÃ¡gina de administraciÃ³n
 @app.route('/admin')
 def admin():
     return render_template('admin.html')
-# imprime un mensaje en la consola para indicar que el programa está funcionando
-print("El programa está funcionando")
+# imprime un mensaje en la consola para indicar que el programa estÃ¡ funcionando
+print("El programa estÃ¡ funcionando")
 @app.route('/operador')
 def operador():
     return render_template('operador.html')
@@ -240,6 +634,122 @@ def operador():
 @app.route('/cajero')
 def cajero():
     return render_template('cajero.html')
+
+
+@app.before_request
+def _background_cancelled_cleanup():
+    try:
+        _run_cancelled_cleanup_if_due(force=False)
+    except Exception as e:
+        print(f"Error en limpieza programada de pedidos cancelados: {e}")
+
+    try:
+        _run_db_backup_if_due(force=False, trigger="request")
+    except Exception as e:
+        print(f"Error en backup programado de base de datos: {e}")
+
+
+@app.route('/api/admin/db-backup', methods=['POST'])
+@login_required
+@role_required('admin')
+def admin_db_backup_now():
+    result = _run_db_backup_if_due(force=True, trigger="manual")
+    if result.get("ok") or result.get("skipped"):
+        return jsonify(result), 200
+    return jsonify(result), 500
+
+
+@app.route('/api/autosave/<string:draft_key>', methods=['GET', 'PUT', 'DELETE'])
+def autosave_draft(draft_key):
+    if not _validar_draft_key(draft_key):
+        return jsonify({"error": "Clave de borrador invalida"}), 400
+
+    draft = ClienteDraft.query.filter_by(draft_key=draft_key).first()
+
+    if request.method == 'GET':
+        if not draft:
+            return jsonify({"draft": None}), 404
+        return jsonify({"draft": _draft_to_dict(draft)}), 200
+
+    if request.method == 'DELETE':
+        if draft:
+            db.session.delete(draft)
+            db.session.commit()
+        return jsonify({"ok": True}), 200
+
+    data = request.get_json(silent=True) or {}
+    payload = data.get("payload")
+    base_version = data.get("baseVersion")
+    force_write = bool(data.get("force"))
+
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Payload de borrador invalido"}), 400
+
+    if not _payload_size_ok(payload):
+        return jsonify({"error": "Borrador demasiado grande"}), 413
+
+    if draft:
+        if base_version is not None and not force_write:
+            try:
+                base_version = int(base_version)
+            except (TypeError, ValueError):
+                return jsonify({"error": "baseVersion invalido"}), 400
+
+            if base_version != int(draft.version or 1):
+                return jsonify({
+                    "error": "conflict",
+                    "draft": _draft_to_dict(draft),
+                }), 409
+
+        draft.payload = payload
+        draft.version = int(draft.version or 1) + 1
+    else:
+        draft = ClienteDraft(
+            draft_key=draft_key,
+            payload=payload,
+            version=1,
+        )
+        db.session.add(draft)
+
+    db.session.commit()
+
+    status_code = 200 if draft and draft.version > 1 else 201
+    return jsonify({
+        "ok": True,
+        "draft": _draft_to_dict(draft),
+    }), status_code
+
+
+@app.route('/api/autosave/<string:draft_key>/beacon', methods=['POST'])
+def autosave_draft_beacon(draft_key):
+    if not _validar_draft_key(draft_key):
+        return jsonify({"error": "Clave de borrador invalida"}), 400
+
+    data = request.get_json(silent=True) or {}
+    payload = data.get("payload")
+
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Payload de borrador invalido"}), 400
+
+    if not _payload_size_ok(payload):
+        return jsonify({"error": "Borrador demasiado grande"}), 413
+
+    draft = ClienteDraft.query.filter_by(draft_key=draft_key).first()
+    if draft:
+        draft.payload = payload
+        draft.version = int(draft.version or 1) + 1
+    else:
+        draft = ClienteDraft(
+            draft_key=draft_key,
+            payload=payload,
+            version=1,
+        )
+        db.session.add(draft)
+
+    db.session.commit()
+    return jsonify({"ok": True, "draft": _draft_to_dict(draft)}), 200
+
+
 @app.route('/api/clientes', methods=['POST'])
 def crear_clientes():
     # Soporta FormData (con fotos) y JSON (sin fotos)
@@ -250,22 +760,23 @@ def crear_clientes():
         data = request.get_json() or {}
         archivos = []
 
-    # Validación básica backend
+    # ValidaciÃ³n bÃ¡sica backend
     campos = ['nombre', 'apellido', 'correo', 'telefono', 'fechaRegistro']
     for campo in campos:
         if not data.get(campo):
             return jsonify({"error": f"Campo '{campo}' requerido"}), 400
 
-    # Verificar si ya existe el correo → agregar fotos al cliente existente
+    # Verificar si ya existe el correo â†’ agregar fotos al cliente existente
     existe = Cliente.query.filter_by(correo=data["correo"]).first()
     if existe:
-        # Actualizar datos del pedido (tamaño, papel, fecha)
+        # Actualizar datos del pedido (tamaÃ±o, papel, fecha)
         existe.tamano       = data.get("tamano", existe.tamano)
         existe.tamano_keys  = data.get("tamano_keys", existe.tamano_keys)
         existe.papel        = data.get("papel", existe.papel)
         existe.fecha_registro = data["fechaRegistro"]
-        if not existe.estado:
+        if not existe.estado or (existe.estado or '').strip().lower() == 'cancelado':
             existe.estado = 'pendiente'
+            existe.cancelled_at = None
         if existe.pagado is None:
             existe.pagado = False
 
@@ -307,6 +818,7 @@ def crear_clientes():
                 "tamano": existe.tamano,
                 "papel": existe.papel,
                 "estado": existe.estado,
+                "cancelledAt": existe.cancelled_at.isoformat() if existe.cancelled_at else None,
                 "pagado": bool(existe.pagado),
                 "numFotos": len(fotos_guardadas),
                 "fotos": fotos_guardadas,
@@ -372,6 +884,7 @@ def crear_clientes():
             "tamano": nuevo_cliente.tamano,
             "papel": nuevo_cliente.papel,
             "estado": nuevo_cliente.estado,
+            "cancelledAt": nuevo_cliente.cancelled_at.isoformat() if nuevo_cliente.cancelled_at else None,
             "pagado": bool(nuevo_cliente.pagado),
             "numFotos": len(fotos_guardadas),
             "fotos": fotos_guardadas,
@@ -397,6 +910,7 @@ def obtener_clientes():
         "tamano":         c.tamano or "",
         "papel":          c.papel or "",
         "estado":         c.estado or "pendiente",
+        "cancelledAt":    c.cancelled_at.isoformat() if c.cancelled_at else None,
         "pagado":         bool(c.pagado),
         "numFotos":       len(c.fotos),
         "fotos":          [f.filename for f in c.fotos],
@@ -438,9 +952,20 @@ def actualizar_estado_cliente(id):
     if estado not in estados_validos:
         return jsonify({"error": "Estado invalido"}), 400
 
+    estado_anterior = (cliente.estado or '').strip().lower()
+    if estado == 'cancelado':
+        if estado_anterior != 'cancelado' or cliente.cancelled_at is None:
+            cliente.cancelled_at = datetime.now(timezone.utc)
+    elif estado_anterior == 'cancelado':
+        cliente.cancelled_at = None
+
     cliente.estado = estado
     db.session.commit()
-    return jsonify({"mensaje": "Estado actualizado", "estado": cliente.estado}), 200
+    return jsonify({
+        "mensaje": "Estado actualizado",
+        "estado": cliente.estado,
+        "cancelledAt": cliente.cancelled_at.isoformat() if cliente.cancelled_at else None,
+    }), 200
 
 
 @app.route('/api/clientes/<int:id>/pago', methods=['PATCH'])
@@ -689,6 +1214,7 @@ def api_seguimiento_cliente(cliente_id):
             "telefono": cliente.telefono,
             "fechaRegistro": cliente.fecha_registro,
             "estado": cliente.estado or "pendiente",
+            "cancelledAt": cliente.cancelled_at.isoformat() if cliente.cancelled_at else None,
             "pagado": bool(cliente.pagado),
             "papel": cliente.papel or "No especificado",
             "numFotos": len(cliente.fotos),
@@ -729,7 +1255,7 @@ def admin_crear_tamano():
     try:
         precio_base = float(data.get("precio_base", 0))
     except (TypeError, ValueError):
-        return jsonify({"error": "precio_base debe ser numérico"}), 400
+        return jsonify({"error": "precio_base debe ser numÃ©rico"}), 400
 
     if not clave or not nombre:
         return jsonify({"error": "clave y nombre son requeridos"}), 400
@@ -751,14 +1277,14 @@ def admin_crear_tamano():
 def admin_editar_tamano(tamano_id):
     t = db.session.get(FotoTamano, tamano_id)
     if not t:
-        return jsonify({"error": "Tamaño no encontrado"}), 404
+        return jsonify({"error": "TamaÃ±o no encontrado"}), 404
 
     data = request.get_json() or {}
 
     if "clave" in data:
         nueva_clave = (data.get("clave") or "").strip().lower()
         if not nueva_clave:
-            return jsonify({"error": "clave inválida"}), 400
+            return jsonify({"error": "clave invÃ¡lida"}), 400
         existe = FotoTamano.query.filter(FotoTamano.clave == nueva_clave, FotoTamano.id != tamano_id).first()
         if existe:
             return jsonify({"error": "La clave ya existe"}), 409
@@ -767,14 +1293,14 @@ def admin_editar_tamano(tamano_id):
     if "nombre" in data:
         nuevo_nombre = (data.get("nombre") or "").strip()
         if not nuevo_nombre:
-            return jsonify({"error": "nombre inválido"}), 400
+            return jsonify({"error": "nombre invÃ¡lido"}), 400
         t.nombre = nuevo_nombre
 
     if "precio_base" in data:
         try:
             nuevo_precio = float(data.get("precio_base"))
         except (TypeError, ValueError):
-            return jsonify({"error": "precio_base debe ser numérico"}), 400
+            return jsonify({"error": "precio_base debe ser numÃ©rico"}), 400
         if nuevo_precio < 0:
             return jsonify({"error": "precio_base no puede ser negativo"}), 400
         t.precio_base = nuevo_precio
@@ -792,7 +1318,7 @@ def admin_editar_tamano(tamano_id):
 def admin_desactivar_tamano(tamano_id):
     t = db.session.get(FotoTamano, tamano_id)
     if not t:
-        return jsonify({"error": "Tamaño no encontrado"}), 404
+        return jsonify({"error": "TamaÃ±o no encontrado"}), 404
 
     t.activo = False
     db.session.commit()
@@ -826,10 +1352,10 @@ def admin_crear_marco():
     nombre = (request.form.get('nombre') or '').strip()
     archivo = request.files.get('imagen')
     estado_raw = (request.form.get('activo') or 'true').strip().lower()
-    activo = estado_raw in {'true', '1', 'on', 'si', 'sí'}
+    activo = estado_raw in {'true', '1', 'on', 'si', 'sÃ­'}
 
     if not nombre:
-        return jsonify({"error": "El nombre del diseño es requerido"}), 400
+        return jsonify({"error": "El nombre del diseÃ±o es requerido"}), 400
 
     if not archivo or not archivo.filename:
         return jsonify({"error": "La imagen del marco es requerida"}), 400
@@ -895,14 +1421,14 @@ def obtener_precios():
     try:
         cantidad = int(cantidad)
     except (TypeError, ValueError):
-        return jsonify({"error": "cantidad inválida"}), 400
+        return jsonify({"error": "cantidad invÃ¡lida"}), 400
 
     if not tamano or cantidad <= 0:
         return jsonify({"error": "Datos incompletos"}), 400
 
     precio_base = _precio_base_tamano(tamano)
     if precio_base is None:
-        return jsonify({"error": "Tamaño no válido"}), 400
+        return jsonify({"error": "TamaÃ±o no vÃ¡lido"}), 400
 
     precio_unitario = _aplicar_descuentos(tamano, cantidad, precio_base)
     total = round(precio_unitario * cantidad, 2)
@@ -921,7 +1447,7 @@ def pedidos_semana():
     from datetime import datetime, timedelta
     hoy = datetime.now().date()
     dias = []
-    nombres_dias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+    nombres_dias = ['Lun', 'Mar', 'MiÃ©', 'Jue', 'Vie', 'SÃ¡b', 'Dom']
     for i in range(6, -1, -1):
         dia = hoy - timedelta(days=i)
         dias.append(dia)
@@ -994,56 +1520,123 @@ def estadisticas():
 @login_required
 @role_required('admin', 'operador')
 def ultimas_subidas():
-    from datetime import datetime
-    fotos = (Foto.query
-             .order_by(Foto.id.desc())
-             .limit(10)
-             .all())
+    ultimas_fotos_por_cliente = (
+        db.session.query(
+            Foto.cliente_id.label("cliente_id"),
+            db.func.max(Foto.id).label("ultima_foto_id")
+        )
+        .group_by(Foto.cliente_id)
+        .subquery()
+    )
+
+    clientes = (
+        Cliente.query
+        .join(
+            ultimas_fotos_por_cliente,
+            ultimas_fotos_por_cliente.c.cliente_id == Cliente.id
+        )
+        .order_by(ultimas_fotos_por_cliente.c.ultima_foto_id.desc())
+        .limit(5)
+        .all()
+    )
+
     resultado = []
-    for f in fotos:
-        cliente = f.cliente
+    for cliente in clientes:
+        fotos_cliente = sorted(list(cliente.fotos or []), key=lambda item: item.id or 0)
+        urls_fotos = [f.filename for f in fotos_cliente if f.filename]
+        if not urls_fotos:
+            continue
+
+        foto_ultima = fotos_cliente[-1]
         resultado.append({
-            "url": f.filename,
-            "thumbnail": _thumbnail_url(f.public_id, f.filename),
+            "clienteId": cliente.id,
+            "fotos": urls_fotos,
+            "url": urls_fotos[-1],
+            "thumbnail": _thumbnail_url(foto_ultima.public_id, foto_ultima.filename),
             "cliente": f"{cliente.nombre} {cliente.apellido}",
             "fecha": cliente.fecha_registro,
-            "numFotos": len(cliente.fotos),
+            "numFotos": len(urls_fotos),
         })
+
     return jsonify(resultado), 200
 
 @app.route('/api/cloudinary-stats', methods=['GET'])
 @login_required
 @role_required('admin')
 def cloudinary_stats():
-    """Obtiene estadísticas de almacenamiento de Cloudinary."""
+    """Obtiene estadisticas de uso de Cloudinary, priorizando almacenamiento real."""
     try:
         stats = cloudinary.api.usage()
-        # stats contiene: 
-        # - bandwidth (ancho de banda usado)
-        # - get_requests (solicitudes GET)
-        # - put_requests (solicitudes PUT)
-        # - etc.
-        # Para planes con almacenamiento limitado, intentamos obtener el límite
+
+        def _to_float(value):
+            try:
+                if value is None:
+                    return None
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        def _extract_storage_bytes(payload):
+            storage_node = payload.get('storage')
+            used = None
+            limit = None
+
+            if isinstance(storage_node, dict):
+                for key in ('usage', 'used', 'bytes', 'value', 'consumed'):
+                    parsed = _to_float(storage_node.get(key))
+                    if parsed is not None:
+                        used = parsed
+                        break
+                for key in ('limit', 'max', 'quota'):
+                    parsed = _to_float(storage_node.get(key))
+                    if parsed is not None:
+                        limit = parsed
+                        break
+            elif storage_node is not None:
+                used = _to_float(storage_node)
+
+            if used is None:
+                for key in ('storage_usage', 'storage_used', 'storage_bytes', 'storage'):
+                    parsed = _to_float(payload.get(key))
+                    if parsed is not None:
+                        used = parsed
+                        break
+
+            if limit is None:
+                for key in ('storage_limit', 'storage_quota', 'storage_bytes_limit'):
+                    parsed = _to_float(payload.get(key))
+                    if parsed is not None:
+                        limit = parsed
+                        break
+
+            return used, limit
+
+        storage_used_bytes, storage_limit_bytes = _extract_storage_bytes(stats)
+        storage_source = 'storage' if storage_used_bytes is not None else 'transformations_fallback'
+
         return jsonify({
-            "bandwidth": stats.get("bandwidth", 0),
-            "bandwidth_limit": stats.get("bandwidth_limit", 0),
-            "context": stats.get("context", {}),
-            "derived_resources": stats.get("derived_resources", 0),
-            "derived_resources_limit": stats.get("derived_resources_limit", 0),
-            "media_limit": stats.get("media_limit", 0),
-            "media_duration": stats.get("media_duration", 0),
-            "media_duration_limit": stats.get("media_duration_limit", 0),
-            "transformation_count": stats.get("transformation_count", 0),
-            "transformation_count_limit": stats.get("transformation_count_limit", 0),
-            "requests": stats.get("requests", 0),
+            'bandwidth': stats.get('bandwidth', 0),
+            'bandwidth_limit': stats.get('bandwidth_limit', 0),
+            'context': stats.get('context', {}),
+            'derived_resources': stats.get('derived_resources', 0),
+            'derived_resources_limit': stats.get('derived_resources_limit', 0),
+            'media_limit': stats.get('media_limit', 0),
+            'media_duration': stats.get('media_duration', 0),
+            'media_duration_limit': stats.get('media_duration_limit', 0),
+            'transformation_count': stats.get('transformation_count', 0),
+            'transformation_count_limit': stats.get('transformation_count_limit', 0),
+            'requests': stats.get('requests', 0),
+            'storage_used_bytes': storage_used_bytes,
+            'storage_limit_bytes': storage_limit_bytes,
+            'storage_source': storage_source,
         }), 200
     except Exception as e:
-        print(f"Error obteniendo stats de Cloudinary: {e}")
-        return jsonify({"error": str(e)}), 500
-
-   
+        print(f'Error obteniendo stats de Cloudinary: {e}')
+        return jsonify({'error': str(e)}), 500
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
+
 
 
 

@@ -46,7 +46,6 @@ function renderTamanosEnSelect(tamanos) {
         tamanoSelect.appendChild(option);
     });
 
-    checkResumenBtn();
     tamanoSelect.dispatchEvent(new Event("change"));
 }
 
@@ -66,28 +65,8 @@ async function cargarTamanosDinamicos(force = false) {
     }
 }
 
-// Habilitar/deshabilitar botón según selección
-function checkResumenBtn() {
-    const tienesFotos  = inputImagenes && inputImagenes.files && inputImagenes.files.length > 0;
-    const totalFotos = inputImagenes && inputImagenes.files ? inputImagenes.files.length : 0;
-    let tieneTamano = false;
-
-    if (usaAsignacionPorFoto()) {
-        const resumen = obtenerResumenAsignado();
-        const totalAsignado = Object.values(resumen).reduce(function(acc, item) {
-            return acc + Number(item.cantidad || 0);
-        }, 0);
-        tieneTamano = totalFotos > 0 && totalAsignado === totalFotos;
-    } else {
-        tieneTamano = tamanoSelect && tamanoSelect.selectedOptions.length > 0;
-    }
-
-    if (btnResumen) btnResumen.disabled = !(tienesFotos && tieneTamano);
-}
-
-if (tamanoSelect) tamanoSelect.addEventListener("change", checkResumenBtn);
-if (inputImagenes) inputImagenes.addEventListener("change", checkResumenBtn);
-document.addEventListener("asignacionesTamanosActualizadas", checkResumenBtn);
+// El botón de resumen siempre queda habilitado; la validación vive en formulario_clientes.js.
+if (btnResumen) btnResumen.disabled = false;
 
 // Abrir modal
 async function abrirResumenPedido() {
@@ -178,14 +157,6 @@ async function abrirResumenPedido() {
 }
 
 window.abrirResumenPedido = abrirResumenPedido;
-
-if (btnResumen) {
-    btnResumen.addEventListener("click", async function (e) {
-        // Si el botón está dentro del form, evita submit automático.
-        e.preventDefault();
-        await abrirResumenPedido();
-    });
-}
 
 // Finalizar pedido desde el modal — confirma y envía
 const btnFinalizar = document.getElementById("btnFinalizarPedido");

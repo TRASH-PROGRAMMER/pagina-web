@@ -8,6 +8,11 @@
         padding: 1.25rem;
     }
 
+    .container-datos {
+        margin: 1rem auto;
+        border-radius: 14px;
+    }
+
     .titulo { font-size: 1.5rem; }
     h2 { font-size: 1.125rem; }
 
@@ -34,9 +39,62 @@
         gap: 0.625rem;
     }
 
+    .formulario_datos_personales fieldset {
+        width: 100%;
+        min-width: 0;
+        padding: 0;
+        gap: 0.625rem;
+    }
+
+    .formulario_datos_personales legend h2 {
+        text-align: center;
+        font-size: 1.2rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .formulario_datos_personales label {
+        margin-top: 0.4rem;
+        font-size: 0.95rem;
+    }
+
+    .formulario_datos_personales input[type="text"],
+    .formulario_datos_personales input[type="email"],
+    .formulario_datos_personales input[type="tel"],
+    .formulario_datos_personales .prefijo-pais {
+        width: 100%;
+        max-width: 100%;
+        font-size: 1rem;
+        padding: 0.7rem 0.8rem;
+    }
+
+    .telefono-group {
+        grid-template-columns: 1fr;
+        gap: 0.55rem;
+    }
+
+    .formulario_datos_personales .campo-ayuda {
+        font-size: 0.76rem;
+        line-height: 1.35;
+    }
+
+    .autosave-status {
+        width: 100%;
+        display: flex;
+        gap: 8px;
+        padding: 8px 10px;
+    }
+
+    .autosave-status-text {
+        font-size: 0.82rem;
+    }
+
+    .autosave-status-meta {
+        font-size: 0.72rem;
+    }
+
     .enviar-button,
     .image-action-btn {
-        padding: 0.5rem 0.75rem;
+        padding: 0.75rem 0.9rem;
         width: 100%;
     }
 
@@ -139,7 +197,10 @@
     }
 
     .image-action-modal {
-        padding: 12px;
+        padding: 8px;
+        align-items: flex-start;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .image-action-modal-content {
@@ -147,8 +208,60 @@
         padding: 14px;
     }
 
+    .crop-modal-content {
+        width: 100%;
+        max-width: 100%;
+        max-height: calc(100dvh - 16px);
+        overflow-y: auto;
+        border-radius: 12px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .crop-workspace {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .crop-workspace .cropper-stage {
+        min-height: 42dvh;
+        max-height: 48dvh;
+    }
+
+    .crop-workspace .cropper-stage img {
+        width: 100%;
+        max-height: 46dvh;
+        object-fit: contain;
+    }
+
     .image-action-title {
         font-size: 22px;
+    }
+
+    .crop-compare {
+        padding: 8px;
+    }
+
+    .crop-compare-title {
+        margin-bottom: 6px;
+        font-size: 12px;
+    }
+
+    .crop-compare-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .crop-compare-card img {
+        aspect-ratio: 1 / 1;
+    }
+
+    .image-action-buttons {
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .image-action-btn {
+        min-width: 0;
     }
 
     .factura-overlay {
@@ -227,6 +340,38 @@
 }
 
 @media (max-width: 420px) {
+    .container-datos {
+        padding: 0.9rem 0.75rem;
+    }
+
+    .formulario_datos_personales legend h2 {
+        font-size: 1.05rem;
+    }
+
+    .formulario_datos_personales label {
+        font-size: 0.88rem;
+    }
+
+    .formulario_datos_personales input[type="text"],
+    .formulario_datos_personales input[type="email"],
+    .formulario_datos_personales input[type="tel"],
+    .formulario_datos_personales .prefijo-pais {
+        font-size: 0.95rem;
+    }
+
+    .crop-workspace .cropper-stage {
+        min-height: 36dvh;
+        max-height: 44dvh;
+    }
+
+    .crop-workspace .cropper-stage img {
+        max-height: 42dvh;
+    }
+
+    .crop-compare-grid {
+        grid-template-columns: 1fr;
+    }
+
     .factura-title {
         font-size: 18px;
     }

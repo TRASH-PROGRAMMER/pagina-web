@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Image Manager — sube, organiza e imprime tus fotos en distintos tamaños y papeles fotográficos.">
 <title>Image Manager — Carga e impresión de fotos</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style/style.css', v='20260323a') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='style/reponsive_index.css', v='20260323a') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/style.css', v='20260327f') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/reponsive_index.css', v='20260327f') }}" />
 <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" />
 </head>
 <body>
@@ -106,6 +106,7 @@
             <input type="radio" id="papel2" name="papel" value="Mate">
             <label for="papel2">Papel Fotográfico Mate</label>
         </div>
+        <p id="papelHelp" class="campo-ayuda">Selecciona el tipo de papel para tu impresion.</p>
     </fieldset>
 </main>
 
@@ -117,22 +118,24 @@
             <label for="nombre">Nombres:</label>
             <input type="text" id="nombre" name="nombre" placeholder="Ej: Juan Carlos"
                    autocomplete="given-name" required minlength="2"
-                   pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,}$"
+                     maxlength="60"
+                     pattern="^(?=.{2,60}$)[A-Za-zÀ-ÖØ-öø-ÿÑñ]+(?:[ '’-][A-Za-zÀ-ÖØ-öø-ÿÑñ]+)*$"
                    aria-describedby="nombreHelp">
-            <p id="nombreHelp" class="campo-ayuda">Solo letras, mínimo 2 caracteres.</p>
+                 <p id="nombreHelp" class="campo-ayuda">Usa letras y separadores internos validos (espacio, apostrofe o guion). Ej: Maria Jose, O'Connor, Marie-Claire.</p>
 
             <label for="apellido">Apellidos:</label>
             <input type="text" id="apellido" name="apellido" placeholder="Ej: Pérez López"
                    autocomplete="family-name" required minlength="2"
-                   pattern="^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,}$"
+                     maxlength="60"
+                     pattern="^(?=.{2,60}$)[A-Za-zÀ-ÖØ-öø-ÿÑñ]+(?:[ '’-][A-Za-zÀ-ÖØ-öø-ÿÑñ]+)*$"
                    aria-describedby="apellidoHelp">
-            <p id="apellidoHelp" class="campo-ayuda">Solo letras, mínimo 2 caracteres.</p>
+                 <p id="apellidoHelp" class="campo-ayuda">Usa letras y separadores internos validos (espacio, apostrofe o guion). Ej: Lopez, Iñaki, D'Angelo.</p>
 
             <label for="correo">Correo electrónico:</label>
             <input type="email" id="correo" name="correo" placeholder="Ej: correo@ejemplo.com"
                    autocomplete="email" required
                    aria-describedby="correoHelp">
-            <p id="correoHelp" class="campo-ayuda">Formato válido: usuario@dominio.com</p>
+                 <p id="correoHelp" class="campo-ayuda">Formato recomendado: usuario@dominio.com</p>
 
             <label for="telefono">Teléfono:</label>
             <div class="telefono-group">
@@ -154,11 +157,19 @@
                        pattern="^\d{6,12}$"
                        aria-describedby="telefonoHelp">
             </div>
-            <p id="telefonoHelp" class="campo-ayuda">Se detecta automáticamente el prefijo internacional. Escribe entre 6 y 12 dígitos del número local.</p>
+            <p id="telefonoHelp" class="campo-ayuda">Se detecta automaticamente el prefijo internacional. Escribe solo el numero local (6 a 12 digitos).</p>
 
             <input type="submit" value="Revisar pedido" class="enviar-button"
                    aria-label="Revisar pedido antes de enviar" id="btnVerResumen">
             <div id="mensajeError" class="mensaje-error" role="alert" aria-live="assertive"></div>
+            <div id="autosaveStatus" class="autosave-status" data-state="idle" role="group" aria-label="Estado de autoguardado">
+                <span class="autosave-status-icon" aria-hidden="true"></span>
+                <span class="autosave-status-copy">
+                    <span id="autosaveStatusText" class="autosave-status-text">Autoguardado activado</span>
+                    <span id="autosaveStatusMeta" class="autosave-status-meta">Tus cambios se guardan automaticamente.</span>
+                </span>
+            </div>
+            <p id="autosaveStatusLive" class="sr-only" aria-live="polite" aria-atomic="true"></p>
         </fieldset>
     </form>
     
@@ -207,11 +218,26 @@
 </div>
 
 <div class="image-action-modal" id="cropImageModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="cropImageTitle">
-    <div class="image-action-modal-content">
+    <div class="image-action-modal-content crop-modal-content">
         <h3 id="cropImageTitle" class="image-action-title">Recortar imagen</h3>
         <p class="image-action-help">Arrastra para mover el encuadre y usa la rueda para hacer zoom.</p>
-        <div class="cropper-stage">
-            <img id="cropImageTarget" alt="Vista para recorte" />
+        <div class="crop-workspace">
+            <div class="cropper-stage">
+                <img id="cropImageTarget" alt="Vista para recorte" />
+            </div>
+            <div class="crop-compare" aria-label="Comparador antes y despues del recorte">
+                <p class="crop-compare-title">Comparador antes/despues</p>
+                <div class="crop-compare-grid">
+                    <figure class="crop-compare-card">
+                        <figcaption>Antes</figcaption>
+                        <img id="cropCompareBefore" alt="Vista original antes del recorte" />
+                    </figure>
+                    <figure class="crop-compare-card">
+                        <figcaption>Despues</figcaption>
+                        <img id="cropCompareAfter" alt="Vista previa despues del recorte" />
+                    </figure>
+                </div>
+            </div>
         </div>
         <div class="image-action-buttons">
             <button type="button" class="image-action-btn cancel" id="cancelCropBtn" aria-label="Cancelar recorte">✕ Cancelar</button>
@@ -246,7 +272,8 @@
 <script type = "module" src="{{ url_for('static', filename='script/main.js') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/db.js') }}"></script>
 <script src="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.js"></script>
-<script type="module" src="{{ url_for('static', filename='script/formulario_clientes.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='script/formulario_clientes.js', v='20260327d') }}"></script>
+<script type="module" src="{{ url_for('static', filename='script/autosave_pedido.js', v='20260327b') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/precios_fotos.js') }}?v=2"></script>
 <script src="{{ url_for('static', filename='script/pasos_carousel.js') }}"></script>
 <script src="{{ url_for('static', filename='script/dark-mode-index.js') }}"></script>

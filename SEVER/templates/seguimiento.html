@@ -31,6 +31,7 @@
         background: var(--seg-bg);
         color: var(--seg-text);
         padding: 0 0 24px;
+        overflow-x: hidden;
     }
 
     .seg-topbar {
@@ -65,7 +66,40 @@
         background: var(--seg-card);
         border-radius: 18px;
         box-shadow: 0 20px 50px rgba(22, 51, 96, 0.18);
-        overflow: hidden;
+        max-height: calc(100dvh - 88px);
+        overflow-y: auto;
+        overflow-x: hidden;
+        scroll-behavior: smooth;
+        -webkit-overflow-scrolling: touch;
+        touch-action: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable both-edges;
+        scrollbar-width: thin;
+        scrollbar-color: #5f7fb0 #e8efff;
+    }
+
+    .seguimiento-wrap:focus-visible {
+        outline: 3px solid var(--seg-focus);
+        outline-offset: 2px;
+    }
+
+    .seguimiento-wrap::-webkit-scrollbar {
+        width: 12px;
+    }
+
+    .seguimiento-wrap::-webkit-scrollbar-track {
+        background: #e8efff;
+        border-radius: 999px;
+    }
+
+    .seguimiento-wrap::-webkit-scrollbar-thumb {
+        background: #5f7fb0;
+        border-radius: 999px;
+        border: 2px solid #e8efff;
+    }
+
+    .seguimiento-wrap::-webkit-scrollbar-thumb:hover {
+        background: #466b9f;
     }
 
     .seguimiento-header {
@@ -239,13 +273,31 @@
         border-radius: 14px;
         padding: 16px;
         background: #ffffff;
-        display: grid;
+        display: flex;
+        flex-direction: column;
         gap: 10px;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    #seguimientoResultado > * {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .tarjeta-pedido {
+        width: 100%;
+        max-width: 450px;
+        box-sizing: border-box;
+        margin: 0 auto;
     }
 
     #seguimientoResultado h2 {
         margin: 0;
         font-size: clamp(28px, 3vw, 36px);
+        line-height: 1.1;
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
 
     .seguimiento-wrap .factura-info {
@@ -265,9 +317,47 @@
 
     .seguimiento-table-scroll {
         width: 100%;
+        max-width: 100%;
+        min-width: 0;
         overflow-x: auto;
+        overflow-y: hidden;
         border-radius: 10px;
         border: 1px solid #e6eefc;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-x;
+        overscroll-behavior-x: contain;
+        scroll-behavior: smooth;
+        scrollbar-width: thin;
+        scrollbar-color: #86a1cb #edf3ff;
+    }
+
+    .contenedor-tabla {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .seguimiento-table-scroll:focus-visible {
+        outline: 3px solid var(--seg-focus);
+        outline-offset: 2px;
+    }
+
+    .seguimiento-table-scroll::-webkit-scrollbar {
+        height: 10px;
+    }
+
+    .seguimiento-table-scroll::-webkit-scrollbar-track {
+        background: #edf3ff;
+        border-radius: 999px;
+    }
+
+    .seguimiento-table-scroll::-webkit-scrollbar-thumb {
+        background: #86a1cb;
+        border-radius: 999px;
+        border: 2px solid #edf3ff;
+    }
+
+    .seguimiento-table-scroll::-webkit-scrollbar-thumb:hover {
+        background: #6f8fbd;
     }
 
     .seguimiento-wrap .factura-tabla {
@@ -284,6 +374,12 @@
         background: var(--seg-warning-bg);
         border-color: var(--seg-warning-border);
         color: var(--seg-warning-text);
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
 
     .sr-only {
@@ -301,16 +397,25 @@
     @media (max-width: 680px) {
         .seg-topbar,
         .seguimiento-wrap {
-            width: 96%;
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .seguimiento-wrap {
+            scrollbar-gutter: auto;
+        }
+
+        body {
+            padding: 0 8px 20px;
         }
 
         .seguimiento-body,
         .seguimiento-header {
-            padding: 16px;
+            padding: 14px 12px;
         }
 
         .seguimiento-form {
-            padding: 14px;
+            padding: 12px;
         }
 
         .seguimiento-body > p {
@@ -319,6 +424,22 @@
 
         #seguimientoResultado {
             padding: 13px;
+            overflow: visible;
+        }
+
+        #seguimientoResultado.tarjeta-pedido {
+            max-width: 100%;
+        }
+
+        #seguimientoResultado h2 {
+            text-align: center;
+            font-size: clamp(22px, 7.6vw, 30px);
+            line-height: 1.15;
+        }
+
+        #seguimientoResultado h2 span {
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .seguimiento-wrap .factura-total {
@@ -333,6 +454,10 @@
     }
 
     @media (max-width: 460px) {
+        body {
+            padding: 0 6px 16px;
+        }
+
         .seg-topbar {
             margin-top: 12px;
         }
@@ -356,8 +481,40 @@
         }
 
         .seguimiento-wrap .factura-tabla {
-            min-width: 500px;
+            min-width: 360px;
             font-size: 12px;
+        }
+
+        .seguimiento-wrap .factura-tabla thead th,
+        .seguimiento-wrap .factura-tabla tbody td {
+            padding: 8px 4px;
+            white-space: nowrap;
+        }
+
+        .seguimiento-wrap .factura-info-row {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 3px;
+            align-items: start;
+            justify-items: start;
+        }
+
+        .seguimiento-wrap .factura-info-row span:last-child {
+            text-align: left;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .pedido-exito-alerta {
+            display: block;
+            text-align: center;
+            font-size: 12px;
+            line-height: 1.35;
+            padding: 9px 10px;
+            white-space: normal !important;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            hyphens: auto;
         }
     }
 </style>
@@ -368,11 +525,12 @@
         ← Volver al inicio
     </a>
 </div>
-<main class="seguimiento-wrap" aria-labelledby="seguimientoTitle">
+<main id="seguimientoModalScroll" class="seguimiento-wrap" tabindex="0" aria-labelledby="seguimientoTitle" aria-describedby="seguimientoModalScrollHelp">
     <div class="seguimiento-header">
         <h1 id="seguimientoTitle" class="titulo" style="margin:0; color:#fff; -webkit-text-fill-color:#fff;">Seguimiento de Pedido</h1>
         <p class="seguimiento-subtitle">Consulta tu estado en tiempo real con tu numero de pedido y correo.</p>
     </div>
+    <p id="seguimientoModalScrollHelp" class="sr-only">Este modal es desplazable de inicio a fin. Usa rueda del mouse o gestos tactiles. Con foco en el modal, usa Flechas, Re Pag, Av Pag, Inicio o Fin para navegar.</p>
 
     <div class="seguimiento-body">
         <p>Ingresa los datos exactamente como los registraste al finalizar el pedido.</p>
@@ -392,8 +550,8 @@
         <div id="seguimientoMensaje" class="seguimiento-mensaje info" role="status" aria-live="polite" aria-atomic="true">Listo para consultar tu pedido.</div>
         <div id="seguimientoErrores" class="sr-only" role="alert" aria-live="assertive"></div>
 
-        <section id="seguimientoResultado" hidden>
-            <h2>Pedido #<span id="rPedido">-</span></h2>
+        <section id="seguimientoResultado" class="tarjeta-pedido" hidden role="region" aria-labelledby="seguimientoResultadoTitle">
+            <h2 id="seguimientoResultadoTitle">Pedido #<span id="rPedido">-</span></h2>
             <p class="seguimiento-estado">Estado: <span class="estado-chip" id="rEstado">-</span></p>
 
             <div class="factura-info" id="rInfo"></div>
@@ -412,6 +570,7 @@
     const msg = document.getElementById('seguimientoMensaje');
     const msgErrores = document.getElementById('seguimientoErrores');
     const out = document.getElementById('seguimientoResultado');
+    const modalScroll = document.getElementById('seguimientoModalScroll');
 
     const rPedido = document.getElementById('rPedido');
     const rEstado = document.getElementById('rEstado');
@@ -435,6 +594,50 @@
         if (activo) {
             setMensaje('Consultando tu pedido, espera un momento...', 'info');
         }
+    }
+
+    function ocultarResultado() {
+        out.hidden = true;
+        if (modalScroll) {
+            modalScroll.removeAttribute('data-scrollable');
+        }
+    }
+
+    function actualizarEstadoScrollResultado() {
+        if (!modalScroll) return;
+        const esScrollable = modalScroll.scrollHeight > modalScroll.clientHeight + 1;
+        modalScroll.dataset.scrollable = esScrollable ? 'true' : 'false';
+    }
+
+    function scrollResultadoConTeclado(event) {
+        if (!modalScroll || event.target !== modalScroll) return;
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+
+        const paso = Math.max(72, Math.round(modalScroll.clientHeight * 0.12));
+        const pagina = Math.max(180, Math.round(modalScroll.clientHeight * 0.9));
+        let delta = 0;
+
+        if (event.key === 'ArrowDown') delta = paso;
+        if (event.key === 'ArrowUp') delta = -paso;
+        if (event.key === 'PageDown') delta = pagina;
+        if (event.key === 'PageUp') delta = -pagina;
+        if (event.key === ' ') delta = event.shiftKey ? -pagina : pagina;
+
+        if (event.key === 'Home') {
+            event.preventDefault();
+            modalScroll.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+
+        if (event.key === 'End') {
+            event.preventDefault();
+            modalScroll.scrollTo({ top: modalScroll.scrollHeight, behavior: 'smooth' });
+            return;
+        }
+
+        if (!delta) return;
+        event.preventDefault();
+        modalScroll.scrollBy({ top: delta, behavior: 'smooth' });
     }
 
     function limpiarEstadosInputs() {
@@ -511,7 +714,7 @@
         }).join('');
 
         rBody.innerHTML = `
-            <div class="seguimiento-table-scroll">
+            <div class="seguimiento-table-scroll contenedor-tabla" tabindex="0" role="region" aria-label="Detalle del pedido, desplazable horizontalmente">
                 <table class="factura-tabla">
                     <thead>
                         <tr>
@@ -531,6 +734,12 @@
         `;
 
         out.hidden = false;
+        if (modalScroll) {
+            modalScroll.scrollTop = 0;
+        }
+        requestAnimationFrame(function () {
+            actualizarEstadoScrollResultado();
+        });
         setMensaje('Pedido encontrado. Revisa el estado y detalle abajo.', 'success');
     }
 
@@ -538,7 +747,7 @@
         const validacion = validarCampos();
         if (!validacion.esValido) {
             setMensaje(validacion.errores.join(' '), 'error');
-            out.hidden = true;
+            ocultarResultado();
             return;
         }
 
@@ -551,14 +760,14 @@
 
             if (!res.ok) {
                 setMensaje(data.error || 'No se pudo consultar el pedido.', 'error');
-                out.hidden = true;
+                ocultarResultado();
                 return;
             }
 
             pintarResultado(data.pedido || {});
         } catch (err) {
             setMensaje('Error de conexion al consultar el estado.', 'error');
-            out.hidden = true;
+            ocultarResultado();
         } finally {
             setLoading(false);
         }
@@ -587,6 +796,11 @@
             validarCampos();
         });
     });
+
+    if (modalScroll) {
+        modalScroll.addEventListener('keydown', scrollResultadoConTeclado);
+    }
+    window.addEventListener('resize', actualizarEstadoScrollResultado);
 
     if (pedidoQuery && correoQuery) {
         consultar();

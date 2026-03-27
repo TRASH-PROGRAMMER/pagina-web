@@ -105,7 +105,7 @@
           <div class="cloudinary-progress" style="background: var(--input-bg); border-radius: 4px; height: 6px; overflow: hidden;">
             <div id="cloudinaryStorageBar" style="height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); width: 0%; transition: width 0.3s ease;"></div>
           </div>
-          <div id="cloudinaryStorageText" style="font-size: 11px; color: var(--muted); margin-top: 6px;" title="Transformaciones usadas / Límite del plan">Cargando...</div>
+          <div id="cloudinaryStorageText" style="font-size: 11px; color: var(--muted); margin-top: 6px;" title="Almacenamiento usado / limite del plan">Cargando...</div>
         </div>
       </div>
     </div>
@@ -525,6 +525,66 @@
   }
   .fotos-link:hover { color: #9b8fff; }
 
+  #fotoModalBody.foto-modal-body-carrusel {
+    display: block;
+    width: 100%;
+  }
+
+  #fotoModalBody.foto-modal-body-carrusel .foto-carrusel-wrap {
+    width: min(100%, 980px);
+    margin: 0 auto;
+  }
+
+  #fotoModalBody.foto-modal-body-carrusel .foto-carrusel-counter {
+    width: min(100%, 980px);
+    margin: 12px auto 0;
+  }
+
+  #fotoModalBody.foto-modal-body-carrusel .foto-carrusel-frame {
+    min-height: 420px;
+    height: min(68vh, 680px);
+  }
+
+  @media (max-width: 640px) {
+    .foto-modal-content {
+      width: calc(100% - 18px);
+      max-height: 92vh;
+      padding: 14px;
+      border-radius: 10px;
+    }
+
+    .foto-modal-header {
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .foto-modal-header h3 {
+      font-size: 15px;
+      margin: 0;
+      flex: 1 1 180px;
+    }
+
+    .foto-grid {
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 10px;
+    }
+
+    #fotoModalBody.foto-modal-body-carrusel .foto-carrusel-wrap {
+      width: 100%;
+    }
+
+    #fotoModalBody.foto-modal-body-carrusel .foto-carrusel-counter {
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    #fotoModalBody.foto-modal-body-carrusel .foto-carrusel-frame {
+      min-height: 220px;
+      height: auto;
+    }
+  }
+
   .panel-opciones {
     margin-top: 18px;
   }
@@ -798,6 +858,6 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='script/session_auth_client.js') }}"></script>
-<script src="{{ url_for('static', filename='script/dasbord_admin.js') }}"></script>
+<script src="{{ url_for('static', filename='script/dasbord_admin.js', v='20260327c') }}"></script>
 </body>
 </html>

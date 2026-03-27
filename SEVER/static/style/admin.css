@@ -838,6 +838,14 @@ tr:hover td {
     background-color: #1a1a25;
     border-radius: 12px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 8px 10px;
+    border: 1px solid transparent;
+}
+
+.upload-item:focus-visible {
+    outline: 2px solid #7c6cfc;
+    outline-offset: 1px;
+    border-color: #7c6cfc;
 }
 .upload-thumb {
     width: 40px;
@@ -849,6 +857,14 @@ tr:hover td {
     align-items: center;
     justify-content: center;
     font-size: 20px;
+}
+
+.upload-thumb-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 6px;
 }
 
 
@@ -891,6 +907,66 @@ tr:hover td {
     gap: 8px;
 }
 
+.foto-carrusel-wrap {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.foto-carrusel-frame {
+    width: 100%;
+    min-height: 320px;
+    max-height: 62vh;
+    border: 1px solid #2a2a3a;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #0d0f1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.foto-carrusel-img {
+    width: 100%;
+    height: 100%;
+    max-height: 62vh;
+    object-fit: contain;
+    background: #0d0f1a;
+}
+
+.foto-carrusel-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 1px solid #2a2a3a;
+    background: #1a1a28;
+    color: #e8e8f0;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform .15s ease, border-color .15s ease, background .15s ease;
+}
+
+.foto-carrusel-btn:hover:not(:disabled) {
+    transform: scale(1.06);
+    border-color: #7c6cfc;
+    background: #23233a;
+}
+
+.foto-carrusel-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.foto-carrusel-counter {
+    margin-top: 10px;
+    text-align: center;
+    color: #9ca3b0;
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+}
+
 .descargarpedidobtn {
     margin: 0;
     padding: 8px 18px;
@@ -920,5 +996,60 @@ tr:hover td {
     opacity: 0.55;
     cursor: not-allowed;
     transform: none;
+}
+
+@media (max-width: 640px) {
+    .foto-modal-actions {
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .descargarpedidobtn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .foto-carrusel-wrap {
+        grid-template-columns: 34px minmax(0, 1fr) 34px;
+        gap: 6px;
+    }
+
+    .foto-carrusel-frame {
+        min-height: 220px;
+        max-height: 58vh;
+        border-radius: 8px;
+    }
+
+    .foto-carrusel-img {
+        max-height: 58vh;
+    }
+
+    .foto-carrusel-btn {
+        width: 34px;
+        height: 34px;
+        font-size: 20px;
+    }
+
+    .foto-carrusel-counter {
+        margin-top: 8px;
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 420px) {
+    .foto-carrusel-wrap {
+        grid-template-columns: 30px minmax(0, 1fr) 30px;
+    }
+
+    .foto-carrusel-btn {
+        width: 30px;
+        height: 30px;
+        font-size: 18px;
+    }
+
+    .foto-carrusel-frame {
+        min-height: 180px;
+    }
 }
 

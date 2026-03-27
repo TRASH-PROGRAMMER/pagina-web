@@ -18,6 +18,7 @@ class Cliente(db.Model):
     papel          = db.Column(db.String(50),  nullable=True)
     estado         = db.Column(db.String(20),  nullable=False, default='pendiente')
     pagado         = db.Column(db.Boolean, nullable=False, default=False)
+    cancelled_at   = db.Column(db.DateTime(timezone=True), nullable=True)
     fotos          = db.relationship('Foto', backref='cliente',
                                      cascade='all, delete-orphan', lazy=True)
 
@@ -29,6 +30,18 @@ class Foto(db.Model):
     public_id  = db.Column(db.String(255), nullable=True)    # public_id para eliminar
     cliente_id = db.Column(db.Integer,
                            db.ForeignKey('clientes.id'), nullable=False)
+
+
+class ClienteDraft(db.Model):
+    __tablename__ = 'cliente_drafts'
+    id         = db.Column(db.Integer, primary_key=True)
+    draft_key  = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    payload    = db.Column(db.JSON, nullable=False, default=dict)
+    version    = db.Column(db.Integer, nullable=False, default=1)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False,
+                           server_default=func.now())
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=False,
+                           server_default=func.now(), onupdate=func.now())
 
 
 class FotoTamano(db.Model):
