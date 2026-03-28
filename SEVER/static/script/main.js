@@ -262,10 +262,87 @@ function crearCardPreview(item) {
         mensaje.classList.add("alta");
     }
 
+    // Selector de cantidad
+    const cantidadContainer = document.createElement("div");
+    cantidadContainer.className = "cantidad-selector";
+    
+    // Inicializar cantidad desde el item o por defecto 1
+    const cantidadActual = item.cantidad || 1;
+    
+    cantidadContainer.innerHTML = `
+        <div class="cantidad-selector__controls">
+            <button type="button" class="cantidad-selector__btn" data-action="restar" aria-label="Disminuir cantidad">−</button>
+            <input type="number" class="cantidad-selector__input" value="${cantidadActual}" min="1" max="99" aria-label="Cantidad de copias">
+            <button type="button" class="cantidad-selector__btn" data-action="sumar" aria-label="Aumentar cantidad">+</button>
+        </div>
+    `;
+    
+    // Event listeners para los botones de cantidad
+    const btnRestar = cantidadContainer.querySelector('[data-action="restar"]');
+    const btnSumar = cantidadContainer.querySelector('[data-action="sumar"]');
+    const inputCantidad = cantidadContainer.querySelector('.cantidad-selector__input');
+    
+    const actualizarCantidad = (nuevaCantidad) => {
+        nuevaCantidad = Math.max(1, Math.min(99, parseInt(nuevaCantidad) || 1));
+        inputCantidad.value = nuevaCantidad;
+        btnRestar.disabled = nuevaCantidad <= 1;
+        
+        // Guardar cantidad en el item
+        item.cantidad = nuevaCantidad;
+        
+        // Actualizar en archivosGlobal
+        const idx = archivosGlobal.findIndex(f => f.archivo === item.archivo);
+        if (idx >= 0) {
+            archivosGlobal[idx].cantidad = nuevaCantidad;
+        }
+        
+        // Actualizar en previewsGlobal
+        const previewIdx = previewsGlobal.findIndex(p => p.archivo === item.archivo);
+        if (previewIdx >= 0) {
+            previewsGlobal[previewIdx].cantidad = nuevaCantidad;
+        }
+        
+        // Actualizar precios si hay tamaño seleccionado
+        actualizarPreciosConCantidad();
+        
+        // Guardar en localStorage
+        guardarFotosEnStorage();
+    };
+    
+    btnRestar.addEventListener('click', () => {
+        actualizarCantidad(parseInt(inputCantidad.value) - 1);
+    });
+    
+    btnSumar.addEventListener('click', () => {
+        actualizarCantidad(parseInt(inputCantidad.value) + 1);
+    });
+    
+    inputCantidad.addEventListener('change', () => {
+        actualizarCantidad(inputCantidad.value);
+    });
+    
+    inputCantidad.addEventListener('input', () => {
+        let val = parseInt(inputCantidad.value);
+        if (val < 1) inputCantidad.value = 1;
+        if (val > 99) inputCantidad.value = 99;
+    });
+    
+    // Inicializar estado del botón restar
+    btnRestar.disabled = cantidadActual <= 1;
+
     card.appendChild(botonEliminar);
     card.appendChild(imagen);
     card.appendChild(mensaje);
+    card.appendChild(cantidadContainer);
     return card;
+}
+
+// Función para actualizar precios considerando cantidades
+function actualizarPreciosConCantidad() {
+    // Disparar evento para que otros scripts actualicen los precios
+    window.dispatchEvent(new CustomEvent('cantidades:actualizadas', {
+        detail: { fotos: archivosGlobal }
+    }));
 }
 
 function establecerMensajeSeleccion() {
@@ -387,6 +464,7 @@ function procesarArchivos(archivos, opciones = {}) {
                     src: img.src,
                     width: img.width,
                     height: img.height,
+                    cantidad: 1,
                 });
 
                 paginaActual = totalPaginas();
@@ -503,6 +581,14 @@ if (input) {
         }
 
         archivosGlobal = archivosGlobal.concat(nuevos);
+        
+        // Aplicar cantidades guardadas en localStorage a los nuevos archivos
+        archivosGlobal.forEach(archivo => {
+            if (!archivo.cantidad) {
+                archivo.cantidad = obtenerCantidadGuardada(archivo);
+            }
+        });
+        
         sincronizarInputFiles();
 
         if (cargaEnCurso) {
@@ -521,6 +607,14 @@ if (cancelButton) {
         archivosGlobal = [];
         previewsGlobal = [];
         paginaActual = 1;
+        
+        // Limpiar cantidades guardadas en localStorage
+        try {
+            localStorage.removeItem("fotos_cantidades");
+        } catch (e) {
+            console.warn("No se pudo limpiar localStorage:", e);
+        }
+        
         sincronizarInputFiles();
         renderizarPaginaActual();
         mostrarExito("");
@@ -566,3 +660,125 @@ if (nextPageButton) {
 sincronizarInputFiles();
 renderizarPaginaActual();
 actualizarBarraProgreso(0, 0, ESTADO_CARGA.IDLE, "Listo para cargar imagenes.", false);
+
+/**
+ * Guarda las fotos y sus cantidades en localStorage
+ * Solo guarda los metadatos necesarios (nombre, cantidad) no las imágenes en base64
+ */
+function guardarFotosEnStorage() {
+    try {
+        const datosParaGuardar = previewsGlobal.map(preview => ({
+            nombre: preview.archivo.name,
+            cantidad: preview.cantidad || 1,
+            size: preview.archivo.size,
+            lastModified: preview.archivo.lastModified,
+        }));
+        localStorage.setItem("fotos_cantidades", JSON.stringify(datosParaGuardar));
+    } catch (e) {
+        console.warn("No se pudo guardar en localStorage:", e);
+    }
+}
+
+/**
+ * Carga las cantidades guardadas en localStorage
+ * @returns {Array} Array de objetos con nombre y cantidad
+ */
+function cargarCantidadesDeStorage() {
+    try {
+        const datos = localStorage.getItem("fotos_cantidades");
+        return datos ? JSON.parse(datos) : [];
+    } catch (e) {
+        console.warn("No se pudo cargar de localStorage:", e);
+        return [];
+    }
+}
+
+/**
+ * Obtiene la cantidad guardada para un archivo específico
+ * @param {File} archivo - El archivo a buscar
+ * @returns {number} La cantidad guardada o 1 por defecto
+ */
+function obtenerCantidadGuardada(archivo) {
+    const cantidades = cargarCantidadesDeStorage();
+    const guardado = cantidades.find(c => 
+        c.nombre === archivo.name && 
+        c.size === archivo.size && 
+        c.lastModified === archivo.lastModified
+    );
+    return guardado ? guardado.cantidad : 1;
+}
+
+/**
+ * Actualiza archivosGlobal con las cantidades guardadas en localStorage
+ */
+function aplicarCantidadesGuardadas() {
+    archivosGlobal.forEach(archivo => {
+        archivo.cantidad = obtenerCantidadGuardada(archivo);
+    });
+}
+
+// Exponer funciones necesarias globalmente
+window.obtenerCantidadGuardada = obtenerCantidadGuardada;
+window.guardarFotosEnStorage = guardarFotosEnStorage;
+
+// --- Lógica para el botón "Mis pedidos" en index ---
+document.addEventListener('DOMContentLoaded', function () {
+    const btnMisPedidos = document.querySelector('.btn-ver-mis-pedidos');
+    if (!btnMisPedidos) return;
+
+    // Intenta obtener el correo del usuario guardado (si existe)
+    let correo = null;
+    try {
+        correo = localStorage.getItem('misPedidos_email') || null;
+    } catch (e) {
+        correo = null;
+    }
+
+    // Si no hay correo, deshabilita el botón y muestra mensaje
+    if (!correo) {
+        btnMisPedidos.classList.add('btn-mis-pedidos-disabled');
+        btnMisPedidos.setAttribute('aria-disabled', 'true');
+        btnMisPedidos.style.opacity = '0.6';
+        btnMisPedidos.style.pointerEvents = 'none';
+        btnMisPedidos.textContent = 'Aún no tienes pedidos';
+        // Opcional: mostrar tooltip o ayuda
+        btnMisPedidos.title = 'Realiza un pedido para poder consultarlo aquí.';
+        return;
+    }
+
+    // Consulta al backend si hay pedidos para este correo
+    fetch('/api/mis-pedidos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ correo })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (Array.isArray(data.pedidos) && data.pedidos.length > 0) {
+            // Hay pedidos: botón destacado
+            btnMisPedidos.classList.remove('btn-mis-pedidos-disabled');
+            btnMisPedidos.removeAttribute('aria-disabled');
+            btnMisPedidos.style.opacity = '1';
+            btnMisPedidos.style.pointerEvents = '';
+            btnMisPedidos.textContent = '📦 Ver mis pedidos';
+            btnMisPedidos.title = 'Consulta el estado de tus pedidos aquí.';
+        } else {
+            // No hay pedidos: deshabilitar y mostrar mensaje
+            btnMisPedidos.classList.add('btn-mis-pedidos-disabled');
+            btnMisPedidos.setAttribute('aria-disabled', 'true');
+            btnMisPedidos.style.opacity = '0.6';
+            btnMisPedidos.style.pointerEvents = 'none';
+            btnMisPedidos.textContent = 'Aún no tienes pedidos';
+            btnMisPedidos.title = 'Realiza un pedido para poder consultarlo aquí.';
+        }
+    })
+    .catch(() => {
+        // Error de red: mostrar botón deshabilitado
+        btnMisPedidos.classList.add('btn-mis-pedidos-disabled');
+        btnMisPedidos.setAttribute('aria-disabled', 'true');
+        btnMisPedidos.style.opacity = '0.6';
+        btnMisPedidos.style.pointerEvents = 'none';
+        btnMisPedidos.textContent = 'No se pudo verificar pedidos';
+        btnMisPedidos.title = 'Intenta recargar la página o revisa tu conexión.';
+    });
+});

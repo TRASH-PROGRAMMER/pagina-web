@@ -68,16 +68,51 @@ async function cargarTamanosDinamicos(force = false) {
 // El botón de resumen siempre queda habilitado; la validación vive en formulario_clientes.js.
 if (btnResumen) btnResumen.disabled = false;
 
+// Obtener cantidades por foto desde el sistema de cantidades
+function obtenerCantidadesPorFoto() {
+    // Intentar obtener desde archivosGlobal o localStorage
+    if (typeof archivosGlobal !== 'undefined' && archivosGlobal.length > 0) {
+        const cantidades = {};
+        archivosGlobal.forEach(foto => {
+            cantidades[foto.archivo] = foto.cantidad || 1;
+        });
+        return cantidades;
+    }
+    
+    // Fallback: todas las fotos tienen cantidad 1
+    return {};
+}
+
+// Calcular cantidad total considerando copias por foto
+function calcularCantidadTotalConCopias(numFotos) {
+    const cantidades = obtenerCantidadesPorFoto();
+    let total = 0;
+    
+    if (typeof archivosGlobal !== 'undefined' && archivosGlobal.length > 0) {
+        archivosGlobal.forEach(foto => {
+            total += (foto.cantidad || 1);
+        });
+    } else {
+        total = numFotos;
+    }
+    
+    return total;
+}
+
 // Abrir modal
 async function abrirResumenPedido() {
     const modoAsignado = usaAsignacionPorFoto();
     const resumenAsignado = obtenerResumenAsignado();
+    
+    // Calcular cantidad total considerando copias por foto
+    const numFotosArchivos = inputImagenes.files ? inputImagenes.files.length : 0;
+    const cantidadTotal = calcularCantidadTotalConCopias(numFotosArchivos);
+    
     const seleccionados = modoAsignado
         ? Object.entries(resumenAsignado)
         : Array.from(tamanoSelect.selectedOptions).map(function(opt) {
-            return [opt.value, { nombre: opt.text, cantidad: (inputImagenes.files ? inputImagenes.files.length : 0) }];
+            return [opt.value, { nombre: opt.text, cantidad: cantidadTotal }];
         });
-    const numFotos      = inputImagenes.files ? inputImagenes.files.length : 0;
     const papelRadio    = document.querySelector('input[name="papel"]:checked');
     const papel         = papelRadio ? papelRadio.value : "No seleccionado";
 
@@ -86,21 +121,27 @@ async function abrirResumenPedido() {
     }, 0);
 
     if (modoAsignado) {
-        if (seleccionados.length === 0 || numFotos === 0 || totalAsignado !== numFotos) return;
+        if (seleccionados.length === 0 || cantidadTotal === 0 || totalAsignado !== cantidadTotal) return;
     } else {
-        if (seleccionados.length === 0 || numFotos === 0) return;
+        if (seleccionados.length === 0 || cantidadTotal === 0) return;
     }
 
     // Info del pedido
     const fecha = new Date().toLocaleDateString("es-EC", {
         day: "2-digit", month: "long", year: "numeric"
     });
+    
+    // Mostrar info de fotos con cantidad de copias
+    const infoCopias = cantidadTotal !== numFotosArchivos 
+        ? `${numFotosArchivos} archivos (${cantidadTotal} copias)`
+        : `${cantidadTotal} imagen${cantidadTotal > 1 ? "es" : ""}`;
+    
     facturaInfo.innerHTML = `
         <div class="factura-info-row">
             <span>📅 Fecha</span><span>${fecha}</span>
         </div>
         <div class="factura-info-row">
-            <span>🖼️ Fotos</span><span>${numFotos} imagen${numFotos > 1 ? "es" : ""}</span>
+            <span>🖼️ Fotos</span><span>${infoCopias}</span>
         </div>
         <div class="factura-info-row">
             <span>📄 Papel</span><span class="factura-papel">${papel}</span>
