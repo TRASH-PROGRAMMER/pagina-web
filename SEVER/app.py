@@ -24,6 +24,7 @@ for env_candidate in [
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_session import Session
 from werkzeug.security import generate_password_hash
+from werkzeug.exceptions import RequestEntityTooLarge
 from sqlalchemy.engine.url import make_url
 from db import AuthSession, Cliente, ClienteDraft, Foto, FotoTamano, MarcoDiseno, User, db
 from auth import auth_bp, login_required, role_required
@@ -56,6 +57,21 @@ app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production
 
 Session(app)
 
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_too_large(_error):
+    max_content_length = app.config.get('MAX_CONTENT_LENGTH')
+    limite_mb = int(max_content_length / (1024 * 1024)) if max_content_length else None
+    mensaje = (
+        f"Carga demasiado grande. Limite total por pedido: {limite_mb} MB."
+        if limite_mb else
+        "Carga demasiado grande."
+    )
+
+    if (request.path or "").startswith("/api/"):
+        return jsonify({"error": mensaje}), 413
+    return mensaje, 413
+
 # ConfiguraciÃ³n de Cloudinary
 cloudinary.config(
     cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
@@ -65,8 +81,11 @@ cloudinary.config(
 )
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+ALLOWED_IMAGE_MIMETYPES = {'image/png', 'image/jpeg', 'image/gif', 'image/pjpeg', 'image/jpg'}
 FRAME_ALLOWED_EXTENSIONS = {'png', 'svg'}
 FRAME_ALLOWED_MIMETYPES = {'image/png', 'image/svg+xml'}
+MAX_FILES_PER_ORDER = int(os.environ.get("MAX_FILES_PER_ORDER", "150"))
+MAX_IMAGE_BYTES_PER_FILE = int(os.environ.get("MAX_IMAGE_BYTES_PER_FILE", str(10 * 1024 * 1024)))
 
 DEFAULT_TAMANOS = [
     {"clave": "instax", "nombre": "Instax (5x8cm)", "precio_base": 0.00},
@@ -113,6 +132,73 @@ _db_backup_thread_started = False
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def _file_size_bytes(file_obj):
+    try:
+        stream = file_obj.stream
+        current_pos = stream.tell()
+        stream.seek(0, os.SEEK_END)
+        size = int(stream.tell())
+        stream.seek(current_pos, os.SEEK_SET)
+        return size
+    except Exception:
+        return None
+
+
+def _validar_archivos_cliente(archivos):
+    archivos_limpios = [a for a in (archivos or []) if a and getattr(a, "filename", "")]
+    if not archivos_limpios:
+        return None, "Debes adjuntar al menos una foto."
+
+    if len(archivos_limpios) > MAX_FILES_PER_ORDER:
+        return None, f"Maximo permitido: {MAX_FILES_PER_ORDER} fotos por pedido."
+
+    errores = []
+    for archivo in archivos_limpios:
+        nombre = str(archivo.filename or "").strip() or "archivo_sin_nombre"
+
+        if not allowed_file(nombre):
+            errores.append(f"Formato no permitido: {nombre}")
+            continue
+
+        mime = (archivo.mimetype or "").lower().split(";")[0].strip()
+        if mime and mime not in ALLOWED_IMAGE_MIMETYPES:
+            errores.append(f"Tipo de archivo no permitido: {nombre}")
+            continue
+
+        size_bytes = _file_size_bytes(archivo)
+        if size_bytes is None:
+            errores.append(f"No se pudo validar el tamano: {nombre}")
+            continue
+
+        if size_bytes <= 0:
+            errores.append(f"Archivo vacio: {nombre}")
+            continue
+
+        if size_bytes > MAX_IMAGE_BYTES_PER_FILE:
+            limite_mb = int(MAX_IMAGE_BYTES_PER_FILE / (1024 * 1024))
+            errores.append(f"{nombre} supera {limite_mb} MB")
+            continue
+
+        try:
+            archivo.stream.seek(0)
+        except Exception:
+            pass
+
+    if errores:
+        resumen = "; ".join(errores[:3])
+        if len(errores) > 3:
+            resumen += f"; y {len(errores) - 3} archivo(s) mas"
+        return None, f"Archivos invalidos: {resumen}"
+
+    for archivo in archivos_limpios:
+        try:
+            archivo.stream.seek(0)
+        except Exception:
+            pass
+
+    return archivos_limpios, None
 
 
 def allowed_frame_file(file_obj):
@@ -755,7 +841,9 @@ def crear_clientes():
     # Soporta FormData (con fotos) y JSON (sin fotos)
     if request.content_type and 'multipart/form-data' in request.content_type:
         data = request.form.to_dict()
-        archivos = request.files.getlist('fotos')
+        archivos, error_archivos = _validar_archivos_cliente(request.files.getlist('fotos'))
+        if error_archivos:
+            return jsonify({"error": error_archivos}), 400
     else:
         data = request.get_json() or {}
         archivos = []
@@ -765,6 +853,9 @@ def crear_clientes():
     for campo in campos:
         if not data.get(campo):
             return jsonify({"error": f"Campo '{campo}' requerido"}), 400
+
+    if not archivos:
+        return jsonify({"error": "Debes adjuntar al menos una foto valida."}), 400
 
     # Verificar si ya existe el correo â†’ agregar fotos al cliente existente
     existe = Cliente.query.filter_by(correo=data["correo"]).first()
@@ -1222,6 +1313,65 @@ def api_seguimiento_cliente(cliente_id):
             "total": round(total, 2),
         }
     }), 200
+
+
+@app.route('/api/mis-pedidos', methods=['POST'])
+def api_mis_pedidos():
+    """
+    Endpoint para obtener todos los pedidos de un usuario por su correo.
+    Requiere verificación de correo para seguridad.
+    """
+    data = request.get_json() or {}
+    correo = (data.get('correo') or '').strip().lower()
+    
+    if not correo:
+        return jsonify({"error": "Correo electronico requerido"}), 400
+    
+    if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', correo):
+        return jsonify({"error": "Formato de correo invalido"}), 400
+    
+    # Buscar todos los pedidos del correo
+    pedidos = Cliente.query.filter(
+        db.func.lower(Cliente.correo) == correo
+    ).order_by(Cliente.id.desc()).all()
+    
+    if not pedidos:
+        return jsonify({
+            "pedidos": [],
+            "mensaje": "No se encontraron pedidos para este correo"
+        }), 200
+    
+    resultado = []
+    for pedido in pedidos:
+        detalle = _detalle_pedido(pedido.tamano_keys, pedido.tamano, len(pedido.fotos))
+        total = calcular_precio_total(pedido.tamano_keys, len(pedido.fotos), pedido.tamano)
+        
+        resultado.append({
+            "id": pedido.id,
+            "nombre": pedido.nombre,
+            "apellido": pedido.apellido,
+            "correo": pedido.correo,
+            "telefono": pedido.telefono,
+            "fechaRegistro": pedido.fecha_registro,
+            "estado": pedido.estado or "pendiente",
+            "cancelledAt": pedido.cancelled_at.isoformat() if pedido.cancelled_at else None,
+            "pagado": bool(pedido.pagado),
+            "papel": pedido.papel or "No especificado",
+            "numFotos": len(pedido.fotos),
+            "detalle": detalle,
+            "total": round(total, 2),
+        })
+    
+    return jsonify({
+        "pedidos": resultado,
+        "total": len(resultado)
+    }), 200
+
+
+@app.route('/mis-pedidos')
+def mis_pedidos_page():
+    """Página para ver todos los pedidos del usuario."""
+    return render_template('mis_pedidos.html')
 
 
 @app.route('/api/tamanos', methods=['GET'])

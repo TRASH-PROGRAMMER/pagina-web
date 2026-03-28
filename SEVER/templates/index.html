@@ -18,7 +18,12 @@
     <p class="text1">Carga de archivos fotográficos en segundos en PNG, JPG, GIF</p>
     <h2>Subir hasta 150 imágenes en segundos</h2>
     <nav class="instrucciones-pedido" aria-label="Pasos del pedido">
-  <h3>📋 ¿Cómo hacer tu pedido?</h3>
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+    <h3 style="margin: 0;">📋 ¿Cómo hacer tu pedido?</h3>
+    <a href="/mis-pedidos" class="btn-ver-mis-pedidos" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: all 0.2s;">
+      📦 Mis Pedidos
+    </a>
+  </div>
     <div class="pasos-carousel-wrap" role="region" aria-label="Carrusel de pasos" aria-describedby="pasosCarouselHint">
         <button type="button" class="pasos-nav pasos-prev" id="pasosPrev" aria-label="Paso anterior">‹</button>
         <ol class="pasos pasos-carousel" id="pasosCarousel" role="list" tabindex="0">
@@ -50,18 +55,24 @@
     <span id="pageInfo" class="page-info">Página 1 de 1</span>
     <button type="button" id="nextPageButton" aria-label="Ir a la página siguiente">Siguiente</button>
 </div>
-    <div class="progress-container" id="progressContainer">
+    <div class="progress-container" id="progressContainer" data-state="idle">
         <div class="progress-track">
             <div class="progress-bar" id="progressBar"
                  role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"
-                 aria-label="Progreso de carga de imágenes">0%</div>
+                 aria-valuetext="Listo para cargar imagenes."
+                 aria-describedby="progressStatusText"
+                 aria-label="Progreso de carga de imagenes">0%</div>
         </div>
+        <p id="progressStatusText" class="progress-status-text" role="status" aria-live="polite" aria-atomic="true">
+            Listo para cargar imagenes.
+        </p>
         <div class="progress-buttons">
-            <button id="cancelButton" aria-label="Cancelar la carga de imágenes">Cancelar</button>
-            <button id="retryButton" aria-label="Reintentar la carga de imágenes">Reintentar</button>
+            <button id="cancelButton" aria-label="Cancelar la carga de imagenes">Cancelar</button>
+            <button id="retryButton" aria-label="Reintentar la carga de imagenes">Reintentar</button>
         </div>
         <div id="errorMessage" class="error-message" role="alert" aria-live="assertive"></div>
         <div id="successMessage" class="success-message" role="status" aria-live="polite"></div>
+        <p id="progressStatusLive" class="sr-only" aria-live="polite" aria-atomic="true"></p>
     </div>
 </header>
 
@@ -269,12 +280,13 @@
        target="_blank" rel="noopener noreferrer"
        aria-label="Ver ubicación de Manta Color en Google Maps">📍 Dirección: C. 13, Manta</a>
 </footer>
-<script type = "module" src="{{ url_for('static', filename='script/main.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='script/main.js', v='20260328b') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/db.js') }}"></script>
 <script src="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.js"></script>
 <script type="module" src="{{ url_for('static', filename='script/formulario_clientes.js', v='20260327d') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/autosave_pedido.js', v='20260327b') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/precios_fotos.js') }}?v=2"></script>
+<script type="module" src="{{ url_for('static', filename='script/seguimiento_pedidos.js', v='20260328a') }}"></script>
 <script src="{{ url_for('static', filename='script/pasos_carousel.js') }}"></script>
 <script src="{{ url_for('static', filename='script/dark-mode-index.js') }}"></script>
 </body>

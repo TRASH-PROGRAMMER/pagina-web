@@ -554,6 +554,9 @@
             <h2 id="seguimientoResultadoTitle">Pedido #<span id="rPedido">-</span></h2>
             <p class="seguimiento-estado">Estado: <span class="estado-chip" id="rEstado">-</span></p>
 
+            <!-- Timeline de progreso del pedido -->
+            <div id="pedidoTimeline" class="pedido-timeline"></div>
+
             <div class="factura-info" id="rInfo"></div>
             <div class="factura-body" id="rBody"></div>
             <div class="pedido-exito-alerta">⚠ ACERQUESE A PAGAR EN CAJA PARA PROCESAR SU PEDIDO</div>
@@ -690,10 +693,89 @@
         return String(fechaRegistro).split(',')[0] || fechaRegistro;
     }
 
+    function generarTimelineHTML(estado) {
+        const estadosOrden = [
+            { key: 'pendiente', label: 'Pendiente', desc: 'Tu pedido está registrado y espera confirmación de pago', icono: '📋' },
+            { key: 'procesando', label: 'En Proceso', desc: 'Estamos imprimiendo tus fotos', icono: '🖨️' },
+            { key: 'enviado', label: 'Enviado', desc: 'Tu pedido está en camino', icono: '🚚' },
+            { key: 'entregado', label: 'Entregado', desc: 'Pedido completado exitosamente', icono: '✅' }
+        ];
+        
+        const estadoNormalizado = String(estado || '').toLowerCase();
+        
+        if (estadoNormalizado === 'cancelado') {
+            return `
+                <div class="timeline-item cancelado active">
+                    <div class="timeline-icon">❌</div>
+                    <div class="timeline-content">
+                        <div class="timeline-titulo">Pedido Cancelado</div>
+                        <div class="timeline-descripcion">Este pedido ha sido cancelado</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        const indiceActual = estadosOrden.findIndex(e => e.key === estadoNormalizado);
+        
+        return estadosOrden.map((est, index) => {
+            let clase = '';
+            if (index < indiceActual) clase = 'completado';
+            else if (index === indiceActual) clase = 'active';
+            
+            return `
+                <div class="timeline-item ${clase}">
+                    <div class="timeline-icon">${est.icono}</div>
+                    <div class="timeline-content">
+                        <div class="timeline-titulo">${est.label}</div>
+                        <div class="timeline-descripcion">${est.desc}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function guardarEnLocalStorage(pedido, correo) {
+        try {
+            const STORAGE_KEY = 'imageManager_pedidos';
+            const data = localStorage.getItem(STORAGE_KEY);
+            const pedidos = data ? JSON.parse(data) : [];
+            
+            const pedidoData = {
+                id: pedido.id,
+                correo: correo,
+                estado: pedido.estado,
+                numFotos: pedido.numFotos || 0,
+                total: pedido.total || 0,
+                papel: pedido.papel || '',
+                fechaRegistro: pedido.fechaRegistro || new Date().toISOString(),
+                fechaGuardado: new Date().toISOString()
+            };
+            
+            // Evitar duplicados
+            const existeIndex = pedidos.findIndex(p => p.id === pedido.id);
+            if (existeIndex >= 0) {
+                pedidos[existeIndex] = { ...pedidos[existeIndex], ...pedidoData };
+            } else {
+                pedidos.unshift(pedidoData);
+            }
+            
+            // Mantener máximo 5 pedidos
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(pedidos.slice(0, 5)));
+        } catch (e) {
+            console.error('Error guardando en localStorage:', e);
+        }
+    }
+
     function pintarResultado(pedido) {
         rPedido.textContent = pedido.id;
         rEstado.textContent = pedido.estado;
         aplicarColorEstado(pedido.estado);
+
+        // Generar timeline
+        const timelineContainer = document.getElementById('pedidoTimeline');
+        if (timelineContainer) {
+            timelineContainer.innerHTML = generarTimelineHTML(pedido.estado);
+        }
 
         const fecha = formatearFecha(pedido.fechaRegistro);
         rInfo.innerHTML = `
@@ -764,7 +846,12 @@
                 return;
             }
 
-            pintarResultado(data.pedido || {});
+            const pedido = data.pedido || {};
+            
+            // Guardar en localStorage para persistencia
+            guardarEnLocalStorage(pedido, validacion.mail);
+            
+            pintarResultado(pedido);
         } catch (err) {
             setMensaje('Error de conexion al consultar el estado.', 'error');
             ocultarResultado();

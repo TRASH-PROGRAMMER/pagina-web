@@ -1119,6 +1119,48 @@ function abrirModalExitoPedido(clienteId, correoCliente, infoHtml, bodyHtml) {
         id: clienteId ? String(clienteId) : "",
         correo: String(correoCliente || "").trim(),
     };
+    
+    // Guardar pedido en localStorage para persistencia
+    try {
+        const STORAGE_KEY = 'imageManager_pedidos';
+        const fotosGuardadas = JSON.parse(localStorage.getItem("pedidoFotos") || "[]");
+        const papelSeleccionado = document.querySelector('input[name="papel"]:checked')?.value || '';
+        const totalElement = document.getElementById('facturaTotal');
+        const total = totalElement ? parseFloat(totalElement.textContent.replace(/[^0-9.]/g, '')) : 0;
+        
+        const pedidoData = {
+            id: clienteId,
+            correo: correoCliente,
+            estado: 'pendiente',
+            numFotos: fotosGuardadas.length,
+            total: total,
+            papel: papelSeleccionado,
+            fechaRegistro: new Date().toISOString(),
+            fechaGuardado: new Date().toISOString()
+        };
+        
+        const data = localStorage.getItem(STORAGE_KEY);
+        const pedidos = data ? JSON.parse(data) : [];
+        
+        // Evitar duplicados
+        const existeIndex = pedidos.findIndex(p => p.id === clienteId);
+        if (existeIndex >= 0) {
+            pedidos[existeIndex] = { ...pedidos[existeIndex], ...pedidoData };
+        } else {
+            pedidos.unshift(pedidoData);
+        }
+        
+        // Mantener máximo 5 pedidos
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(pedidos.slice(0, 5)));
+        
+        // Notificar al sistema de seguimiento si está disponible
+        if (window.SeguimientoPedidos && typeof window.SeguimientoPedidos.crearBotonSeguimiento === 'function') {
+            window.SeguimientoPedidos.crearBotonSeguimiento();
+        }
+    } catch (e) {
+        console.error('Error guardando pedido en localStorage:', e);
+    }
+    
     if (pedidoExitoNumero) pedidoExitoNumero.textContent = String(clienteId || "-");
     if (pedidoExitoInfo) pedidoExitoInfo.innerHTML = infoHtml || "";
     if (pedidoExitoBody) pedidoExitoBody.innerHTML = bodyHtml || "";

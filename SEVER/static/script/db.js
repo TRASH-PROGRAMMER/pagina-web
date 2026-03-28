@@ -1,4 +1,4 @@
-// Se inicializa automáticamente al importar el módulo
+// Se inicializa automaticamente al importar el modulo
 const dbReady = new Promise((resolve, reject) => {
     const request = indexedDB.open("ClientesDB", 1);
 
@@ -22,23 +22,38 @@ const dbReady = new Promise((resolve, reject) => {
     };
 });
 
-// ✅ Guardar cliente + fotos — usa FormData → API Flask → PostgreSQL
+// Guardar cliente + fotos: usa FormData -> API Flask -> PostgreSQL
 export async function guardarCliente(formData) {
     const response = await fetch("/api/clientes", {
         method: "POST",
-        body: formData   // FormData — el navegador pone el Content-Type automáticamente
+        body: formData
     });
 
-    const data = await response.json();
+    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+    let data = {};
+
+    if (contentType.includes("application/json")) {
+        data = await response.json().catch(function() { return {}; });
+    } else {
+        const text = await response.text().catch(function() { return ""; });
+        data = { error: (text || "").trim() };
+    }
 
     if (!response.ok) {
-        throw new Error(data.error || "Error al guardar cliente");
+        if (response.status === 413) {
+            throw new Error(data.error || "La carga supera el limite permitido del servidor.");
+        }
+        throw new Error(data.error || `Error al guardar cliente (HTTP ${response.status})`);
+    }
+
+    if (!data || typeof data !== "object" || !data.cliente) {
+        throw new Error("Respuesta invalida del servidor al guardar el pedido.");
     }
 
     return data.cliente;
 }
 
-// ✅ Eliminar cliente por ID
+// Eliminar cliente por ID
 export async function eliminarCliente(id) {
     const db = await dbReady;
     return new Promise((resolve, reject) => {
@@ -50,7 +65,7 @@ export async function eliminarCliente(id) {
     });
 }
 
-// ✅ Obtener clientes
+// Obtener clientes
 export async function obtenerClientes() {
     const db = await dbReady;
     return new Promise((resolve, reject) => {

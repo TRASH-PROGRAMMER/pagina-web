@@ -1,0 +1,1449 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Consulta el estado de todos tus pedidos de impresión fotográfica en Image Manager">
+    <title>Mis Pedidos | Image Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* ============================================
+           DESIGN SYSTEM - Variables CSS
+           ============================================ */
+        :root {
+            /* Colores primarios */
+            --color-primary-50: #eef2ff;
+            --color-primary-100: #e0e7ff;
+            --color-primary-500: #6366f1;
+            --color-primary-600: #4f46e5;
+            --color-primary-700: #4338ca;
+            --color-primary-900: #312e81;
+            
+            /* Colores de estado */
+            --color-success-50: #ecfdf5;
+            --color-success-100: #d1fae5;
+            --color-success-500: #10b981;
+            --color-success-600: #059669;
+            --color-warning-50: #fffbeb;
+            --color-warning-100: #fef3c7;
+            --color-warning-500: #f59e0b;
+            --color-warning-600: #d97706;
+            --color-danger-50: #fef2f2;
+            --color-danger-100: #fee2e2;
+            --color-danger-500: #ef4444;
+            --color-danger-600: #dc2626;
+            --color-info-50: #eff6ff;
+            --color-info-100: #dbeafe;
+            --color-info-500: #3b82f6;
+            
+            /* Escala de grises */
+            --color-white: #ffffff;
+            --color-gray-50: #f9fafb;
+            --color-gray-100: #f3f4f6;
+            --color-gray-200: #e5e7eb;
+            --color-gray-300: #d1d5db;
+            --color-gray-400: #9ca3af;
+            --color-gray-500: #6b7280;
+            --color-gray-600: #4b5563;
+            --color-gray-700: #374151;
+            --color-gray-800: #1f2937;
+            --color-gray-900: #111827;
+            
+            /* Tipografía */
+            --font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-size-xs: 0.75rem;
+            --font-size-sm: 0.875rem;
+            --font-size-base: 1rem;
+            --font-size-lg: 1.125rem;
+            --font-size-xl: 1.25rem;
+            --font-size-2xl: 1.5rem;
+            --font-size-3xl: 1.875rem;
+            --font-size-4xl: 2.25rem;
+            
+            --font-weight-normal: 400;
+            --font-weight-medium: 500;
+            --font-weight-semibold: 600;
+            --font-weight-bold: 700;
+            
+            --line-height-tight: 1.25;
+            --line-height-normal: 1.5;
+            --line-height-relaxed: 1.75;
+            
+            /* Espaciado */
+            --space-1: 0.25rem;
+            --space-2: 0.5rem;
+            --space-3: 0.75rem;
+            --space-4: 1rem;
+            --space-5: 1.25rem;
+            --space-6: 1.5rem;
+            --space-8: 2rem;
+            --space-10: 2.5rem;
+            --space-12: 3rem;
+            --space-16: 4rem;
+            
+            /* Bordes */
+            --border-radius-sm: 0.375rem;
+            --border-radius-md: 0.5rem;
+            --border-radius-lg: 0.75rem;
+            --border-radius-xl: 1rem;
+            --border-radius-2xl: 1.5rem;
+            --border-radius-full: 9999px;
+            
+            /* Sombras */
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            --shadow-focus: 0 0 0 3px rgba(99, 102, 241, 0.3);
+            
+            /* Transiciones */
+            --transition-fast: 150ms ease-in-out;
+            --transition-normal: 250ms ease-in-out;
+            --transition-slow: 350ms ease-in-out;
+            
+            /* Z-index */
+            --z-dropdown: 100;
+            --z-sticky: 200;
+            --z-modal: 300;
+            --z-tooltip: 400;
+        }
+
+        /* ============================================
+           RESET Y BASE
+           ============================================ */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-family-base);
+            font-size: var(--font-size-base);
+            line-height: var(--line-height-normal);
+            color: var(--color-gray-800);
+            background-color: var(--color-gray-50);
+            min-height: 100vh;
+        }
+
+        /* Focus visible para accesibilidad */
+        *:focus-visible {
+            outline: 2px solid var(--color-primary-500);
+            outline-offset: 2px;
+        }
+
+        button:focus-visible,
+        a:focus-visible,
+        input:focus-visible {
+            box-shadow: var(--shadow-focus);
+        }
+
+        /* Saltar al contenido (accesibilidad) */
+        .skip-link {
+            position: absolute;
+            top: -40px;
+            left: 0;
+            background: var(--color-primary-600);
+            color: var(--color-white);
+            padding: 8px 16px;
+            z-index: 1000;
+            text-decoration: none;
+            font-weight: var(--font-weight-medium);
+            border-radius: 0 0 var(--border-radius-md) 0;
+        }
+
+        .skip-link:focus {
+            top: 0;
+        }
+
+        /* ============================================
+           COMPONENTES - Botones
+           ============================================ */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-2);
+            padding: var(--space-3) var(--space-5);
+            font-family: var(--font-family-base);
+            font-size: var(--font-size-sm);
+            font-weight: var(--font-weight-semibold);
+            line-height: var(--line-height-tight);
+            text-decoration: none;
+            border: 1px solid transparent;
+            border-radius: var(--border-radius-lg);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            white-space: nowrap;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn--primary {
+            background-color: var(--color-primary-600);
+            color: var(--color-white);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn--primary:hover:not(:disabled) {
+            background-color: var(--color-primary-700);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+
+        .btn--secondary {
+            background-color: var(--color-white);
+            color: var(--color-gray-700);
+            border-color: var(--color-gray-300);
+        }
+
+        .btn--secondary:hover:not(:disabled) {
+            background-color: var(--color-gray-50);
+            border-color: var(--color-gray-400);
+        }
+
+        .btn--ghost {
+            background-color: transparent;
+            color: var(--color-gray-600);
+        }
+
+        .btn--ghost:hover:not(:disabled) {
+            background-color: var(--color-gray-100);
+            color: var(--color-gray-800);
+        }
+
+        .btn--sm {
+            padding: var(--space-2) var(--space-3);
+            font-size: var(--font-size-xs);
+        }
+
+        .btn--lg {
+            padding: var(--space-4) var(--space-6);
+            font-size: var(--font-size-base);
+        }
+
+        /* ============================================
+           COMPONENTES - Formularios
+           ============================================ */
+        .form-group {
+            margin-bottom: var(--space-5);
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: var(--space-2);
+            font-size: var(--font-size-sm);
+            font-weight: var(--font-weight-medium);
+            color: var(--color-gray-700);
+        }
+
+        .form-label__required::after {
+            content: ' *';
+            color: var(--color-danger-500);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: var(--space-3) var(--space-4);
+            font-family: var(--font-family-base);
+            font-size: var(--font-size-base);
+            color: var(--color-gray-800);
+            background-color: var(--color-white);
+            border: 2px solid var(--color-gray-200);
+            border-radius: var(--border-radius-lg);
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+        .form-input:hover {
+            border-color: var(--color-gray-300);
+        }
+
+        .form-input:focus {
+            border-color: var(--color-primary-500);
+            box-shadow: var(--shadow-focus);
+            outline: none;
+        }
+
+        .form-input--error {
+            border-color: var(--color-danger-500);
+            background-color: var(--color-danger-50);
+        }
+
+        .form-input--error:focus {
+            border-color: var(--color-danger-500);
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+        }
+
+        .form-hint {
+            margin-top: var(--space-2);
+            font-size: var(--font-size-sm);
+            color: var(--color-gray-500);
+        }
+
+        .form-error {
+            margin-top: var(--space-2);
+            font-size: var(--font-size-sm);
+            color: var(--color-danger-600);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        /* ============================================
+           COMPONENTES - Tarjetas
+           ============================================ */
+        .card {
+            background-color: var(--color-white);
+            border-radius: var(--border-radius-xl);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--color-gray-200);
+            overflow: hidden;
+            transition: box-shadow var(--transition-normal), transform var(--transition-normal);
+        }
+
+        .card--hover:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .card__header {
+            padding: var(--space-6);
+            border-bottom: 1px solid var(--color-gray-100);
+        }
+
+        .card__body {
+            padding: var(--space-6);
+        }
+
+        .card__footer {
+            padding: var(--space-4) var(--space-6);
+            background-color: var(--color-gray-50);
+            border-top: 1px solid var(--color-gray-100);
+        }
+
+        /* ============================================
+           COMPONENTES - Alertas
+           ============================================ */
+        .alert {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-3);
+            padding: var(--space-4);
+            border-radius: var(--border-radius-lg);
+            font-size: var(--font-size-sm);
+        }
+
+        .alert__icon {
+            flex-shrink: 0;
+            font-size: var(--font-size-lg);
+        }
+
+        .alert__content {
+            flex: 1;
+        }
+
+        .alert--error {
+            background-color: var(--color-danger-50);
+            border: 1px solid var(--color-danger-100);
+            color: var(--color-danger-700);
+        }
+
+        .alert--success {
+            background-color: var(--color-success-50);
+            border: 1px solid var(--color-success-100);
+            color: var(--color-success-700);
+        }
+
+        .alert--info {
+            background-color: var(--color-info-50);
+            border: 1px solid var(--color-info-100);
+            color: var(--color-info-700);
+        }
+
+        .alert--warning {
+            background-color: var(--color-warning-50);
+            border: 1px solid var(--color-warning-100);
+            color: var(--color-warning-700);
+        }
+
+        /* ============================================
+           COMPONENTES - Badges
+           ============================================ */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-1);
+            padding: var(--space-1) var(--space-3);
+            font-size: var(--font-size-xs);
+            font-weight: var(--font-weight-semibold);
+            border-radius: var(--border-radius-full);
+            white-space: nowrap;
+        }
+
+        .badge--pending {
+            background-color: var(--color-info-100);
+            color: var(--color-info-500);
+        }
+
+        .badge--processing {
+            background-color: var(--color-warning-100);
+            color: var(--color-warning-600);
+        }
+
+        .badge--shipped {
+            background-color: var(--color-primary-100);
+            color: var(--color-primary-600);
+        }
+
+        .badge--delivered {
+            background-color: var(--color-success-100);
+            color: var(--color-success-600);
+        }
+
+        .badge--cancelled {
+            background-color: var(--color-danger-100);
+            color: var(--color-danger-600);
+        }
+
+        /* ============================================
+           COMPONENTES - Timeline
+           ============================================ */
+        .timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .timeline__item {
+            display: flex;
+            gap: var(--space-4);
+            padding: var(--space-3) 0;
+            position: relative;
+            opacity: 0.5;
+        }
+
+        .timeline__item:not(:last-child)::before {
+            content: '';
+            position: absolute;
+            left: 11px;
+            top: 36px;
+            width: 2px;
+            height: calc(100% - 20px);
+            background-color: var(--color-gray-300);
+        }
+
+        .timeline__item--completed,
+        .timeline__item--active {
+            opacity: 1;
+        }
+
+        .timeline__item--completed::before {
+            background-color: var(--color-success-500);
+        }
+
+        .timeline__icon {
+            width: 24px;
+            height: 24px;
+            border-radius: var(--border-radius-full);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: var(--font-size-xs);
+            flex-shrink: 0;
+            z-index: 1;
+            background-color: var(--color-gray-300);
+            color: var(--color-white);
+        }
+
+        .timeline__item--completed .timeline__icon {
+            background-color: var(--color-success-500);
+        }
+
+        .timeline__item--active .timeline__icon {
+            background-color: var(--color-primary-500);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+            50% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0); }
+        }
+
+        .timeline__content {
+            flex: 1;
+            padding-top: 2px;
+        }
+
+        .timeline__title {
+            font-weight: var(--font-weight-semibold);
+            font-size: var(--font-size-sm);
+            color: var(--color-gray-800);
+        }
+
+        .timeline__desc {
+            font-size: var(--font-size-xs);
+            color: var(--color-gray-500);
+            margin-top: var(--space-1);
+        }
+
+        /* ============================================
+           LAYOUT - Header
+           ============================================ */
+        .app-header {
+            background: linear-gradient(135deg, var(--color-primary-600) 0%, var(--color-primary-800) 100%);
+            color: var(--color-white);
+            padding: var(--space-12) var(--space-6);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .app-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            opacity: 0.5;
+        }
+
+        .app-header__content {
+            max-width: 1200px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .app-header__title {
+            font-size: var(--font-size-3xl);
+            font-weight: var(--font-weight-bold);
+            margin-bottom: var(--space-2);
+            letter-spacing: -0.025em;
+            color: black;
+        }
+
+        .app-header__subtitle {
+            font-size: var(--font-size-lg);
+            opacity: 0.9;
+            font-weight: var(--font-weight-normal);
+            color: black;
+        }
+
+        /* ============================================
+           LAYOUT - Contenedor principal
+           ============================================ */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: var(--space-6);
+        }
+
+        .container--narrow {
+            max-width: 480px;
+        }
+
+        /* ============================================
+           SECCIONES
+           ============================================ */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-6);
+            flex-wrap: wrap;
+            gap: var(--space-4);
+        }
+
+        .section-title {
+            font-size: var(--font-size-xl);
+            font-weight: var(--font-weight-bold);
+            color: var(--color-gray-900);
+        }
+
+        /* ============================================
+           PÁGINA - Login
+           ============================================ */
+        .login-page {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .login-page__header {
+            padding: var(--space-6);
+        }
+
+        .login-page__back {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-2);
+            color: var(--color-primary-600);
+            text-decoration: none;
+            font-weight: var(--font-weight-medium);
+            font-size: var(--font-size-sm);
+            transition: color var(--transition-fast);
+        }
+
+        .login-page__back:hover {
+            color: var(--color-primary-700);
+        }
+
+        .login-page__content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-6);
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .login-card__icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto var(--space-6);
+            background: linear-gradient(135deg, var(--color-primary-500) 0%, var(--color-primary-700) 100%);
+            border-radius: var(--border-radius-xl);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: var(--font-size-2xl);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .login-card__title {
+            font-size: var(--font-size-2xl);
+            font-weight: var(--font-weight-bold);
+            text-align: center;
+            color: var(--color-gray-900);
+            margin-bottom: var(--space-2);
+        }
+
+        .login-card__subtitle {
+            text-align: center;
+            color: var(--color-gray-500);
+            margin-bottom: var(--space-8);
+            font-size: var(--font-size-sm);
+        }
+
+        /* ============================================
+           PÁGINA - Lista de pedidos
+           ============================================ */
+        .orders-page {
+            display: none;
+        }
+
+        .orders-page--active {
+            display: block;
+        }
+
+        .orders-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-6);
+            flex-wrap: wrap;
+            gap: var(--space-4);
+        }
+
+        .orders-count {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-2);
+            font-size: var(--font-size-sm);
+            color: var(--color-gray-600);
+        }
+
+        .orders-count__number {
+            background-color: var(--color-primary-100);
+            color: var(--color-primary-700);
+            padding: var(--space-1) var(--space-3);
+            border-radius: var(--border-radius-full);
+            font-weight: var(--font-weight-semibold);
+        }
+
+        /* ============================================
+           Tarjeta de pedido
+           ============================================ */
+        .order-card {
+            margin-bottom: var(--space-5);
+        }
+
+        .order-card__header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: var(--space-4);
+            flex-wrap: wrap;
+        }
+
+        .order-card__id {
+            font-size: var(--font-size-lg);
+            font-weight: var(--font-weight-bold);
+            color: var(--color-gray-900);
+        }
+
+        .order-card__meta {
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+            margin-top: var(--space-2);
+            flex-wrap: wrap;
+        }
+
+        .order-card__date {
+            font-size: var(--font-size-sm);
+            color: var(--color-gray-500);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .order-card__summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: var(--space-4);
+            margin: var(--space-6) 0;
+            padding: var(--space-5);
+            background-color: var(--color-gray-50);
+            border-radius: var(--border-radius-lg);
+        }
+
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-1);
+        }
+
+        .summary-item__label {
+            font-size: var(--font-size-xs);
+            font-weight: var(--font-weight-medium);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--color-gray-500);
+        }
+
+        .summary-item__value {
+            font-weight: var(--font-weight-semibold);
+            color: var(--color-gray-800);
+        }
+
+        .order-card__timeline {
+            margin: var(--space-6) 0;
+            padding: var(--space-5);
+            background-color: var(--color-gray-50);
+            border-radius: var(--border-radius-lg);
+        }
+
+        .order-card__actions {
+            display: flex;
+            gap: var(--space-3);
+            flex-wrap: wrap;
+        }
+
+        .order-card__detail {
+            margin-top: var(--space-6);
+            padding-top: var(--space-6);
+            border-top: 1px dashed var(--color-gray-200);
+            display: none;
+        }
+
+        .order-card__detail--open {
+            display: block;
+            animation: slideDown 300ms ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .detail-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: var(--font-size-sm);
+        }
+
+        .detail-table th,
+        .detail-table td {
+            padding: var(--space-3);
+            text-align: left;
+            border-bottom: 1px solid var(--color-gray-200);
+        }
+
+        .detail-table th {
+            font-weight: var(--font-weight-semibold);
+            color: var(--color-gray-600);
+            font-size: var(--font-size-xs);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background-color: var(--color-gray-50);
+        }
+
+        .detail-table td {
+            color: var(--color-gray-700);
+        }
+
+        .detail-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .detail-total {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-4) var(--space-5);
+            margin-top: var(--space-4);
+            background-color: var(--color-gray-100);
+            border-radius: var(--border-radius-lg);
+            font-weight: var(--font-weight-bold);
+            font-size: var(--font-size-lg);
+        }
+
+        .payment-notice {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            padding: var(--space-4);
+            margin-top: var(--space-5);
+            background-color: var(--color-warning-50);
+            border: 1px solid var(--color-warning-100);
+            border-radius: var(--border-radius-lg);
+            color: var(--color-warning-700);
+            font-size: var(--font-size-sm);
+        }
+
+        /* ============================================
+           Estado vacío
+           ============================================ */
+        .empty-state {
+            text-align: center;
+            padding: var(--space-16) var(--space-6);
+        }
+
+        .empty-state__icon {
+            width: 96px;
+            height: 96px;
+            margin: 0 auto var(--space-6);
+            background-color: var(--color-gray-100);
+            border-radius: var(--border-radius-2xl);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: var(--font-size-4xl);
+        }
+
+        .empty-state__title {
+            font-size: var(--font-size-xl);
+            font-weight: var(--font-weight-bold);
+            color: var(--color-gray-900);
+            margin-bottom: var(--space-2);
+        }
+
+        .empty-state__desc {
+            color: var(--color-gray-500);
+            margin-bottom: var(--space-6);
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* ============================================
+           Loading y estados
+           ============================================ */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: var(--color-white);
+            border-radius: var(--border-radius-full);
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, var(--color-gray-200) 25%, var(--color-gray-100) 50%, var(--color-gray-200) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: var(--border-radius-md);
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* ============================================
+           Responsive
+           ============================================ */
+        @media (max-width: 640px) {
+            :root {
+                --font-size-3xl: 1.5rem;
+                --font-size-2xl: 1.25rem;
+            }
+
+            .app-header {
+                padding: var(--space-8) var(--space-5);
+            }
+
+            .container {
+                padding: var(--space-4);
+            }
+
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .order-card__header {
+                flex-direction: column;
+            }
+
+            .order-card__summary {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .orders-toolbar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        /* ============================================
+           Utilidades
+           ============================================ */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .mb-4 {
+            margin-bottom: var(--space-4);
+        }
+
+        .mb-6 {
+            margin-bottom: var(--space-6);
+        }
+    </style>
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Saltar al contenido principal</a>
+
+    <!-- PÁGINA DE LOGIN -->
+    <div id="loginPage" class="login-page">
+        <header class="login-page__header">
+            <a href="/" class="login-page__back" aria-label="Volver a la página principal">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M15.833 10H4.167m0 0L10 15.833M4.167 10L10 4.167" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Volver al inicio
+            </a>
+        </header>
+
+        <main class="login-page__content" id="main-content">
+            <div class="container container--narrow">
+                <div class="card login-card">
+                    <div class="card__body">
+                        <div class="login-card__icon" aria-hidden="true">📦</div>
+                        <h1 class="login-card__title">Mis Pedidos</h1>
+                        <p class="login-card__subtitle">Ingresa tu correo para ver todos tus pedidos registrados</p>
+
+                        <div id="loginAlert" class="alert" role="alert" aria-live="polite" style="display: none;">
+                            <span class="alert__icon" aria-hidden="true"></span>
+                            <div class="alert__content"></div>
+                        </div>
+
+                        <form id="loginForm" novalidate>
+                            <div class="form-group">
+                                <label for="emailInput" class="form-label form-label__required">
+                                    Correo electrónico
+                                </label>
+                                <input 
+                                    type="email" 
+                                    id="emailInput" 
+                                    name="email" 
+                                    class="form-input" 
+                                    placeholder="tu@email.com"
+                                    required
+                                    autocomplete="email"
+                                    aria-describedby="emailHint"
+                                    aria-invalid="false"
+                                >
+                                <div id="emailHint" class="form-hint">Usa el mismo correo que registraste en tu pedido</div>
+                                <div id="emailError" class="form-error" role="alert" style="display: none;"></div>
+                            </div>
+
+                            <button type="submit" class="btn btn--primary btn--lg" id="loginBtn" style="width: 100%;">
+                                Ver mis pedidos
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- PÁGINA DE PEDIDOS -->
+    <div id="ordersPage" class="orders-page" role="main" aria-label="Lista de pedidos">
+        <header class="app-header">
+            <div class="app-header__content">
+                <h1 class="app-header__title">📦 Mis Pedidos</h1>
+                <p class="app-header__subtitle">Consulta el estado de todas tus órdenes</p>
+            </div>
+        </header>
+
+        <div class="container">
+            <nav aria-label="Navegación">
+                <a href="/" class="login-page__back mb-6">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path d="M15.833 10H4.167m0 0L10 15.833M4.167 10L10 4.167" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Volver al inicio
+                </a>
+            </nav>
+
+            <div class="orders-toolbar">
+                <div class="orders-count">
+                    Tienes <span class="orders-count__number" id="ordersCount">0 pedidos</span>
+                </div>
+                <button type="button" class="btn btn--secondary btn--sm" id="changeEmailBtn">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path d="M2.5 10a7.5 7.5 0 1115 0 7.5 7.5 0 01-15 0z" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M7.5 10h5M10 7.5v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    Cambiar correo
+                </button>
+            </div>
+
+            <div id="ordersList" role="region" aria-label="Pedidos del usuario">
+                <!-- Los pedidos se cargan dinámicamente -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        // Configuración de estados
+        const ORDER_STATES = {
+            pendiente: { 
+                label: 'Pendiente', 
+                icon: '⏳', 
+                desc: 'Esperando confirmación de pago',
+                class: 'badge--pending'
+            },
+            procesando: { 
+                label: 'En Proceso', 
+                icon: '🖨️', 
+                desc: 'Imprimiendo tus fotos',
+                class: 'badge--processing'
+            },
+            enviado: { 
+                label: 'Enviado', 
+                icon: '🚚', 
+                desc: 'En camino a tu dirección',
+                class: 'badge--shipped'
+            },
+            entregado: { 
+                label: 'Entregado', 
+                icon: '✅', 
+                desc: 'Entregado exitosamente',
+                class: 'badge--delivered'
+            },
+            cancelado: { 
+                label: 'Cancelado', 
+                icon: '❌', 
+                desc: 'Pedido cancelado',
+                class: 'badge--cancelled'
+            }
+        };
+
+        // Elementos del DOM
+        const loginPage = document.getElementById('loginPage');
+        const ordersPage = document.getElementById('ordersPage');
+        const loginForm = document.getElementById('loginForm');
+        const emailInput = document.getElementById('emailInput');
+        const emailError = document.getElementById('emailError');
+        const loginBtn = document.getElementById('loginBtn');
+        const loginAlert = document.getElementById('loginAlert');
+        const ordersList = document.getElementById('ordersList');
+        const ordersCount = document.getElementById('ordersCount');
+        const changeEmailBtn = document.getElementById('changeEmailBtn');
+
+        let currentEmail = '';
+
+        // Utilidades
+        const formatDate = (dateString) => {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('es-EC', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            });
+        };
+
+        const formatCurrency = (amount) => {
+            return '$' + Number(amount || 0).toFixed(2);
+        };
+
+        const showAlert = (type, message) => {
+            loginAlert.className = `alert alert--${type}`;
+            loginAlert.querySelector('.alert__icon').textContent = 
+                type === 'error' ? '⚠️' : type === 'success' ? '✅' : 'ℹ️';
+            loginAlert.querySelector('.alert__content').textContent = message;
+            loginAlert.style.display = 'flex';
+        };
+
+        const hideAlert = () => {
+            loginAlert.style.display = 'none';
+        };
+
+        const setLoading = (loading) => {
+            loginBtn.disabled = loading;
+            loginBtn.innerHTML = loading 
+                ? '<span class="spinner" aria-hidden="true"></span> Consultando...' 
+                : 'Ver mis pedidos';
+        };
+
+        const showFieldError = (message) => {
+            emailInput.classList.add('form-input--error');
+            emailInput.setAttribute('aria-invalid', 'true');
+            emailError.textContent = message;
+            emailError.style.display = 'flex';
+        };
+
+        const clearFieldError = () => {
+            emailInput.classList.remove('form-input--error');
+            emailInput.setAttribute('aria-invalid', 'false');
+            emailError.style.display = 'none';
+        };
+
+        // Generar timeline
+        const generateTimeline = (state) => {
+            const stateOrder = ['pendiente', 'procesando', 'enviado', 'entregado'];
+            const normalizedState = String(state || '').toLowerCase();
+            const currentIndex = stateOrder.indexOf(normalizedState);
+
+            if (normalizedState === 'cancelado') {
+                return `
+                    <div class="timeline">
+                        <div class="timeline__item timeline__item--active">
+                            <div class="timeline__icon" aria-hidden="true">❌</div>
+                            <div class="timeline__content">
+                                <div class="timeline__title">Pedido Cancelado</div>
+                                <div class="timeline__desc">Este pedido ha sido cancelado</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="timeline">
+                    ${stateOrder.map((key, index) => {
+                        const config = ORDER_STATES[key];
+                        let statusClass = '';
+                        if (index < currentIndex) statusClass = 'timeline__item--completed';
+                        else if (index === currentIndex) statusClass = 'timeline__item--active';
+                        
+                        return `
+                            <div class="timeline__item ${statusClass}">
+                                <div class="timeline__icon" aria-hidden="true">${config.icon}</div>
+                                <div class="timeline__content">
+                                    <div class="timeline__title">${config.label}</div>
+                                    <div class="timeline__desc">${config.desc}</div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        };
+
+        // Crear tarjeta de pedido
+        const createOrderCard = (order) => {
+            const stateConfig = ORDER_STATES[order.estado] || ORDER_STATES.pendiente;
+            const detailRows = (order.detalle || []).map(item => `
+                <tr>
+                    <td>${item.nombre}</td>
+                    <td class="text-center">${item.cantidad}</td>
+                    <td class="text-right">$${Number(item.precio_unitario || 0).toFixed(2)}</td>
+                    <td class="text-right">$${Number(item.subtotal || 0).toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            return `
+                <article class="card order-card card--hover" data-order-id="${order.id}">
+                    <div class="card__body">
+                        <header class="order-card__header">
+                            <div>
+                                <h2 class="order-card__id">Pedido #${order.id}</h2>
+                                <div class="order-card__meta">
+                                    <time class="order-card__date" datetime="${order.fechaRegistro}">
+                                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                                            <rect x="2.5" y="4.167" width="15" height="12.5" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                                            <path d="M2.5 8.333h15M6.667 2.5v3.333M13.333 2.5v3.333" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                        </svg>
+                                        ${formatDate(order.fechaRegistro)}
+                                    </time>
+                                </div>
+                            </div>
+                            <span class="badge ${stateConfig.class}">
+                                <span aria-hidden="true">${stateConfig.icon}</span>
+                                ${stateConfig.label}
+                            </span>
+                        </header>
+
+                        <div class="order-card__summary">
+                            <div class="summary-item">
+                                <span class="summary-item__label">Fotos</span>
+                                <span class="summary-item__value">${order.numFotos} imagen${order.numFotos !== 1 ? 'es' : ''}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-item__label">Papel</span>
+                                <span class="summary-item__value">${order.papel}</span>
+                            </div>
+                            <div class="summary-item">
+                                <span class="summary-item__label">Total</span>
+                                <span class="summary-item__value">${formatCurrency(order.total)}</span>
+                            </div>
+                        </div>
+
+                        <div class="order-card__timeline" aria-label="Estado del pedido">
+                            ${generateTimeline(order.estado)}
+                        </div>
+
+                        <footer class="order-card__actions">
+                            <button type="button" class="btn btn--secondary btn--sm" 
+                                    onclick="toggleOrderDetail(${order.id})"
+                                    aria-expanded="false"
+                                    aria-controls="order-detail-${order.id}">
+                                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                                    <path d="M10 11.667a1.667 1.667 0 100-3.334 1.667 1.667 0 000 3.334z" stroke="currentColor" stroke-width="1.5"/>
+                                    <path d="M2.983 10a7.083 7.083 0 0114.034 0 7.083 7.083 0 01-14.034 0z" stroke="currentColor" stroke-width="1.5"/>
+                                </svg>
+                                Ver detalle
+                            </button>
+                            <a href="/seguimiento?pedido=${order.id}&correo=${encodeURIComponent(order.correo)}" 
+                               class="btn btn--primary btn--sm">
+                                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                                    <path d="M10 17.5a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" stroke="currentColor" stroke-width="1.5"/>
+                                    <path d="M10 6.667V10l2.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                </svg>
+                                Seguimiento
+                            </a>
+                        </footer>
+
+                        <div class="order-card__detail" id="order-detail-${order.id}" aria-hidden="true">
+                            <h3 class="section-title" style="font-size: var(--font-size-base); margin-bottom: var(--space-4);">Detalle del pedido</h3>
+                            <div style="overflow-x: auto;">
+                                <table class="detail-table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Tamaño</th>
+                                            <th scope="col" class="text-center">Cant.</th>
+                                            <th scope="col" class="text-right">P/U</th>
+                                            <th scope="col" class="text-right">Subtotal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${detailRows || '<tr><td colspan="4" class="text-center" style="color: var(--color-gray-500); padding: var(--space-6);">Sin detalle disponible</td></tr>'}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="detail-total">
+                                <span>Total del pedido</span>
+                                <span>${formatCurrency(order.total)}</span>
+                            </div>
+                            ${order.estado === 'pendiente' ? `
+                                <div class="payment-notice" role="alert">
+                                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                                        <path d="M10 17.5a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" stroke="currentColor" stroke-width="1.5"/>
+                                        <path d="M10 6.667V10l2.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    </svg>
+                                    <span>Acércate a pagar en caja para procesar tu pedido</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </article>
+            `;
+        };
+
+        // Toggle detalle del pedido
+        window.toggleOrderDetail = function(orderId) {
+            const detail = document.getElementById(`order-detail-${orderId}`);
+            const button = document.querySelector(`[aria-controls="order-detail-${orderId}"]`);
+            const isOpen = detail.classList.contains('order-card__detail--open');
+            
+            if (isOpen) {
+                detail.classList.remove('order-card__detail--open');
+                detail.setAttribute('aria-hidden', 'true');
+                button.setAttribute('aria-expanded', 'false');
+                button.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path d="M10 11.667a1.667 1.667 0 100-3.334 1.667 1.667 0 000 3.334z" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M2.983 10a7.083 7.083 0 0114.034 0 7.083 7.083 0 01-14.034 0z" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                    Ver detalle
+                `;
+            } else {
+                detail.classList.add('order-card__detail--open');
+                detail.setAttribute('aria-hidden', 'false');
+                button.setAttribute('aria-expanded', 'true');
+                button.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path d="M2.983 10a7.083 7.083 0 0114.034 0 7.083 7.083 0 01-14.034 0z" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M7.5 10h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    Ocultar detalle
+                `;
+            }
+        };
+
+        // Cargar pedidos
+        const loadOrders = async (email) => {
+            setLoading(true);
+            hideAlert();
+            clearFieldError();
+
+            try {
+                const response = await fetch('/api/mis-pedidos', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ correo: email })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    showAlert('error', data.error || 'Error al consultar pedidos. Intenta nuevamente.');
+                    setLoading(false);
+                    return;
+                }
+
+                // Guardar email en localStorage
+                localStorage.setItem('misPedidos_email', email);
+                currentEmail = email;
+
+                // Mostrar página de pedidos
+                loginPage.style.display = 'none';
+                ordersPage.classList.add('orders-page--active');
+                document.title = `Mis Pedidos (${data.pedidos?.length || 0}) | Image Manager`;
+
+                // Actualizar contador
+                const count = data.pedidos?.length || 0;
+                ordersCount.textContent = `${count} pedido${count !== 1 ? 's' : ''}`;
+
+                // Renderizar pedidos
+                if (!data.pedidos || data.pedidos.length === 0) {
+                    ordersList.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state__icon" aria-hidden="true">📭</div>
+                            <h2 class="empty-state__title">No tienes pedidos registrados</h2>
+                            <p class="empty-state__desc">No se encontraron pedidos asociados a <strong>${email}</strong>. Crea tu primer pedido para comenzar.</p>
+                            <a href="/" class="btn btn--primary">Crear nuevo pedido</a>
+                        </div>
+                    `;
+                } else {
+                    ordersList.innerHTML = data.pedidos.map(createOrderCard).join('');
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                showAlert('error', 'Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        // Event Listeners
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = emailInput.value.trim();
+            
+            clearFieldError();
+
+            if (!email) {
+                showFieldError('El correo electrónico es obligatorio');
+                emailInput.focus();
+                return;
+            }
+
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                showFieldError('Ingresa un correo electrónico válido');
+                emailInput.focus();
+                return;
+            }
+
+            loadOrders(email);
+        });
+
+        emailInput.addEventListener('input', clearFieldError);
+
+        changeEmailBtn.addEventListener('click', () => {
+            ordersPage.classList.remove('orders-page--active');
+            loginPage.style.display = 'flex';
+            document.title = 'Mis Pedidos | Image Manager';
+            emailInput.value = '';
+            emailInput.focus();
+            hideAlert();
+            clearFieldError();
+        });
+
+        // Auto-cargar si hay email guardado
+        const savedEmail = localStorage.getItem('misPedidos_email');
+        if (savedEmail) {
+            emailInput.value = savedEmail;
+            // Opcional: auto-cargar sin confirmación
+            // loadOrders(savedEmail);
+        }
+    })();
+    </script>
+</body>
+</html>
