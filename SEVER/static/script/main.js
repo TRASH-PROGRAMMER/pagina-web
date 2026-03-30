@@ -17,7 +17,7 @@ const previewHelp = document.getElementById("previewHelp");
 const MAX_IMAGENES = 150;
 const MAX_BYTES_POR_ARCHIVO = 10 * 1024 * 1024;
 const TIPOS_VALIDOS = ["image/jpeg", "image/png", "image/gif", "image/pjpeg", "image/jpg"];
-const ITEMS_POR_PAGINA = 20;
+const ITEMS_POR_PAGINA = 10;
 
 const ESTADO_CARGA = Object.freeze({
     IDLE: "idle",
@@ -29,10 +29,14 @@ const ESTADO_CARGA = Object.freeze({
 
 let archivosGlobal = [];
 let previewsGlobal = [];
+// Exponer como globales para otros scripts (como formulario_clientes.js)
+window.archivosGlobal = archivosGlobal;
+window.previewsGlobal = previewsGlobal;
 let paginaActual = 1;
 let cargaEnCurso = false;
 let cargaToken = 0;
 let ultimoAnuncioLive = "";
+let rafRenderPendiente = 0;
 
 function claveFoto(file) {
     return `${file.name}__${file.size}__${file.lastModified}`;
@@ -234,6 +238,14 @@ function renderizarPaginaActual() {
     emitirGaleriaRenderizada();
 }
 
+function solicitarRenderPaginaActual() {
+    if (rafRenderPendiente) return;
+    rafRenderPendiente = requestAnimationFrame(function() {
+        rafRenderPendiente = 0;
+        renderizarPaginaActual();
+    });
+}
+
 function crearCardPreview(item) {
     const card = document.createElement("div");
     card.className = "card";
@@ -290,8 +302,8 @@ function crearCardPreview(item) {
         // Guardar cantidad en el item
         item.cantidad = nuevaCantidad;
         
-        // Actualizar en archivosGlobal
-        const idx = archivosGlobal.findIndex(f => f.archivo === item.archivo);
+        // Actualizar en archivosGlobal (contiene objetos File con propiedad cantidad)
+        const idx = archivosGlobal.findIndex(f => f === item.archivo);
         if (idx >= 0) {
             archivosGlobal[idx].cantidad = nuevaCantidad;
         }
@@ -356,6 +368,10 @@ function establecerMensajeSeleccion() {
 function invalidarCargaActual() {
     cargaToken += 1;
     cargaEnCurso = false;
+    if (rafRenderPendiente) {
+        cancelAnimationFrame(rafRenderPendiente);
+        rafRenderPendiente = 0;
+    }
 }
 
 function procesarArchivos(archivos, opciones = {}) {
@@ -365,6 +381,7 @@ function procesarArchivos(archivos, opciones = {}) {
 
     if (reiniciarVista) {
         previewsGlobal = [];
+        window.previewsGlobal = previewsGlobal;
         paginaActual = 1;
         renderizarPaginaActual();
     }
@@ -467,8 +484,10 @@ function procesarArchivos(archivos, opciones = {}) {
                     cantidad: 1,
                 });
 
-                paginaActual = totalPaginas();
-                renderizarPaginaActual();
+                // Mantener navegación natural: iniciar/continuar desde la primera página.
+                paginaActual = 1;
+                // Render por lotes para evitar stuttering al cargar muchas imagenes.
+                solicitarRenderPaginaActual();
                 marcarProcesado();
             };
 
@@ -507,6 +526,7 @@ function eliminarPreview(archivo) {
     if (archivosGlobal.length === 0) {
         invalidarCargaActual();
         previewsGlobal = [];
+        window.previewsGlobal = previewsGlobal;
         paginaActual = 1;
         renderizarPaginaActual();
         mostrarError("No hay imagenes seleccionadas.", true);
@@ -581,7 +601,8 @@ if (input) {
         }
 
         archivosGlobal = archivosGlobal.concat(nuevos);
-        
+        window.archivosGlobal = archivosGlobal;
+
         // Aplicar cantidades guardadas en localStorage a los nuevos archivos
         archivosGlobal.forEach(archivo => {
             if (!archivo.cantidad) {
@@ -605,7 +626,9 @@ if (cancelButton) {
     cancelButton.addEventListener("click", function() {
         invalidarCargaActual();
         archivosGlobal = [];
+        window.archivosGlobal = archivosGlobal;
         previewsGlobal = [];
+        window.previewsGlobal = previewsGlobal;
         paginaActual = 1;
         
         // Limpiar cantidades guardadas en localStorage

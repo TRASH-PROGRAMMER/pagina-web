@@ -55,18 +55,19 @@
     function guardarPedido(pedido) {
         try {
             const pedidos = obtenerPedidosGuardados();
+            const payload = { ...pedido, estado: normalizarEstado(pedido.estado) };
             
             // Evitar duplicados
             const existe = pedidos.find(p => p.id === pedido.id);
             if (existe) {
                 // Actualizar pedido existente
-                Object.assign(existe, pedido, { 
+                Object.assign(existe, payload, { 
                     fechaActualizacion: new Date().toISOString() 
                 });
             } else {
                 // Agregar nuevo pedido
                 pedidos.unshift({
-                    ...pedido,
+                    ...payload,
                     fechaGuardado: new Date().toISOString()
                 });
             }
@@ -97,12 +98,150 @@
     }
 
     /**
-     * Obtiene el pedido más reciente
-     * @returns {Object|null} Pedido más reciente o null
+     * Estados que cuentan como "pedido en curso" (sincronizado con backend: pendiente, procesando).
+     * Incluye enviado por si en el futuro el API lo usa.
+     */
+    function normalizarEstado(estado) {
+        return String(estado || 'pendiente').trim().toLowerCase();
+    }
+
+    function estadoPedidoActivo(estado) {
+        const e = normalizarEstado(estado);
+        return e === 'pendiente' || e === 'procesando' || e === 'enviado';
+    }
+
+    function obtenerPedidosActivos(pedidos) {
+        return (pedidos || []).filter(p => estadoPedidoActivo(p.estado));
+    }
+
+    /**
+     * Obtiene el pedido más reciente (por id numérico) entre los activos, o null
+     */
+    function obtenerPedidoActivoMasReciente(pedidos) {
+        const activos = obtenerPedidosActivos(pedidos);
+        if (!activos.length) return null;
+        return activos.reduce((a, b) => {
+            const ida = Number(a.id) || 0;
+            const idb = Number(b.id) || 0;
+            return idb >= ida ? b : a;
+        });
+    }
+
+    /**
+     * Obtiene el pedido más reciente (lista local: primer elemento = más nuevo guardado)
+     * @deprecated para banner; usar obtenerPedidoActivoMasReciente
      */
     function obtenerPedidoReciente() {
         const pedidos = obtenerPedidosGuardados();
         return pedidos.length > 0 ? pedidos[0] : null;
+    }
+
+    function obtenerCorreoParaSincronizacion() {
+        try {
+            const key = localStorage.getItem('misPedidos_email');
+            if (key && String(key).trim()) return String(key).trim().toLowerCase();
+        } catch (e) { /* ignore */ }
+        const pedidos = obtenerPedidosGuardados();
+        for (let i = 0; i < pedidos.length; i++) {
+            const c = (pedidos[i].correo || '').trim().toLowerCase();
+            if (c) return c;
+        }
+        return '';
+    }
+
+    function mapApiPedidoALocal(p) {
+        return {
+            id: p.id,
+            correo: p.correo || '',
+            estado: normalizarEstado(p.estado),
+            numFotos: Number(p.numFotos || 0),
+            totalCopias: Number(p.totalCopias != null ? p.totalCopias : p.numFotos || 0),
+            total: p.total != null ? p.total : 0,
+            papel: p.papel || '',
+            fechaRegistro: p.fechaRegistro || new Date().toISOString(),
+            fechaActualizacion: new Date().toISOString()
+        };
+    }
+
+    /**
+     * Fusiona respuesta del servidor con localStorage (fuente de verdad: servidor por id).
+     */
+    function fusionarPedidosConServidor(servidorPedidos) {
+        const lista = Array.isArray(servidorPedidos) ? servidorPedidos : [];
+        const porId = new Map();
+        lista.forEach(p => {
+            porId.set(String(p.id), mapApiPedidoALocal(p));
+        });
+        const locales = obtenerPedidosGuardados();
+        const vistos = new Set();
+        const merged = [];
+
+        locales.forEach(lp => {
+            const sid = String(lp.id);
+            const srv = porId.get(sid);
+            if (srv) {
+                merged.push({
+                    ...lp,
+                    ...srv,
+                    estado: srv.estado,
+                    numFotos: srv.numFotos,
+                    totalCopias: srv.totalCopias,
+                    total: srv.total,
+                    papel: srv.papel || lp.papel,
+                    fechaRegistro: srv.fechaRegistro || lp.fechaRegistro
+                });
+                vistos.add(sid);
+            } else {
+                merged.push({ ...lp, estado: normalizarEstado(lp.estado) });
+            }
+        });
+
+        lista.forEach(p => {
+            const sid = String(p.id);
+            if (!vistos.has(sid)) {
+                const item = mapApiPedidoALocal(p);
+                item.fechaGuardado = new Date().toISOString();
+                merged.push(item);
+            }
+        });
+
+        merged.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+        const limitados = merged.slice(0, MAX_PEDIDOS_GUARDADOS);
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(limitados));
+        } catch (e) {
+            console.error('Error fusionando pedidos:', e);
+        }
+        return limitados;
+    }
+
+    function quitarBannerSeguimiento() {
+        const el = document.getElementById('contenedorSeguimientoPedido');
+        if (el) el.remove();
+    }
+
+    async function sincronizarPedidosDesdeServidor() {
+        const correo = obtenerCorreoParaSincronizacion();
+        if (!correo) return false;
+        try {
+            const res = await fetch('/api/mis-pedidos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ correo })
+            });
+            const data = await res.json();
+            if (!res.ok || !Array.isArray(data.pedidos)) return false;
+            fusionarPedidosConServidor(data.pedidos);
+            return true;
+        } catch (e) {
+            console.warn('Sincronización de pedidos no disponible:', e);
+            return false;
+        }
+    }
+
+    function refrescarBannerSeguimiento() {
+        quitarBannerSeguimiento();
+        crearBotonSeguimiento();
     }
 
     /**
@@ -197,36 +336,45 @@
      * Crea y muestra el botón de seguimiento en la página principal
      */
     function crearBotonSeguimiento() {
-        // Evitar duplicados
-        if (document.getElementById('btnVerEstadoPedido')) {
+        quitarBannerSeguimiento();
+
+        const pedidos = obtenerPedidosGuardados();
+        const activos = obtenerPedidosActivos(pedidos);
+        const pedidoVista = obtenerPedidoActivoMasReciente(pedidos);
+        if (!pedidoVista || activos.length === 0) {
             return;
         }
 
-        const pedidoReciente = obtenerPedidoReciente();
-        if (!pedidoReciente) {
-            return;
-        }
+        const n = activos.length;
+        const titulo = n === 1
+            ? 'Tienes un pedido en curso'
+            : `Tienes ${n} pedidos en curso`;
+        const estadoKey = normalizarEstado(pedidoVista.estado);
+        const estadoMeta = ESTADOS_PEDIDO[estadoKey] || { label: pedidoVista.estado };
+        const subtitulo = n === 1
+            ? `Pedido #${pedidoVista.id} · ${estadoMeta.label}`
+            : `El más reciente: #${pedidoVista.id} · ${estadoMeta.label}`;
 
-        // Crear el contenedor del botón
         const contenedor = document.createElement('div');
         contenedor.id = 'contenedorSeguimientoPedido';
         contenedor.className = 'seguimiento-pedido-banner';
+        contenedor.setAttribute('role', 'status');
         contenedor.innerHTML = `
             <div class="seguimiento-pedido-info">
                 <span class="seguimiento-pedido-icono">📦</span>
                 <div class="seguimiento-pedido-detalles">
-                    <div class="seguimiento-pedido-titulo">Tienes un pedido en curso</div>
-                    <div class="seguimiento-pedido-subtitulo">Pedido #${pedidoReciente.id} - ${ESTADOS_PEDIDO[pedidoReciente.estado]?.label || pedidoReciente.estado}</div>
+                    <div class="seguimiento-pedido-titulo">${titulo}</div>
+                    <div class="seguimiento-pedido-subtitulo">${subtitulo}</div>
+                    <span class="seguimiento-pedido-badge-en-curso">En curso</span>
                 </div>
             </div>
-            <a href="/seguimiento?pedido=${pedidoReciente.id}&correo=${encodeURIComponent(pedidoReciente.correo || '')}" 
+            <a href="/seguimiento?pedido=${pedidoVista.id}&correo=${encodeURIComponent(pedidoVista.correo || '')}" 
                class="btn-ver-estado" 
                id="btnVerEstadoPedido">
                 Ver estado
             </a>
         `;
 
-        // Insertar al inicio del body o después del header
         const header = document.querySelector('header.container');
         if (header && header.parentNode) {
             header.parentNode.insertBefore(contenedor, header.nextSibling);
@@ -281,8 +429,17 @@
     /**
      * Actualiza el contenido del modal con los pedidos guardados
      */
+    function ordenarPedidosParaVista(pedidos) {
+        const activos = obtenerPedidosActivos(pedidos).sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+        const ids = new Set(activos.map(p => String(p.id)));
+        const resto = pedidos
+            .filter(p => !ids.has(String(p.id)))
+            .sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+        return activos.concat(resto);
+    }
+
     function actualizarModalPedidos() {
-        const pedidos = obtenerPedidosGuardados();
+        const pedidos = ordenarPedidosParaVista(obtenerPedidosGuardados());
         const body = document.getElementById('modalPedidosBody');
         
         if (!body) return;
@@ -291,30 +448,58 @@
             body.innerHTML = `
                 <div class="sin-pedidos">
                     <div class="sin-pedidos-icono">📭</div>
-                    <p>No tienes pedidos guardados</p>
+                    <p>No tienes pedidos guardados en este dispositivo</p>
                     <a href="/" class="btn-nuevo-pedido">Crear nuevo pedido</a>
                 </div>
             `;
             return;
         }
 
+        const activos = obtenerPedidosActivos(pedidos);
+        let avisoHtml = '';
+        if (activos.length === 0) {
+            avisoHtml = `
+                <div class="modal-pedidos-aviso modal-pedidos-aviso--sin-activos" role="status">
+                    <strong>No tienes pedidos activos</strong>
+                    <span>Los pedidos listados abajo ya fueron entregados o cancelados. Los estados se actualizan al sincronizar con el servidor.</span>
+                </div>`;
+        } else {
+            avisoHtml = `
+                <div class="modal-pedidos-aviso modal-pedidos-aviso--con-activos" role="status">
+                    <strong>${activos.length === 1 ? 'Tienes 1 pedido en curso' : `Tienes ${activos.length} pedidos en curso`}</strong>
+                    <span>Pendiente o en proceso hasta que el operador marque el pedido como entregado.</span>
+                </div>`;
+        }
+
         const listaHTML = pedidos.map(pedido => {
-            const estado = ESTADOS_PEDIDO[pedido.estado] || { label: pedido.estado, icono: '📦' };
+            const estNorm = normalizarEstado(pedido.estado);
+            const estado = ESTADOS_PEDIDO[estNorm] || { label: pedido.estado, icono: '📦' };
+            const enCurso = estadoPedidoActivo(estNorm);
             const fecha = new Date(pedido.fechaRegistro || pedido.fechaGuardado).toLocaleDateString('es-EC', {
                 day: '2-digit',
                 month: 'short',
                 year: 'numeric'
             });
+            const numFotos = Number(pedido.numFotos || 0);
+            let totalCopias = Number(pedido.totalCopias);
+            if (!Number.isFinite(totalCopias)) totalCopias = numFotos;
+            const muestraCopiasModal = numFotos > 0 && totalCopias > numFotos;
+            const lineaFotosCard = muestraCopiasModal
+                ? `🖼️ ${numFotos} foto${numFotos === 1 ? '' : 's'} · ${totalCopias} copia${totalCopias === 1 ? '' : 's'}`
+                : `🖼️ ${numFotos || '?'} foto${numFotos === 1 ? '' : 's'}`;
 
             return `
-                <div class="pedido-card">
+                <div class="pedido-card${enCurso ? ' pedido-card--activo' : ''}">
                     <div class="pedido-card-header">
                         <span class="pedido-card-numero">#${pedido.id}</span>
-                        <span class="pedido-card-estado estado-${pedido.estado}">${estado.icono} ${estado.label}</span>
+                        <div class="pedido-card-estados">
+                            ${enCurso ? '<span class="pedido-chip-en-curso">En curso</span>' : ''}
+                            <span class="pedido-card-estado estado-${estNorm}">${estado.icono} ${estado.label}</span>
+                        </div>
                     </div>
                     <div class="pedido-card-detalles">
                         <div class="pedido-card-fecha">📅 ${fecha}</div>
-                        <div class="pedido-card-fotos">🖼️ ${pedido.numFotos || '?'} foto(s)</div>
+                        <div class="pedido-card-fotos">${lineaFotosCard}</div>
                     </div>
                     <div class="pedido-card-acciones">
                         <a href="/seguimiento?pedido=${pedido.id}&correo=${encodeURIComponent(pedido.correo || '')}" 
@@ -327,7 +512,7 @@
             `;
         }).join('');
 
-        body.innerHTML = `<div class="pedidos-lista">${listaHTML}</div>`;
+        body.innerHTML = avisoHtml + `<div class="pedidos-lista">${listaHTML}</div>`;
 
         // Event listeners para eliminar pedidos
         body.querySelectorAll('.btn-eliminar-pedido').forEach(btn => {
@@ -336,11 +521,7 @@
                 if (confirm('¿Eliminar este pedido de tu historial?')) {
                     eliminarPedido(id);
                     actualizarModalPedidos();
-                    // Actualizar botón de seguimiento si es necesario
-                    const banner = document.getElementById('contenedorSeguimientoPedido');
-                    if (banner && !tienePedidosGuardados()) {
-                        banner.remove();
-                    }
+                    refrescarBannerSeguimiento();
                 }
             });
         });
@@ -351,10 +532,17 @@
      */
     function abrirModalPedidos() {
         const modal = document.getElementById('modalMisPedidos');
-        if (modal) {
+        if (!modal) return;
+        const correo = obtenerCorreoParaSincronizacion();
+        const mostrar = () => {
             actualizarModalPedidos();
             modal.hidden = false;
             document.body.style.overflow = 'hidden';
+        };
+        if (correo) {
+            sincronizarPedidosDesdeServidor().finally(mostrar);
+        } else {
+            mostrar();
         }
     }
 
@@ -378,15 +566,22 @@
         const pedidoData = {
             id: datosPedido.id,
             correo: datosPedido.correo,
-            estado: datosPedido.estado || 'pendiente',
+            estado: normalizarEstado(datosPedido.estado || 'pendiente'),
             numFotos: datosPedido.numFotos || 0,
+            totalCopias: datosPedido.totalCopias || datosPedido.numFotos || 0,
             total: datosPedido.total || 0,
             papel: datosPedido.papel || '',
             fechaRegistro: datosPedido.fechaRegistro || new Date().toISOString()
         };
 
         guardarPedido(pedidoData);
-        crearBotonSeguimiento();
+        try {
+            const em = String(datosPedido.correo || '').trim().toLowerCase();
+            if (em && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+                localStorage.setItem('misPedidos_email', em);
+            }
+        } catch (e) { /* ignore */ }
+        sincronizarPedidosDesdeServidor().finally(() => refrescarBannerSeguimiento());
     }
 
     /**
@@ -397,7 +592,7 @@
     function actualizarEstadoPedido(id, nuevoEstado) {
         const pedido = buscarPedido(id);
         if (pedido) {
-            pedido.estado = nuevoEstado;
+            pedido.estado = normalizarEstado(nuevoEstado);
             pedido.fechaActualizacion = new Date().toISOString();
             guardarPedido(pedido);
         }
@@ -419,6 +614,10 @@
         crearModalPedidos,
         abrirModalPedidos,
         cerrarModalPedidos,
+        sincronizarPedidosDesdeServidor,
+        refrescarBannerSeguimiento,
+        estadoPedidoActivo,
+        normalizarEstado,
         ESTADOS_PEDIDO
     };
 
@@ -430,11 +629,24 @@
     }
 
     function init() {
-        // Crear botón de seguimiento si hay pedidos guardados
-        crearBotonSeguimiento();
-        
-        // Crear modal de pedidos (inicialmente oculto)
         crearModalPedidos();
+        const correo = obtenerCorreoParaSincronizacion();
+        if (correo) {
+            sincronizarPedidosDesdeServidor().finally(() => {
+                refrescarBannerSeguimiento();
+            });
+        } else {
+            crearBotonSeguimiento();
+        }
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') return;
+            if (!obtenerCorreoParaSincronizacion()) return;
+            sincronizarPedidosDesdeServidor().finally(() => {
+                refrescarBannerSeguimiento();
+                const modal = document.getElementById('modalMisPedidos');
+                if (modal && !modal.hidden) actualizarModalPedidos();
+            });
+        });
     }
 
 })();

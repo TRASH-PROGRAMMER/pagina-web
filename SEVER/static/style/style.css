@@ -2309,6 +2309,19 @@ footer {
     font-size: 16px;
 }
 
+.seguimiento-pedido-badge-en-curso {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: #fff;
+}
+
 .seguimiento-pedido-subtitulo {
     font-size: 14px;
     opacity: 0.9;
@@ -2552,6 +2565,57 @@ footer {
     font-weight: 700;
     font-size: 16px;
     color: #1e293b;
+}
+
+.pedido-card-estados {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.pedido-chip-en-curso {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+}
+
+.pedido-card--activo {
+    border: 2px solid #6366f1;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.15);
+}
+
+.modal-pedidos-aviso {
+    padding: 12px 14px;
+    border-radius: 10px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.modal-pedidos-aviso strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 14px;
+}
+
+.modal-pedidos-aviso--con-activos {
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    color: #312e81;
+}
+
+.modal-pedidos-aviso--sin-activos {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #475569;
 }
 
 .pedido-card-estado {

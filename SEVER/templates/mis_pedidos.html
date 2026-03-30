@@ -417,6 +417,51 @@
             color: var(--color-danger-600);
         }
 
+        .badge--in-progress {
+            background-color: var(--color-primary-100);
+            color: var(--color-primary-700);
+            border: 1px solid var(--color-primary-200);
+        }
+
+        .orders-status-banner {
+            border-radius: var(--border-radius-lg);
+            padding: var(--space-4) var(--space-5);
+            margin-bottom: var(--space-6);
+            font-size: var(--font-size-sm);
+            line-height: var(--line-height-relaxed);
+        }
+
+        .orders-status-banner strong {
+            display: block;
+            font-size: var(--font-size-base);
+            margin-bottom: var(--space-1);
+        }
+
+        .orders-status-banner--active {
+            background: var(--color-primary-50);
+            border: 1px solid var(--color-primary-100);
+            color: var(--color-gray-800);
+        }
+
+        .orders-status-banner--idle {
+            background: var(--color-gray-50);
+            border: 1px solid var(--color-gray-200);
+            color: var(--color-gray-700);
+        }
+
+        .order-card--activo {
+            box-shadow: var(--shadow-md);
+            border: 2px solid var(--color-primary-400);
+        }
+
+        .order-card__badges {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--space-2);
+            justify-content: flex-end;
+        }
+
         /* ============================================
            COMPONENTES - Timeline
            ============================================ */
@@ -1129,6 +1174,24 @@
             return '$' + Number(amount || 0).toFixed(2);
         };
 
+        const normalizeEstado = (estado) => String(estado || 'pendiente').trim().toLowerCase();
+
+        /** Coherente con el backend: pendiente, procesando, enviado = activo; entregado y cancelado = no activo */
+        const isPedidoActivo = (estado) => {
+            const e = normalizeEstado(estado);
+            return e === 'pendiente' || e === 'procesando' || e === 'enviado';
+        };
+
+        const ordenarPedidosVista = (lista) => {
+            const pedidos = Array.isArray(lista) ? lista.slice() : [];
+            const activos = pedidos.filter(o => isPedidoActivo(o.estado))
+                .sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+            const ids = new Set(activos.map(o => String(o.id)));
+            const resto = pedidos.filter(o => !ids.has(String(o.id)))
+                .sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+            return activos.concat(resto);
+        };
+
         const showAlert = (type, message) => {
             loginAlert.className = `alert alert--${type}`;
             loginAlert.querySelector('.alert__icon').textContent = 
@@ -1205,7 +1268,16 @@
 
         // Crear tarjeta de pedido
         const createOrderCard = (order) => {
-            const stateConfig = ORDER_STATES[order.estado] || ORDER_STATES.pendiente;
+            const estadoNorm = normalizeEstado(order.estado);
+            const stateConfig = ORDER_STATES[estadoNorm] || ORDER_STATES.pendiente;
+            const activo = isPedidoActivo(estadoNorm);
+            const numFotos = Number(order.numFotos || 0);
+            const totalCopias = Number(order.totalCopias != null ? order.totalCopias : numFotos);
+            const muestraCopias = numFotos > 0 && totalCopias > numFotos;
+            const etiquetaResumenFotos = muestraCopias ? 'Fotos / copias' : 'Fotos';
+            const valorResumenFotos = muestraCopias
+                ? `${numFotos} imagen${numFotos !== 1 ? 'es' : ''} · ${totalCopias} copia${totalCopias !== 1 ? 's' : ''}`
+                : `${numFotos} imagen${numFotos !== 1 ? 'es' : ''}`;
             const detailRows = (order.detalle || []).map(item => `
                 <tr>
                     <td>${item.nombre}</td>
@@ -1216,7 +1288,7 @@
             `).join('');
 
             return `
-                <article class="card order-card card--hover" data-order-id="${order.id}">
+                <article class="card order-card card--hover${activo ? ' order-card--activo' : ''}" data-order-id="${order.id}">
                     <div class="card__body">
                         <header class="order-card__header">
                             <div>
@@ -1231,16 +1303,19 @@
                                     </time>
                                 </div>
                             </div>
-                            <span class="badge ${stateConfig.class}">
-                                <span aria-hidden="true">${stateConfig.icon}</span>
-                                ${stateConfig.label}
-                            </span>
+                            <div class="order-card__badges">
+                                ${activo ? '<span class="badge badge--in-progress">En curso</span>' : ''}
+                                <span class="badge ${stateConfig.class}">
+                                    <span aria-hidden="true">${stateConfig.icon}</span>
+                                    ${stateConfig.label}
+                                </span>
+                            </div>
                         </header>
 
                         <div class="order-card__summary">
                             <div class="summary-item">
-                                <span class="summary-item__label">Fotos</span>
-                                <span class="summary-item__value">${order.numFotos} imagen${order.numFotos !== 1 ? 'es' : ''}</span>
+                                <span class="summary-item__label">${etiquetaResumenFotos}</span>
+                                <span class="summary-item__value">${valorResumenFotos}</span>
                             </div>
                             <div class="summary-item">
                                 <span class="summary-item__label">Papel</span>
@@ -1253,7 +1328,7 @@
                         </div>
 
                         <div class="order-card__timeline" aria-label="Estado del pedido">
-                            ${generateTimeline(order.estado)}
+                            ${generateTimeline(estadoNorm)}
                         </div>
 
                         <footer class="order-card__actions">
@@ -1298,7 +1373,7 @@
                                 <span>Total del pedido</span>
                                 <span>${formatCurrency(order.total)}</span>
                             </div>
-                            ${order.estado === 'pendiente' ? `
+                            ${estadoNorm === 'pendiente' ? `
                                 <div class="payment-notice" role="alert">
                                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                                         <path d="M10 17.5a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" stroke="currentColor" stroke-width="1.5"/>
@@ -1391,7 +1466,23 @@
                         </div>
                     `;
                 } else {
-                    ordersList.innerHTML = data.pedidos.map(createOrderCard).join('');
+                    const ordenados = ordenarPedidosVista(data.pedidos);
+                    const numActivos = ordenados.filter(o => isPedidoActivo(o.estado)).length;
+                    let bannerHtml = '';
+                    if (numActivos > 0) {
+                        bannerHtml = `
+                            <div class="orders-status-banner orders-status-banner--active" role="status">
+                                <strong>${numActivos === 1 ? 'Tienes 1 pedido en curso' : `Tienes ${numActivos} pedidos en curso`}</strong>
+                                <span>Los pedidos marcados con la etiqueta «En curso» están pendientes de pago, en proceso o en camino. Cuando el operador marque el pedido como entregado, dejarán de aparecer como activos.</span>
+                            </div>`;
+                    } else {
+                        bannerHtml = `
+                            <div class="orders-status-banner orders-status-banner--idle" role="status">
+                                <strong>No tienes pedidos activos</strong>
+                                <span>Todos tus pedidos están entregados o cancelados. Más abajo puedes revisar el historial y el detalle de cada uno.</span>
+                            </div>`;
+                    }
+                    ordersList.innerHTML = bannerHtml + ordenados.map(createOrderCard).join('');
                 }
 
             } catch (error) {

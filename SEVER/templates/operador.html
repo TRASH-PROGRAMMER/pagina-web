@@ -429,6 +429,30 @@
             return pedidosAll.find(function(p) { return Number(p.id) === Number(id); }) || null;
         }
 
+        function pedidoTieneCopiasExtra(p) {
+            const nf = Number(p.numFotos || (Array.isArray(p.fotos) ? p.fotos.length : 0));
+            let tc = Number(p.totalCopias);
+            if (!Number.isFinite(tc)) tc = nf;
+            if (nf > 0 && tc > nf) return true;
+            const arr = p.cantidades;
+            if (Array.isArray(arr)) {
+                for (let i = 0; i < arr.length; i++) {
+                    if (Math.max(1, parseInt(arr[i], 10) || 1) > 1) return true;
+                }
+            }
+            return false;
+        }
+
+        function lineaFotosPedido(p) {
+            const nf = Number(p.numFotos || (Array.isArray(p.fotos) ? p.fotos.length : 0));
+            let tc = Number(p.totalCopias);
+            if (!Number.isFinite(tc)) tc = nf;
+            const palF = nf === 1 ? "foto" : "fotos";
+            if (!pedidoTieneCopiasExtra(p)) return nf + "\u00a0" + palF;
+            const palC = tc === 1 ? "copia" : "copias";
+            return nf + "\u00a0" + palF + " \u00b7 " + tc + "\u00a0" + palC;
+        }
+
         function aplicarFiltros() {
             const q = (document.getElementById("searchInput")?.value || "").trim().toLowerCase();
             const estado = (document.getElementById("estadoFiltro")?.value || "").toLowerCase();
@@ -478,7 +502,7 @@
                     <td>${escapeHtml(p.correo)}<br><span class="muted">${escapeHtml(p.telefono || "-")}</span></td>
                     <td><span class="tag ${estadoClass(p.estado)}">${escapeHtml((p.estado || "pendiente").toUpperCase())}</span></td>
                     <td>${estadoPago}</td>
-                    <td>${Number(p.numFotos || 0)}</td>
+                    <td style="white-space:nowrap">${lineaFotosPedido(p)}</td>
                     <td>
                         <div class="actions">
                             <button type="button" class="state-btn" data-action="estado" data-id="${p.id}" aria-label="Cambiar estado del pedido ${p.id}">Cambiar estado</button>

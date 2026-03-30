@@ -28,6 +28,7 @@ class Foto(db.Model):
     id         = db.Column(db.Integer, primary_key=True)
     filename   = db.Column(db.String(500), nullable=False)   # URL de Cloudinary
     public_id  = db.Column(db.String(255), nullable=True)    # public_id para eliminar
+    cantidad   = db.Column(db.Integer, nullable=False, default=1)  # Copias pedidas por el cliente
     cliente_id = db.Column(db.Integer,
                            db.ForeignKey('clientes.id'), nullable=False)
 

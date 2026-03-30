@@ -745,6 +745,7 @@
                 correo: correo,
                 estado: pedido.estado,
                 numFotos: pedido.numFotos || 0,
+                totalCopias: pedido.totalCopias || pedido.numFotos || 0,
                 total: pedido.total || 0,
                 papel: pedido.papel || '',
                 fechaRegistro: pedido.fechaRegistro || new Date().toISOString(),
@@ -767,6 +768,9 @@
     }
 
     function pintarResultado(pedido) {
+        const numFotos = Number(pedido.numFotos || 0);
+        const totalCopias = Number(pedido.totalCopias != null ? pedido.totalCopias : numFotos);
+        const muestraCopiasSeg = numFotos > 0 && totalCopias > numFotos;
         rPedido.textContent = pedido.id;
         rEstado.textContent = pedido.estado;
         aplicarColorEstado(pedido.estado);
@@ -778,9 +782,12 @@
         }
 
         const fecha = formatearFecha(pedido.fechaRegistro);
+        const filaFotos = muestraCopiasSeg
+            ? `<div class="factura-info-row"><span>Fotos / copias</span><span>${numFotos} imagen${numFotos !== 1 ? 'es' : ''} · ${totalCopias} copia${totalCopias !== 1 ? 's' : ''}</span></div>`
+            : `<div class="factura-info-row"><span>Fotos</span><span>${numFotos} imagen${numFotos !== 1 ? 'es' : ''}</span></div>`;
         rInfo.innerHTML = `
             <div class="factura-info-row"><span>Fecha</span><span>${fecha}</span></div>
-            <div class="factura-info-row"><span>Fotos</span><span>${pedido.numFotos} imagen${pedido.numFotos !== 1 ? 'es' : ''}</span></div>
+            ${filaFotos}
             <div class="factura-info-row"><span>Papel</span><span class="factura-papel">${pedido.papel || 'No especificado'}</span></div>
         `;
 

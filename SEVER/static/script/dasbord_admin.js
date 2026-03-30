@@ -1,4 +1,4 @@
-﻿// â”€â”€â”€ BroadcastChannel: escuchar nuevos clientes desde index â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€ BroadcastChannel: escuchar nuevos clientes desde index â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const clienteChannel = new BroadcastChannel("clientes_channel");
 clienteChannel.onmessage = function(event) {
     if (event.data?.tipo === "nuevo_cliente") {
@@ -27,6 +27,49 @@ let currentCardsPage = 1;
 const CARDS_PAGE_SIZE = 6;
 let currentTablePage = 1;
 const TABLE_PAGE_SIZE = 8;
+
+/** Hay copias extra solo si el stepper subio alguna cantidad por encima de 1 (o total > archivos). */
+function clienteTieneMultiplesCopias(cliente) {
+    if (!cliente) return false;
+    const fotos = cliente.fotos || [];
+    const numFotos = Number(cliente.numFotos != null ? cliente.numFotos : fotos.length) || 0;
+    let totalCopias = Number(cliente.totalCopias);
+    if (!Number.isFinite(totalCopias)) totalCopias = numFotos;
+    if (numFotos > 0 && totalCopias > numFotos) return true;
+    const arr = cliente.cantidades;
+    if (Array.isArray(arr)) {
+        for (let i = 0; i < arr.length; i += 1) {
+            if (Math.max(1, parseInt(arr[i], 10) || 1) > 1) return true;
+        }
+    }
+    return false;
+}
+
+function modalDebeMostrarCopias(numArchivos, totalCopias, cantidades) {
+    const n = Number(numArchivos) || 0;
+    const t = Number(totalCopias);
+    if (n > 0 && Number.isFinite(t) && t > n) return true;
+    if (Array.isArray(cantidades)) {
+        for (let i = 0; i < cantidades.length; i += 1) {
+            if (Math.max(1, parseInt(cantidades[i], 10) || 1) > 1) return true;
+        }
+    }
+    return false;
+}
+
+function textoImagenesAdmin(cliente) {
+    const fotos = cliente.fotos || [];
+    const numFotos = Number(cliente.numFotos || fotos.length || 0);
+    const totalCopias = Number(cliente.totalCopias != null ? cliente.totalCopias : numFotos);
+    const extra = clienteTieneMultiplesCopias(cliente);
+    const palFoto = numFotos === 1 ? "foto" : "fotos";
+    if (!extra) {
+        return `${numFotos}\u00A0${palFoto}`;
+    }
+    const tc = Number.isFinite(totalCopias) ? totalCopias : numFotos;
+    const palCopia = tc === 1 ? "copia" : "copias";
+    return `${numFotos}\u00A0${palFoto} · ${tc}\u00A0${palCopia}`;
+}
 
 function mostrarMensajeTamano(texto, ok = true) {
     const msg = document.getElementById("tamanoMensaje");
@@ -112,13 +155,15 @@ function initOpcionesAccordion() {
 function renderClienteCard(c) {
     const card = document.createElement("article");
     card.className = "cliente-card";
+    const etiquetaFotos = clienteTieneMultiplesCopias(c) ? "Fotos / copias" : "Fotos";
+    const valorFotos = textoImagenesAdmin(c);
     card.innerHTML = `
         <h4>${c.nombre || ""} ${c.apellido || ""}</h4>
         <div class="cliente-meta"><strong>Correo:</strong> ${c.correo || "-"}</div>
         <div class="cliente-meta"><strong>Telefono:</strong> ${c.telefono || "-"}</div>
         <div class="cliente-meta"><strong>Tamano:</strong> ${c.tamano || "-"}</div>
         <div class="cliente-meta"><strong>Papel:</strong> ${c.papel || "-"}</div>
-        <div class="cliente-meta"><strong>Fotos:</strong> ${c.numFotos || 0}</div>
+        <div class="cliente-meta"><strong>${etiquetaFotos}:</strong> ${valorFotos}</div>
         <div class="cliente-meta"><strong>Fecha:</strong> ${c.fechaRegistro || "-"}</div>
         <div class="cliente-meta"><strong>Total:</strong> $${Number(c.precioTotal || 0).toFixed(2)}</div>
     `;
@@ -736,24 +781,62 @@ function actualizarBadge(delta) {
 }
 
 // â”€â”€â”€ Ver fotos en modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function verFotos(fotosJSON, clienteNombre) {
+function verFotos(fotosJSON, clienteNombre, numArchivos, totalCopias, cantidadesJSON) {
     let fotos = [];
     try {
-        fotos = JSON.parse(fotosJSON || "[]");
+        const raw = String(fotosJSON || "[]").replace(/&quot;/g, '"');
+        fotos = JSON.parse(raw);
     } catch (_error) {
         fotos = [];
+    }
+
+    let cantidades = [];
+    if (cantidadesJSON != null && String(cantidadesJSON).trim() !== "") {
+        try {
+            const rawC = String(cantidadesJSON).replace(/&quot;/g, '"');
+            const parsed = JSON.parse(rawC);
+            cantidades = Array.isArray(parsed) ? parsed : [];
+        } catch (_e) {
+            cantidades = [];
+        }
     }
 
     const modal = document.getElementById("fotoModal");
     const body  = document.getElementById("fotoModalBody");
     const title = document.getElementById("fotoModalTitle");
+    const meta  = document.getElementById("fotoModalMeta");
 
     fotosModalActuales = Array.isArray(fotos) ? fotos.slice() : [];
     nombrePedidoModal = (clienteNombre || "pedido").trim();
     carruselIndiceActual = 0;
     modoCarruselActivo = false;
 
+    const nArch = Number.isFinite(Number(numArchivos)) ? Number(numArchivos) : fotosModalActuales.length;
+    let total = Number(totalCopias);
+    if (!Number.isFinite(total) && cantidades.length > 0) {
+        total = cantidades.reduce(function(acc, c) {
+            return acc + Math.max(1, parseInt(c, 10) || 1);
+        }, 0);
+    }
+    if (!Number.isFinite(total)) {
+        total = Math.max(nArch, fotosModalActuales.length);
+    }
+
+    const mostrarCopiasEnModal = modalDebeMostrarCopias(nArch, total, cantidades);
+
     title.textContent = `Fotos - ${nombrePedidoModal || "pedido"}`;
+    if (meta) {
+        if (mostrarCopiasEnModal) {
+            const arch = nArch || fotosModalActuales.length;
+            const palArch = arch === 1 ? "archivo" : "archivos";
+            meta.textContent = arch > 0
+                ? `${total} copias en total (${arch} ${palArch})`
+                : "";
+        } else {
+            meta.textContent = "";
+        }
+    }
+
     body.classList.remove("foto-modal-body-carrusel");
     body.classList.add("foto-grid");
     body.innerHTML = "";
@@ -766,9 +849,18 @@ function verFotos(fotosJSON, clienteNombre) {
             div.className = "foto-thumb";
             const img = document.createElement("img");
             img.src = url;
-            img.alt = `Foto ${idx + 1}`;
+            const copias = Math.max(1, parseInt(cantidades[idx], 10) || 1);
+            img.alt = mostrarCopiasEnModal
+                ? `Foto ${idx + 1}, ${copias} copia${copias > 1 ? "s" : ""}`
+                : `Foto ${idx + 1}`;
             img.loading = "lazy";
             div.appendChild(img);
+            if (mostrarCopiasEnModal) {
+                const badge = document.createElement("span");
+                badge.className = "foto-thumb-badge";
+                badge.textContent = "\u00d7" + copias;
+                div.appendChild(badge);
+            }
             div.onclick = function() {
                 window.open(url, '_blank');
             };
@@ -779,10 +871,11 @@ function verFotos(fotosJSON, clienteNombre) {
     modal.classList.add("active");
 }
 
-function abrirCarruselCliente(clienteNombre, fotos, indiceInicial = 0) {
+function abrirCarruselCliente(clienteNombre, fotos, indiceInicial = 0, resumenCopias) {
     const modal = document.getElementById("fotoModal");
     const body = document.getElementById("fotoModalBody");
     const title = document.getElementById("fotoModalTitle");
+    const meta = document.getElementById("fotoModalMeta");
 
     fotosModalActuales = Array.isArray(fotos) ? fotos.slice() : [];
     nombrePedidoModal = (clienteNombre || "cliente").trim();
@@ -790,6 +883,16 @@ function abrirCarruselCliente(clienteNombre, fotos, indiceInicial = 0) {
     carruselIndiceActual = Math.max(0, Math.min(indiceInicial, Math.max(fotosModalActuales.length - 1, 0)));
 
     title.textContent = `Fotos - ${nombrePedidoModal || "cliente"}`;
+    if (meta) {
+        const arch = Number(resumenCopias && resumenCopias.numArchivos) || fotosModalActuales.length;
+        const total = Number(resumenCopias && resumenCopias.totalCopias);
+        if (resumenCopias && Number.isFinite(total) && total > arch) {
+            const palArch = arch === 1 ? "archivo" : "archivos";
+            meta.textContent = `${total} copias en total (${arch} ${palArch})`;
+        } else {
+            meta.textContent = "";
+        }
+    }
 
     body.classList.remove("foto-grid");
     body.classList.add("foto-modal-body-carrusel");
@@ -866,6 +969,8 @@ function mostrarFotoSiguienteCarrusel() {
 function cerrarModal() {
     modoCarruselActivo = false;
     carruselIndiceActual = 0;
+    const meta = document.getElementById("fotoModalMeta");
+    if (meta) meta.textContent = "";
     document.getElementById("fotoModal").classList.remove("active");
 }
 async function descargarImagenComoArchivo(url, nombreArchivo) {
@@ -999,10 +1104,13 @@ function renderClienteRow(cliente, applyFilters = true) {
 
     const fotos = cliente.fotos || [];
     const fotosJSON = JSON.stringify(fotos).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+    const cantidadesJSON = JSON.stringify(cliente.cantidades || []).replace(/'/g, "\\'").replace(/"/g, "&quot;");
     const nombreCompleto = `${cliente.nombre} ${cliente.apellido}`;
-    const numFotos = cliente.numFotos || fotos.length || 0;
+    const nombreSeguroOnclick = String(nombreCompleto).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const numFotos = Number(cliente.numFotos || fotos.length || 0);
+    const totalCopias = Number(cliente.totalCopias || numFotos || 0);
     const precioNum = cliente.precioTotal != null ? Number(cliente.precioTotal) : null;
-    const precio = precioNum != null ? `$${precioNum.toFixed(2)}` : 'â€”';
+    const precio = precioNum != null ? `$${precioNum.toFixed(2)}` : "\u2014";
 
     const estadoRaw = (cliente.estado || "pendiente").toLowerCase();
     const estadoIndex = estados.findIndex(function(e) { return e.toLowerCase() === estadoRaw; });
@@ -1014,6 +1122,8 @@ function renderClienteRow(cliente, applyFilters = true) {
     tr.dataset.precio = precioNum != null && !Number.isNaN(precioNum) ? String(precioNum) : "";
     tr.dataset.numFotos = String(numFotos);
 
+    const textoImg = textoImagenesAdmin(cliente);
+
     tr.innerHTML = `
         <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#${String(cliente.id).padStart(4,"0")}</code></td>
         <td>
@@ -1022,19 +1132,19 @@ function renderClienteRow(cliente, applyFilters = true) {
         </td>
         <td>
             ${numFotos > 0
-                ? `<span class="fotos-link" onclick="verFotos('${fotosJSON}', '${nombreCompleto}')">${numFotos} foto${numFotos > 1 ? 's' : ''}</span>`
-                : 'â€”'}
+                ? `<span class="fotos-link" onclick="verFotos('${fotosJSON}', '${nombreSeguroOnclick}', ${numFotos}, ${totalCopias}, '${cantidadesJSON}')">${textoImg}</span>`
+                : "\u2014"}
         </td>
-        <td>${cliente.tamano || 'â€”'}</td>
-        <td>${cliente.papel || 'â€”'}</td>
+        <td>${cliente.tamano || "\u2014"}</td>
+        <td>${cliente.papel || "\u2014"}</td>
         <td style="color:#22c55e;font-weight:600;font-family:'Space Mono',monospace">${precio}</td>
         <td><span class="status ${estadoClass}">${estadoLabel}</span></td>
         <td style="color:var(--muted);font-size:12px">${cliente.fechaRegistro}</td>
         <td>
             <div class="acciones-pedido">
-                <button class="action-btn" onclick="changeStatus(this)">âœŽ Estado</button>
-                <button class="action-btn del" onclick="deleteRow(this)">âœ•</button>
-                <button class="action-btn" onclick="descargarPedido(this)">â†“ Descargar</button>
+                <button class="action-btn" onclick="changeStatus(this)">\u270e Estado</button>
+                <button class="action-btn del" onclick="deleteRow(this)">\u2715</button>
+                <button class="action-btn" onclick="descargarPedido(this)">\u2193 Descargar</button>
             </div>
         </td>
     `;
@@ -1522,10 +1632,16 @@ async function cargarUltimasSubidas() {
                 : icono;
             const div = document.createElement('div');
             div.className = 'upload-item';
+            const nf = Number(s.numFotos || 0);
+            const tc = Number(s.totalCopias != null ? s.totalCopias : nf);
+            const subidasExtra = nf > 0 && tc > nf;
+            const uploadTitle = subidasExtra
+                ? `${nf} foto${nf > 1 ? 's' : ''} \u00b7 ${tc} copia${tc > 1 ? 's' : ''}`
+                : `${nf} foto${nf > 1 ? 's' : ''}`;
             div.innerHTML = `
                 <div class="upload-thumb">${thumbHtml}</div>
                 <div class="upload-info">
-                    <div class="upload-name">${s.numFotos} foto${s.numFotos > 1 ? 's' : ''}</div>
+                    <div class="upload-name">${uploadTitle}</div>
                     <div class="upload-meta">${s.cliente} - ${tiempoRelativo(s.fecha)}</div>
                 </div>
             `;
@@ -1534,12 +1650,18 @@ async function cargarUltimasSubidas() {
             div.setAttribute('role', 'button');
             div.setAttribute('aria-label', `Ver fotos de ${s.cliente}`);
             div.onclick = function() {
-                abrirCarruselCliente(s.cliente, fotosCliente, 0);
+                abrirCarruselCliente(s.cliente, fotosCliente, 0, {
+                    numArchivos: s.numFotos,
+                    totalCopias: Number(s.totalCopias || s.numFotos || 0),
+                });
             };
             div.onkeydown = function(evt) {
                 if (evt.key === 'Enter' || evt.key === ' ') {
                     evt.preventDefault();
-                    abrirCarruselCliente(s.cliente, fotosCliente, 0);
+                    abrirCarruselCliente(s.cliente, fotosCliente, 0, {
+                        numArchivos: s.numFotos,
+                        totalCopias: Number(s.totalCopias || s.numFotos || 0),
+                    });
                 }
             };
             container.appendChild(div);

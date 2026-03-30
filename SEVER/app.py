@@ -8,6 +8,8 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock, Thread
+import io
+from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Cargar variables de entorno desde .ENV
@@ -599,6 +601,8 @@ with app.app_context():
         conn.execute(db.text(
             "ALTER TABLE fotos ADD COLUMN IF NOT EXISTS public_id VARCHAR(255)"))
         conn.execute(db.text(
+            "ALTER TABLE fotos ADD COLUMN IF NOT EXISTS cantidad INTEGER NOT NULL DEFAULT 1"))
+        conn.execute(db.text(
             "ALTER TABLE foto_tamanos ADD COLUMN IF NOT EXISTS nombre VARCHAR(100)"))
         conn.execute(db.text(
             "ALTER TABLE foto_tamanos ADD COLUMN IF NOT EXISTS precio_base FLOAT"))
@@ -857,6 +861,19 @@ def crear_clientes():
     if not archivos:
         return jsonify({"error": "Debes adjuntar al menos una foto valida."}), 400
 
+    # Parsear cantidades por foto (viene como "2,1,3" en el mismo orden que los archivos)
+    cantidades_raw = (data.get("cantidades") or "").strip()
+    if cantidades_raw:
+        try:
+            cantidades_lista = [max(1, int(c.strip())) for c in cantidades_raw.split(',') if c.strip()]
+        except (TypeError, ValueError):
+            cantidades_lista = []
+    else:
+        cantidades_lista = []
+    # Asegurar que haya una cantidad por cada archivo (default 1)
+    while len(cantidades_lista) < len(archivos):
+        cantidades_lista.append(1)
+
     # Verificar si ya existe el correo â†’ agregar fotos al cliente existente
     existe = Cliente.query.filter_by(correo=data["correo"]).first()
     if existe:
@@ -871,34 +888,90 @@ def crear_clientes():
         if existe.pagado is None:
             existe.pagado = False
 
-        # Subir nuevas fotos a Cloudinary
+        # Subir nuevas fotos a Cloudinary (en paralelo para acelerar el submit)
         fotos_guardadas = []
         thumbnails_guardadas = []
-        for archivo in archivos:
-            if archivo and archivo.filename and allowed_file(archivo.filename):
+        folder = f"image_manager/cliente_{existe.id}"
+
+        indices_validos = [
+            (idx, archivo)
+            for idx, archivo in enumerate(archivos)
+            if archivo and archivo.filename and allowed_file(archivo.filename)
+        ]
+
+        resultados_por_idx = {}
+
+        def _upload_cloudinary(idx, archivo):
+            try:
                 try:
-                    resultado = cloudinary.uploader.upload(
-                        archivo,
-                        folder=f"image_manager/cliente_{existe.id}",
-                        resource_type="image"
-                    )
-                    foto = Foto(
-                        filename=resultado['secure_url'],
-                        public_id=resultado['public_id'],
-                        cliente_id=existe.id
-                    )
-                    db.session.add(foto)
-                    fotos_guardadas.append(resultado['secure_url'])
-                    thumbnails_guardadas.append(
-                        _thumbnail_url(resultado.get('public_id'), resultado.get('secure_url', ''))
-                    )
-                except Exception as e:
-                    print(f"Error subiendo a Cloudinary: {e}")
-                    continue
+                    archivo.stream.seek(0)
+                except Exception:
+                    pass
+
+                # Leer bytes para evitar que el stream compartido cause problemas al paralelizar.
+                data = archivo.stream.read()
+                stream = io.BytesIO(data)
+                stream.name = archivo.filename
+
+                resultado = cloudinary.uploader.upload(
+                    stream,
+                    folder=folder,
+                    resource_type="image",
+                )
+                return idx, resultado, None
+            except Exception as e:
+                return idx, None, str(e)
+
+        max_workers = min(4, len(indices_validos)) if indices_validos else 1
+        if indices_validos:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(_upload_cloudinary, idx, archivo) for idx, archivo in indices_validos]
+                for fut in as_completed(futures):
+                    idx, resultado, err = fut.result()
+                    if resultado:
+                        resultados_por_idx[idx] = resultado
+                    else:
+                        print(f"Error subiendo a Cloudinary (idx={idx}): {err}")
+
+        # Manejo mejorado de errores: informar imágenes fallidas y evitar agregar si todas fallan
+        fallos_upload = []
+        for idx, archivo in indices_validos:
+            if idx not in resultados_por_idx:
+                fallos_upload.append(archivo.filename)
+
+        if indices_validos and not resultados_por_idx:
+            db.session.rollback()
+            return jsonify({
+                "error": "No se pudieron subir las fotos a Cloudinary. Intenta nuevamente.",
+                "fallos": fallos_upload
+            }), 502
+
+        for idx in sorted(resultados_por_idx.keys()):
+            resultado = resultados_por_idx[idx]
+            foto = Foto(
+                filename=resultado["secure_url"],
+                public_id=resultado["public_id"],
+                cantidad=cantidades_lista[idx] if idx < len(cantidades_lista) else 1,
+                cliente_id=existe.id,
+            )
+            db.session.add(foto)
+            fotos_guardadas.append(resultado["secure_url"])
+            thumbnails_guardadas.append(
+                _thumbnail_url(resultado.get("public_id"), resultado.get("secure_url", ""))  # fallback seguro
+            )
+
+        if not fotos_guardadas:
+            db.session.rollback()
+            return jsonify({
+                "error": "No se pudo guardar ninguna foto. Intenta nuevamente.",
+                "fallos": fallos_upload
+            }), 502
 
         db.session.commit()
-        return jsonify({
-            "mensaje": "Fotos agregadas al pedido existente",
+        # Calcular total de copias sumando cantidades de todas las fotos del cliente
+        total_copias = sum(f.cantidad or 1 for f in existe.fotos)
+        respuesta = {
+            "mensaje": "Fotos agregadas al pedido existente" if not fallos_upload else "Algunas imágenes no se pudieron agregar.",
             "cliente": {
                 "id": existe.id,
                 "nombre": existe.nombre,
@@ -915,9 +988,11 @@ def crear_clientes():
                 "fotos": fotos_guardadas,
                 "thumbnails": thumbnails_guardadas,
                 "precioTotal": calcular_precio_total(
-                    existe.tamano_keys, len(existe.fotos), existe.tamano)
-            }
-        }), 200
+                    existe.tamano_keys, total_copias, existe.tamano)
+            },
+            "fallos": fallos_upload if fallos_upload else None
+        }
+        return jsonify(respuesta), 200
 
     nuevo_cliente = Cliente(
         nombre=data["nombre"],
@@ -938,33 +1013,92 @@ def crear_clientes():
     # Subir fotos a Cloudinary
     fotos_guardadas = []
     thumbnails_guardadas = []
-    for archivo in archivos:
-        if archivo and archivo.filename and allowed_file(archivo.filename):
-            try:
-                resultado = cloudinary.uploader.upload(
-                    archivo,
-                    folder=f"image_manager/cliente_{nuevo_cliente.id}",
-                    resource_type="image"
-                )
-                url_segura = resultado['secure_url']
-                public_id  = resultado['public_id']
+    cantidades_guardadas = []
+    folder = f"image_manager/cliente_{nuevo_cliente.id}"
 
-                foto = Foto(
-                    filename=url_segura,
-                    public_id=public_id,
-                    cliente_id=nuevo_cliente.id
-                )
-                db.session.add(foto)
-                fotos_guardadas.append(url_segura)
-                thumbnails_guardadas.append(_thumbnail_url(public_id, url_segura))
-            except Exception as e:
-                print(f"Error subiendo a Cloudinary: {e}")
-                continue
+    indices_validos = [
+        (idx, archivo)
+        for idx, archivo in enumerate(archivos)
+        if archivo and archivo.filename and allowed_file(archivo.filename)
+    ]
+
+    resultados_por_idx = {}
+
+    def _upload_cloudinary(idx, archivo):
+        try:
+            try:
+                archivo.stream.seek(0)
+            except Exception:
+                pass
+
+            data = archivo.stream.read()
+            stream = io.BytesIO(data)
+            stream.name = archivo.filename
+
+            resultado = cloudinary.uploader.upload(
+                stream,
+                folder=folder,
+                resource_type="image",
+            )
+            return idx, resultado, None
+        except Exception as e:
+            return idx, None, str(e)
+
+    max_workers = min(4, len(indices_validos)) if indices_validos else 1
+    if indices_validos:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_upload_cloudinary, idx, archivo) for idx, archivo in indices_validos]
+            for fut in as_completed(futures):
+                idx, resultado, err = fut.result()
+                if resultado:
+                    resultados_por_idx[idx] = resultado
+                else:
+                    print(f"Error subiendo a Cloudinary (idx={idx}): {err}")
+
+    # Manejo mejorado de errores: informar imágenes fallidas y evitar pedidos incompletos
+    fallos_upload = []
+    for idx, archivo in indices_validos:
+        if idx not in resultados_por_idx:
+            fallos_upload.append(archivo.filename)
+
+    if indices_validos and not resultados_por_idx:
+        # Todas fallaron, no crear pedido
+        db.session.rollback()
+        return jsonify({
+            "error": "No se pudieron subir las fotos a Cloudinary. Intenta nuevamente.",
+            "fallos": fallos_upload
+        }), 502
+
+    # Si algunas subieron y otras no, informar detalle
+    for idx in sorted(resultados_por_idx.keys()):
+        resultado = resultados_por_idx[idx]
+        url_segura = resultado["secure_url"]
+        public_id = resultado["public_id"]
+        cant_foto = cantidades_lista[idx] if idx < len(cantidades_lista) else 1
+
+        foto = Foto(
+            filename=url_segura,
+            public_id=public_id,
+            cantidad=cant_foto,
+            cliente_id=nuevo_cliente.id,
+        )
+        db.session.add(foto)
+        fotos_guardadas.append(url_segura)
+        thumbnails_guardadas.append(_thumbnail_url(public_id, url_segura))
+        cantidades_guardadas.append(cant_foto)
+
+    if not fotos_guardadas:
+        db.session.rollback()
+        return jsonify({
+            "error": "No se pudo guardar ninguna foto. Intenta nuevamente.",
+            "fallos": fallos_upload
+        }), 502
 
     db.session.commit()
+    total_copias = sum(cantidades_guardadas) if cantidades_guardadas else len(fotos_guardadas)
 
-    return jsonify({
-        "mensaje": "Pedido guardado correctamente",
+    respuesta = {
+        "mensaje": "Pedido guardado correctamente" if not fallos_upload else "Pedido guardado parcialmente. Algunas imágenes fallaron.",
         "cliente": {
             "id": nuevo_cliente.id,
             "nombre": nuevo_cliente.nombre,
@@ -981,10 +1115,12 @@ def crear_clientes():
             "fotos": fotos_guardadas,
             "thumbnails": thumbnails_guardadas,
             "precioTotal": calcular_precio_total(
-                nuevo_cliente.tamano_keys, len(fotos_guardadas),
+                nuevo_cliente.tamano_keys, total_copias,
                 nuevo_cliente.tamano)
-        }
-    }), 201
+        },
+        "fallos": fallos_upload if fallos_upload else None
+    }
+    return jsonify(respuesta), 201
 
 @app.route('/api/clientes', methods=['GET'])
 @login_required
@@ -1004,9 +1140,12 @@ def obtener_clientes():
         "cancelledAt":    c.cancelled_at.isoformat() if c.cancelled_at else None,
         "pagado":         bool(c.pagado),
         "numFotos":       len(c.fotos),
+        "totalCopias":    sum(f.cantidad or 1 for f in c.fotos),
         "fotos":          [f.filename for f in c.fotos],
+        "cantidades":     [f.cantidad or 1 for f in c.fotos],
         "thumbnails":     [_thumbnail_url(f.public_id, f.filename) for f in c.fotos],
-        "precioTotal":    calcular_precio_total(c.tamano_keys, len(c.fotos), c.tamano)
+        "precioTotal":    calcular_precio_total(
+            c.tamano_keys, sum(f.cantidad or 1 for f in c.fotos), c.tamano)
     } for c in clientes]), 200
 
 @app.route('/api/clientes/<int:id>', methods=['DELETE'])
@@ -1293,8 +1432,9 @@ def api_seguimiento_cliente(cliente_id):
     if (cliente.correo or '').strip().lower() != correo:
         return jsonify({"error": "Datos de verificacion invalidos"}), 403
 
-    detalle = _detalle_pedido(cliente.tamano_keys, cliente.tamano, len(cliente.fotos))
-    total = calcular_precio_total(cliente.tamano_keys, len(cliente.fotos), cliente.tamano)
+    total_copias = sum(f.cantidad or 1 for f in cliente.fotos)
+    detalle = _detalle_pedido(cliente.tamano_keys, cliente.tamano, total_copias)
+    total = calcular_precio_total(cliente.tamano_keys, total_copias, cliente.tamano)
 
     return jsonify({
         "pedido": {
@@ -1309,6 +1449,7 @@ def api_seguimiento_cliente(cliente_id):
             "pagado": bool(cliente.pagado),
             "papel": cliente.papel or "No especificado",
             "numFotos": len(cliente.fotos),
+            "totalCopias": total_copias,
             "detalle": detalle,
             "total": round(total, 2),
         }
@@ -1343,8 +1484,9 @@ def api_mis_pedidos():
     
     resultado = []
     for pedido in pedidos:
-        detalle = _detalle_pedido(pedido.tamano_keys, pedido.tamano, len(pedido.fotos))
-        total = calcular_precio_total(pedido.tamano_keys, len(pedido.fotos), pedido.tamano)
+        total_copias_pedido = sum(f.cantidad or 1 for f in pedido.fotos)
+        detalle = _detalle_pedido(pedido.tamano_keys, pedido.tamano, total_copias_pedido)
+        total = calcular_precio_total(pedido.tamano_keys, total_copias_pedido, pedido.tamano)
         
         resultado.append({
             "id": pedido.id,
@@ -1358,6 +1500,7 @@ def api_mis_pedidos():
             "pagado": bool(pedido.pagado),
             "papel": pedido.papel or "No especificado",
             "numFotos": len(pedido.fotos),
+            "totalCopias": total_copias_pedido,
             "detalle": detalle,
             "total": round(total, 2),
         })
@@ -1698,6 +1841,7 @@ def ultimas_subidas():
             continue
 
         foto_ultima = fotos_cliente[-1]
+        total_copias_cliente = sum(f.cantidad or 1 for f in fotos_cliente)
         resultado.append({
             "clienteId": cliente.id,
             "fotos": urls_fotos,
@@ -1706,6 +1850,7 @@ def ultimas_subidas():
             "cliente": f"{cliente.nombre} {cliente.apellido}",
             "fecha": cliente.fecha_registro,
             "numFotos": len(urls_fotos),
+            "totalCopias": total_copias_cliente,
         })
 
     return jsonify(resultado), 200

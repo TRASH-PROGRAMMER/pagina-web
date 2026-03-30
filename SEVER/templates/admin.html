@@ -348,7 +348,10 @@
 <div id="fotoModal" class="foto-modal">
   <div class="foto-modal-content">
     <div class="foto-modal-header">
-      <h3 id="fotoModalTitle">Fotos del pedido</h3>
+      <div class="foto-modal-header-text">
+        <h3 id="fotoModalTitle">Fotos del pedido</h3>
+        <p id="fotoModalMeta" class="foto-modal-meta" aria-live="polite"></p>
+      </div>
       <div class="foto-modal-actions">
         <button type="button" id="descargarpedido" class="descargarpedidobtn" aria-label="Descargar imagenes">descargar</button>
         <button class="foto-modal-close" onclick="cerrarModal()" aria-label="Cerrar modal">&times;</button>
@@ -479,8 +482,23 @@
   .foto-modal-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 12px;
     margin-bottom: 16px;
+  }
+  .foto-modal-header-text {
+    min-width: 0;
+    flex: 1;
+  }
+  .foto-modal-meta {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: #9ca3b0;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+  .foto-modal-meta:empty {
+    display: none;
   }
   .foto-modal-header h3 {
     color: #e8e8f0;
@@ -504,12 +522,26 @@
     gap: 12px;
   }
   .foto-thumb {
+    position: relative;
     border-radius: 8px;
     overflow: hidden;
     aspect-ratio: 1;
     border: 1px solid #2a2a3a;
     cursor: pointer;
     transition: transform .2s, border-color .2s;
+  }
+  .foto-thumb-badge {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    background: rgba(0, 0, 0, 0.75);
+    color: #f4f4f8;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 6px;
+    pointer-events: none;
+    font-family: 'Space Mono', monospace;
   }
   .foto-thumb:hover { transform: scale(1.04); border-color: #7c6cfc; }
   .foto-thumb img {
@@ -522,6 +554,7 @@
     cursor: pointer;
     text-decoration: underline;
     font-size: 13px;
+    white-space: nowrap;
   }
   .fotos-link:hover { color: #9b8fff; }
 
@@ -858,6 +891,6 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='script/session_auth_client.js') }}"></script>
-<script src="{{ url_for('static', filename='script/dasbord_admin.js', v='20260327c') }}"></script>
+<script src="{{ url_for('static', filename='script/dasbord_admin.js', v='20260330b') }}"></script>
 </body>
 </html>

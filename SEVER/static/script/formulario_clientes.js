@@ -1,3 +1,45 @@
+// Calcula el total de copias sumando la cantidad de cada foto
+function calcularTotalCopias() {
+    return (window.archivosGlobal || []).reduce(function(acc, item) {
+        return acc + (item.cantidad || 1);
+    }, 0);
+}
+
+// Renderiza el resumen del pedido en el modal factura
+function renderResumenFactura() {
+    if (!window.facturaBody) return;
+    const resumen = window.obtenerResumenTamanosAsignados ? window.obtenerResumenTamanosAsignados() : {};
+    const claves = Object.keys(resumen);
+    const totalFotos = (window.archivosGlobal || []).length;
+    const totalCopias = calcularTotalCopias();
+    let html = `<div><b>Fotos distintas:</b> ${totalFotos}</div>`;
+    html += `<div><b>Total de copias:</b> ${totalCopias}</div>`;
+    if (claves.length > 0) {
+        html += '<ul style="margin-top:8px;">';
+        claves.forEach(function(clave) {
+            const item = resumen[clave];
+            html += `<li><b>${item.nombre}:</b> ${item.cantidad} copia${item.cantidad === 1 ? '' : 's'}</li>`;
+        });
+        html += '</ul>';
+    }
+    window.facturaBody.innerHTML = html;
+}
+
+// Actualizar resumen cada vez que cambian cantidades o asignaciones
+window.addEventListener('cantidades:actualizadas', renderResumenFactura);
+document.addEventListener('asignacionesTamanosActualizadas', renderResumenFactura);
+document.addEventListener('imagenesActualizadas', renderResumenFactura);
+
+if (window.abrirResumenPedido) {
+    const originalAbrirResumen = window.abrirResumenPedido;
+    window.abrirResumenPedido = function() {
+        renderResumenFactura();
+        originalAbrirResumen.apply(this, arguments);
+    };
+}
+
+window.calcularTotalCopias = calcularTotalCopias;
+window.renderResumenFactura = renderResumenFactura;
 import { guardarCliente } from './db.js';
 
 const clienteChannel = new BroadcastChannel("clientes_channel");
@@ -254,10 +296,67 @@ function obtenerEstadoValidacion() {
     const totalDigitos = `${prefijo}${telefonoLocal}`.length;
     const telefonoValido = !!prefijo && phoneLocalRegex.test(telefonoLocal) && totalDigitos >= 7 && totalDigitos <= 15;
 
-    const totalFotos = inputImagenes.files ? inputImagenes.files.length : 0;
-    const fotosValidas = totalFotos > 0;
+    const MAX_FILES_PER_ORDER = 150;
+    const MAX_IMAGE_BYTES_PER_FILE = 10 * 1024 * 1024; // 10 MB
+    const LIMITE_MB = Math.floor(MAX_IMAGE_BYTES_PER_FILE / (1024 * 1024));
 
     const fotos = Array.from(inputImagenes.files || []);
+    let fotosValidas = false;
+    let fotosError = "";
+
+    if (fotos.length === 0) {
+        fotosValidas = false;
+        fotosError = "Selecciona al menos una foto para imprimir.";
+    } else if (fotos.length > MAX_FILES_PER_ORDER) {
+        fotosValidas = false;
+        fotosError = `Maximo permitido: ${MAX_FILES_PER_ORDER} fotos por pedido.`;
+    } else {
+        const extPermitidas = new Set(["png", "jpg", "jpeg", "gif"]);
+        const mimePermitidos = new Set(["image/png", "image/jpeg", "image/jpg", "image/gif", "image/pjpeg"]);
+        const errores = [];
+
+        fotos.forEach((file) => {
+            const nombre = String(file.name || "archivo");
+            const ext = nombre.includes(".") ? nombre.split(".").pop().toLowerCase() : "";
+            const mime = String(file.type || "")
+                .toLowerCase()
+                .split(";")[0]
+                .trim();
+
+            if (ext && !extPermitidas.has(ext)) {
+                errores.push(`Formato no permitido: ${nombre}`);
+                return;
+            }
+
+            if (mime && !mimePermitidos.has(mime)) {
+                errores.push(`Tipo de archivo no permitido: ${nombre}`);
+                return;
+            }
+
+            const sizeBytes = file.size;
+            if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+                errores.push(`Archivo vacio: ${nombre}`);
+                return;
+            }
+
+            if (sizeBytes > MAX_IMAGE_BYTES_PER_FILE) {
+                errores.push(`${nombre} supera ${LIMITE_MB} MB`);
+                return;
+            }
+        });
+
+        if (errores.length) {
+            fotosValidas = false;
+            fotosError = errores.slice(0, 3).join("; ");
+            if (errores.length > 3) {
+                fotosError += `; y ${errores.length - 3} archivo(s) mas`;
+            }
+        } else {
+            fotosValidas = true;
+            fotosError = "";
+        }
+    }
+
     let tamanoValido = false;
     if (usaAsignacionPorFoto()) {
         tamanoValido = fotos.length > 0 && fotos.every(function(file) {
@@ -302,7 +401,7 @@ function obtenerEstadoValidacion() {
         telefonoError = "Con el prefijo internacional, el telefono completo debe tener entre 7 y 15 digitos.";
     }
 
-    const fotosError = fotosValidas ? "" : "Selecciona al menos una foto para imprimir.";
+    // fotosError ya calculado arriba (tipo/mime/tamano).
 
     let tamanoError = "";
     if (!tamanoValido) {
@@ -916,8 +1015,9 @@ function renderTamanoChips() {
 
 function obtenerResumenTamanosAsignados() {
     const resumen = {};
-    Array.from(inputImagenes.files || []).forEach(function(file) {
-        const clave = claveFoto(file);
+    // Buscar cantidades reales desde archivosGlobal (o previewsGlobal si es necesario)
+    (window.archivosGlobal || []).forEach(function(item) {
+        const clave = claveFoto(item);
         const tamano = asignacionesPorFoto.get(clave);
         if (!tamano) return;
 
@@ -929,7 +1029,8 @@ function obtenerResumenTamanosAsignados() {
         if (!resumen[tamano]) {
             resumen[tamano] = { nombre, cantidad: 0 };
         }
-        resumen[tamano].cantidad += 1;
+        // Sumar la cantidad real seleccionada en el stepper
+        resumen[tamano].cantidad += (item.cantidad || 1);
     });
     return resumen;
 }
@@ -1152,10 +1253,22 @@ function abrirModalExitoPedido(clienteId, correoCliente, infoHtml, bodyHtml) {
         
         // Mantener máximo 5 pedidos
         localStorage.setItem(STORAGE_KEY, JSON.stringify(pedidos.slice(0, 5)));
+
+        try {
+            const em = String(correoCliente || '').trim().toLowerCase();
+            if (em && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+                localStorage.setItem('misPedidos_email', em);
+            }
+        } catch (e) { /* ignore */ }
         
-        // Notificar al sistema de seguimiento si está disponible
-        if (window.SeguimientoPedidos && typeof window.SeguimientoPedidos.crearBotonSeguimiento === 'function') {
-            window.SeguimientoPedidos.crearBotonSeguimiento();
+        const SP = window.SeguimientoPedidos;
+        if (SP && typeof SP.sincronizarPedidosDesdeServidor === 'function') {
+            SP.sincronizarPedidosDesdeServidor().finally(() => {
+                if (typeof SP.refrescarBannerSeguimiento === 'function') SP.refrescarBannerSeguimiento();
+                else if (typeof SP.crearBotonSeguimiento === 'function') SP.crearBotonSeguimiento();
+            });
+        } else if (SP && typeof SP.crearBotonSeguimiento === 'function') {
+            SP.crearBotonSeguimiento();
         }
     } catch (e) {
         console.error('Error guardando pedido en localStorage:', e);
@@ -1549,19 +1662,113 @@ async function construirArchivoFinal(file) {
     const key = claveFoto(file);
     const edit = edicionesPorFoto.get(key);
 
+    const MAX_DIMENSION = 1600;
+    const UMBRAL_COMPRESION = 2 * 1024 * 1024; // 2 MB
+
+    const reemplazarExtPorJpeg = (nombre = "") => {
+        const n = String(nombre || "");
+        if (!n) return "imagen.jpg";
+        return n.replace(/\.[^.]+$/, ".jpg");
+    };
+
+    const decodificarImagen = async (blob) => {
+        // createImageBitmap suele ser más rápido que Image tradicional
+        if (typeof createImageBitmap === "function") {
+            return await createImageBitmap(blob);
+        }
+        return await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = URL.createObjectURL(blob);
+        });
+    };
+
+    const comprimirABlobJpeg = async (blob, tipoDestino = "image/jpeg") => {
+        const tipo = String(blob?.type || "").toLowerCase();
+        const metaEsPng = tipo.includes("png");
+
+        const fuente = await decodificarImagen(blob);
+        const width = fuente.width || 0;
+        const height = fuente.height || 0;
+        if (!width || !height) return null;
+
+        const ratio = Math.min(1, MAX_DIMENSION / Math.max(width, height));
+        const outW = Math.max(1, Math.round(width * ratio));
+        const outH = Math.max(1, Math.round(height * ratio));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = outW;
+        canvas.height = outH;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+
+        // Evitar fondo transparente al convertir PNG -> JPEG
+        if (metaEsPng) {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, outW, outH);
+        }
+
+        ctx.drawImage(fuente, 0, 0, outW, outH);
+
+        // Menor calidad para archivos grandes (reduce tiempo de subida)
+        const quality =
+            blob.size > 6 * 1024 * 1024 ? 0.72 :
+                blob.size > 2 * 1024 * 1024 ? 0.82 : 0.9;
+
+        return await new Promise((resolve, reject) => {
+            canvas.toBlob(
+                (b) => (b ? resolve(b) : reject(new Error("No se pudo comprimir la imagen."))),
+                tipoDestino,
+                quality
+            );
+        });
+    };
+
+    const optimizarArchivoParaSubida = async (entrada, metaFile) => {
+        const nombreMeta = String(metaFile?.name || entrada?.name || "imagen");
+        const tipoEntrada = String(entrada?.type || metaFile?.type || "").toLowerCase();
+        // Importante: decidir por el tipo real del contenido a subir (puede cambiar tras recortes/marcos).
+        const esGif = tipoEntrada.includes("gif");
+        if (esGif) return metaFile || entrada;
+
+        const sizeBytes = Number(entrada?.size || metaFile?.size || 0) || 0;
+        const esPng = tipoEntrada.includes("png");
+        const esJpeg = tipoEntrada.includes("jpeg") || tipoEntrada.includes("jpg") || tipoEntrada.includes("image/jpg");
+
+        // Compresión solo si conviene (PNG o archivos grandes) para no penalizar CPU.
+        if (!esPng && esJpeg && sizeBytes <= UMBRAL_COMPRESION) {
+            return metaFile || entrada;
+        }
+
+        // Convertir a JPEG suele acelerar el upload y el procesamiento en Cloudinary.
+        const blobJpeg = await comprimirABlobJpeg(entrada, "image/jpeg").catch(() => null);
+        if (!blobJpeg) return metaFile || entrada;
+
+        // Si no reduce el tamaño de forma significativa, devolvemos el original.
+        if (metaFile && Number(metaFile.size) && blobJpeg.size >= metaFile.size * 0.98) {
+            return metaFile;
+        }
+
+        return new File([blobJpeg], reemplazarExtPorJpeg(nombreMeta), {
+            type: "image/jpeg",
+            lastModified: Date.now(),
+        });
+    };
+
     if (!edit) {
-        return file;
+        return await optimizarArchivoParaSubida(file, file);
     }
 
     let blobBase = edit.blob || file;
     if (edit.frame && edit.frame !== "none") {
-        blobBase = await aplicarMarcoABlob(blobBase, edit.frame, file.type || "image/jpeg");
+        const tipoMime = (file.type && String(file.type).toLowerCase() === "image/gif")
+            ? "image/jpeg"
+            : (file.type || "image/jpeg");
+        blobBase = await aplicarMarcoABlob(blobBase, edit.frame, tipoMime);
     }
 
-    return new File([blobBase], file.name, {
-        type: file.type || blobBase.type || "image/jpeg",
-        lastModified: Date.now(),
-    });
+    return await optimizarArchivoParaSubida(blobBase, file);
 }
 
 // 🔹 Submit — valida y abre resumen; si ya fue confirmado, envía el pedido
@@ -1590,7 +1797,7 @@ form.addEventListener("submit", async function(e) {
     mostrarSpinnerPedido();
     bloquearMensajesValidacion = true;
     btnEnviar.disabled = true;
-    errorMessage.textContent = "Subiendo fotos…⏳";
+    errorMessage.textContent = "Procesando fotos…⏳";
     errorMessage.style.color = "#00ff4c";
 
     // Construir FormData
@@ -1615,13 +1822,19 @@ form.addEventListener("submit", async function(e) {
         }).join(',');
         formData.append('tamano_keys', tamanosKeys);
     } else {
+        // Modo tamaño único: sumar las copias totales de todas las fotos
+        const totalCopias = (window.archivosGlobal || []).reduce(function(acc, item) {
+            return acc + (item.cantidad || 1);
+        }, 0);
+
         const tamanosTexto = Array.from(tamanoSelect.selectedOptions)
             .map(function(o) { return o.text; })
             .join(', ');
         formData.append('tamano', tamanosTexto);
 
+        // Enviar clave:cantidad para que el backend calcule precios correctos
         const tamanosKeys = Array.from(tamanoSelect.selectedOptions)
-            .map(function(o) { return o.value; })
+            .map(function(o) { return o.value + ':' + totalCopias; })
             .join(',');
         formData.append('tamano_keys', tamanosKeys);
     }
@@ -1630,13 +1843,23 @@ form.addEventListener("submit", async function(e) {
     const papel = document.querySelector('input[name="papel"]:checked').value;
     formData.append('papel', papel);
 
-    // Fotos (con recorte/marco aplicado si existe edición)
+    // Fotos (con recorte/marco aplicado si existe edición) + cantidades por foto
+    const cantidadesPorFoto = [];
+    const cantidadesPorClave = new Map(
+        (window.archivosGlobal || []).map(function(file) {
+            return [claveFoto(file), file.cantidad || 1];
+        })
+    );
     for (const foto of inputImagenes.files) {
         const fotoFinal = await construirArchivoFinal(foto);
         formData.append('fotos', fotoFinal);
+        const cantidadFoto = cantidadesPorClave.get(claveFoto(foto)) || 1;
+        cantidadesPorFoto.push(cantidadFoto);
     }
+    formData.append('cantidades', cantidadesPorFoto.join(','));
 
     try {
+        errorMessage.textContent = "Subiendo fotos…⏳";
         const infoResumenHtml = facturaInfo ? facturaInfo.innerHTML : "";
         const bodyResumenHtml = facturaBody ? facturaBody.innerHTML : "";
         const clientePersistido = {

@@ -383,6 +383,30 @@
 			return pedidosAll.find(function(p) { return Number(p.id) === Number(id); }) || null;
 		}
 
+		function pedidoTieneCopiasExtra(p) {
+			const nf = Number(p.numFotos || (Array.isArray(p.fotos) ? p.fotos.length : 0));
+			let tc = Number(p.totalCopias);
+			if (!Number.isFinite(tc)) tc = nf;
+			if (nf > 0 && tc > nf) return true;
+			const arr = p.cantidades;
+			if (Array.isArray(arr)) {
+				for (let i = 0; i < arr.length; i++) {
+					if (Math.max(1, parseInt(arr[i], 10) || 1) > 1) return true;
+				}
+			}
+			return false;
+		}
+
+		function lineaFotosPedido(p) {
+			const nf = Number(p.numFotos || (Array.isArray(p.fotos) ? p.fotos.length : 0));
+			let tc = Number(p.totalCopias);
+			if (!Number.isFinite(tc)) tc = nf;
+			const palF = nf === 1 ? "foto" : "fotos";
+			if (!pedidoTieneCopiasExtra(p)) return nf + "\u00a0" + palF;
+			const palC = tc === 1 ? "copia" : "copias";
+			return nf + "\u00a0" + palF + " \u00b7 " + tc + "\u00a0" + palC;
+		}
+
 		function applyFilters() {
 			const q = (document.getElementById("searchInput")?.value || "").trim().toLowerCase();
 			const pagoFiltro = (document.getElementById("pagoFiltro")?.value || "").toLowerCase();
@@ -429,7 +453,7 @@
 				tr.innerHTML = `
 					<td>#${String(p.id).padStart(4, "0")}</td>
 					<td>${p.nombre} ${p.apellido}<br><span style="color:var(--muted)">${p.correo}</span></td>
-					<td>$${Number(p.precioTotal || 0).toFixed(2)}</td>
+					<td>$${Number(p.precioTotal || 0).toFixed(2)}<br><span style="color:var(--muted);font-size:11px;white-space:nowrap">${lineaFotosPedido(p)}</span></td>
 					<td><span id="estado-${p.id}">${(p.estado || "pendiente").toUpperCase()}</span></td>
 					<td><span class="tag ${pagado ? "paid" : "pending"}" id="pago-${p.id}">${pagado ? "PAGADO" : "PENDIENTE"}</span></td>
 					<td><button type="button" class="pay-btn" id="btn-${p.id}" data-action="pay" data-id="${p.id}" ${pagado ? "disabled" : ""} aria-label="Marcar pagado pedido ${p.id}">Marcar pagado</button></td>
