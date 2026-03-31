@@ -1163,6 +1163,7 @@ document.addEventListener("DOMContentLoaded", async function() {
             window.location.href = "/login";
             return;
         }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const clientes = await res.json();
         clientesCache = Array.isArray(clientes) ? clientes : [];
         const tbody = document.getElementById("tableBody");
@@ -1412,6 +1413,7 @@ let pedidosChart = null;
 async function cargarGraficoPedidos() {
     try {
         const res = await fetch('/api/pedidos-semana');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
         const ctx = document.getElementById('pedidosChart');
@@ -1474,6 +1476,7 @@ document.addEventListener('DOMContentLoaded', function() {
 async function cargarEstadisticas() {
     try {
         const res = await fetch('/api/estadisticas');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const d = await res.json();
 
         const fmt = n => n.toLocaleString('es-MX');
@@ -1612,6 +1615,7 @@ const iconos = ['&#128247;', '&#127748;', '&#127909;', '&#128444;', '&#128248;']
 async function cargarUltimasSubidas() {
     try {
         const res = await fetch('/api/ultimas-subidas');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const subidas = await res.json();
         const container = document.getElementById('uploadList');
         if (!container) return;

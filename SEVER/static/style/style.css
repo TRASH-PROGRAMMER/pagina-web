@@ -576,7 +576,7 @@ select:focus {
 }
 
 .image-action-modal {
-    display: none;
+    display: flex;
     position: fixed;
     inset: 0;
     z-index: 1250;
@@ -585,10 +585,14 @@ select:focus {
     align-items: center;
     justify-content: center;
     padding: 20px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 .image-action-modal.active {
-    display: flex;
+    opacity: 1;
+    visibility: visible;
 }
 
 .image-action-modal-content {
@@ -598,6 +602,12 @@ select:focus {
     border-radius: 14px;
     box-shadow: 0 26px 60px rgba(3, 22, 53, 0.4);
     padding: 18px;
+    transform: translateY(20px);
+    transition: transform 0.3s ease;
+}
+
+.image-action-modal.active .image-action-modal-content {
+    transform: translateY(0);
 }
 
 .crop-modal-content {
@@ -628,6 +638,7 @@ select:focus {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
 }
 
 .crop-workspace {
@@ -641,8 +652,47 @@ select:focus {
     min-height: 320px;
 }
 
-.frame-preview-stage {
+/* Stack para overlay de marcos personalizados */
+.frame-preview-stack {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 280px;
+    background: #d9e4f4;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.frame-preview-stack-inner {
     position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.frame-preview-stack-inner img {
+    max-width: 100%;
+    max-height: 70vh;
+    display: block;
+}
+#frameImagePreview {
+    position: relative;
+    z-index: 1;
+    transition: padding 0.3s ease, border 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+}
+#frameOverlayPreview {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+#frameOverlayPreview:not([hidden]) {
+    opacity: 1;
 }
 
 .cropper-stage img,
@@ -698,31 +748,26 @@ select:focus {
     background: #dce7f7;
 }
 
-#frameOverlayPreview {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    pointer-events: none;
-}
-
 .frame-preview-stage img[data-frame="polaroid"] {
     background: #ffffff;
     padding: 14px 14px 44px;
+    transition: padding 0.35s ease, background 0.35s ease;
 }
 
 .frame-preview-stage img[data-frame="gold"] {
     border: 12px solid #d4ac2f;
+    transition: border 0.35s ease;
 }
 
 .frame-preview-stage img[data-frame="dark"] {
     border: 12px solid #2f3340;
+    transition: border 0.35s ease;
 }
 
 .frame-preview-stage img[data-frame="museum"] {
     border: 16px solid #e8dfcf;
     box-shadow: inset 0 0 0 2px #a28763;
+    transition: border 0.35s ease, box-shadow 0.35s ease;
 }
 
 .frame-options {
@@ -741,12 +786,68 @@ select:focus {
     color: #2e3e5e;
     font-weight: 700;
     padding: 10px 14px;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.frame-option:hover {
+    border-color: #7757ff;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(119, 87, 255, 0.15);
+}
+
+.frame-option:active {
+    transform: translateY(0);
 }
 
 .frame-option.is-active {
     border-color: #7757ff;
     background: #6f50ea;
     color: #fff;
+    box-shadow: 0 3px 12px rgba(111, 80, 234, 0.35);
+}
+
+.frame-thumb {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid #c6d3ea;
+    flex-shrink: 0;
+}
+
+.spinner-marcos,
+.error-marcos {
+    width: 100%;
+    text-align: center;
+    padding: 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #60749a;
+}
+
+.error-marcos {
+    color: #c0392b;
+}
+
+@keyframes marcosSpinner {
+    to { transform: rotate(360deg); }
+}
+
+.spinner-marcos::before {
+    content: "";
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 3px solid #c6d3ea;
+    border-top-color: #6f50ea;
+    border-radius: 50%;
+    animation: marcosSpinner 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
 }
 
 .image-action-buttons {
@@ -766,6 +867,18 @@ select:focus {
     font-size: 16px;
     font-weight: 700;
     padding: 12px 20px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.image-action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.image-action-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .image-action-btn.cancel {

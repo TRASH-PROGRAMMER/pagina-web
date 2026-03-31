@@ -775,7 +775,10 @@ document.addEventListener('DOMContentLoaded', function () {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ correo })
     })
-    .then(res => res.json())
+    .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+    })
     .then(data => {
         if (Array.isArray(data.pedidos) && data.pedidos.length > 0) {
             // Hay pedidos: botón destacado

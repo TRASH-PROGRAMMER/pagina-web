@@ -229,8 +229,9 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ correo })
             });
+            if (!res.ok) return false;
             const data = await res.json();
-            if (!res.ok || !Array.isArray(data.pedidos)) return false;
+            if (!Array.isArray(data.pedidos)) return false;
             fusionarPedidosConServidor(data.pedidos);
             return true;
         } catch (e) {

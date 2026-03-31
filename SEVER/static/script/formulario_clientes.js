@@ -1,4 +1,8 @@
 // Calcula el total de copias sumando la cantidad de cada foto
+function escapeHtml(str) {
+    const s = String(str == null ? "" : str);
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
 function calcularTotalCopias() {
     return (window.archivosGlobal || []).reduce(function(acc, item) {
         return acc + (item.cantidad || 1);
@@ -12,13 +16,13 @@ function renderResumenFactura() {
     const claves = Object.keys(resumen);
     const totalFotos = (window.archivosGlobal || []).length;
     const totalCopias = calcularTotalCopias();
-    let html = `<div><b>Fotos distintas:</b> ${totalFotos}</div>`;
-    html += `<div><b>Total de copias:</b> ${totalCopias}</div>`;
+    let html = `<div><b>Fotos distintas:</b> ${escapeHtml(totalFotos)}</div>`;
+    html += `<div><b>Total de copias:</b> ${escapeHtml(totalCopias)}</div>`;
     if (claves.length > 0) {
         html += '<ul style="margin-top:8px;">';
         claves.forEach(function(clave) {
             const item = resumen[clave];
-            html += `<li><b>${item.nombre}:</b> ${item.cantidad} copia${item.cantidad === 1 ? '' : 's'}</li>`;
+            html += `<li><b>${escapeHtml(item.nombre)}:</b> ${escapeHtml(item.cantidad)} copia${item.cantidad === 1 ? '' : 's'}</li>`;
         });
         html += '</ul>';
     }
@@ -47,6 +51,38 @@ const clienteChannel = new BroadcastChannel("clientes_channel");
 const form = document.getElementById("formDatos");
 const btnEnviar = document.getElementById("btnVerResumen");
 const errorMessage = document.getElementById("mensajeError");
+
+// Toast visual para mensajes de éxito
+function mostrarToastExito(mensaje) {
+    let toast = document.getElementById("toastExito");
+    if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "toastExito";
+        toast.style.position = "fixed";
+        toast.style.bottom = "32px";
+        toast.style.left = "50%";
+        toast.style.transform = "translateX(-50%)";
+        toast.style.background = "#00a76f";
+        toast.style.color = "#fff";
+        toast.style.padding = "14px 32px";
+        toast.style.borderRadius = "24px";
+        toast.style.fontSize = "1.1rem";
+        toast.style.fontWeight = "700";
+        toast.style.boxShadow = "0 4px 24px rgba(0,0,0,0.13)";
+        toast.style.zIndex = "9999";
+        toast.style.opacity = "0";
+        toast.style.pointerEvents = "none";
+        toast.style.transition = "opacity 0.4s cubic-bezier(.4,2,.6,1), bottom 0.4s cubic-bezier(.4,2,.6,1)";
+        document.body.appendChild(toast);
+    }
+    toast.textContent = mensaje;
+    toast.style.opacity = "1";
+    toast.style.bottom = "48px";
+    setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.bottom = "32px";
+    }, 1700);
+}
 const nameInput = document.getElementById("nombre");
 const nombreHelp = document.getElementById("nombreHelp");
 const apellidoInput = document.getElementById("apellido");
@@ -116,6 +152,7 @@ let rafComparadorRecorte = 0;
 let fotoKeyEnEdicion = "";
 let frameSeleccionadoTemporal = "none";
 let bloquearMensajesValidacion = false;
+let enviandoPedido = false;
 let restaurarClientePendiente = null;
 let pedidoSeguimientoPendiente = { id: "", correo: "" };
 let ultimoEstadoValidacion = null;
@@ -610,12 +647,15 @@ function obtenerMarcoCatalogo(frameValue) {
 }
 
 async function cargarMarcosPersonalizados() {
+    // Mostrar spinner de carga en el contenedor de marcos
+    if (frameOptions) {
+        frameOptions.innerHTML = '<div class="spinner-marcos">Cargando marcos...</div>';
+    }
     try {
         const res = await fetch("/api/marcos");
         if (!res.ok) {
             throw new Error("No se pudo cargar el catalogo de marcos");
         }
-
         const data = await res.json();
         const marcos = Array.isArray(data.marcos) ? data.marcos : [];
         const marcosDinamicos = marcos.map(function(m) {
@@ -626,23 +666,26 @@ async function cargarMarcosPersonalizados() {
                 kind: "custom",
             };
         });
-
         frameCatalogo = frameCatalogoBase.concat(marcosDinamicos);
     } catch (_error) {
-        // Mantiene el catálogo base si la API no está disponible.
         frameCatalogo = frameCatalogoBase.slice();
+        if (frameOptions) {
+            frameOptions.innerHTML = '<div class="error-marcos">No se pudo cargar el catálogo de marcos.</div>';
+        }
     }
 }
 
 function actualizarClaseMarcoPreview(frameValue) {
     if (!frameImagePreview) return;
-
     const marco = obtenerMarcoCatalogo(frameValue);
     const personalizado = !!(marco && marco.kind === "custom");
     frameImagePreview.dataset.frame = personalizado ? "none" : frameValue;
-
     if (frameOverlayPreview) {
         if (personalizado && marco.imageUrl) {
+            frameOverlayPreview.onerror = function() {
+                frameOverlayPreview.hidden = true;
+                frameOverlayPreview.removeAttribute("src");
+            };
             frameOverlayPreview.src = marco.imageUrl;
             frameOverlayPreview.hidden = false;
         } else {
@@ -655,25 +698,30 @@ function actualizarClaseMarcoPreview(frameValue) {
 function renderOpcionesMarco(frameActual) {
     if (!frameOptions) return;
     frameOptions.innerHTML = "";
-
     frameCatalogo.forEach(function(item) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "frame-option";
         btn.textContent = item.label;
         btn.setAttribute("role", "radio");
-
         const isActive = item.value === frameActual;
         btn.classList.toggle("is-active", isActive);
         btn.setAttribute("aria-checked", isActive ? "true" : "false");
         btn.setAttribute("aria-label", `Marco ${item.label.replace(/[^\w\sáéíóúÁÉÍÓÚñÑ-]/g, "").trim()}`);
-
+        // Si tiene imagen, mostrar miniatura
+        if (item.imageUrl) {
+            const img = document.createElement("img");
+            img.src = item.imageUrl;
+            img.alt = item.label;
+            img.className = "frame-thumb";
+            img.onerror = function() { img.style.display = "none"; };
+            btn.prepend(img);
+        }
         btn.addEventListener("click", function() {
             frameSeleccionadoTemporal = item.value;
             actualizarClaseMarcoPreview(item.value);
             renderOpcionesMarco(frameSeleccionadoTemporal);
         });
-
         frameOptions.appendChild(btn);
     });
 }
@@ -1494,7 +1542,10 @@ if (applyCropBtn) {
         if (!fileBase) return;
 
         try {
+            // Limitar resolución máxima del recorte (igual que preview)
             const canvas = cropperInstance.getCroppedCanvas({
+                maxWidth: 1200, // puedes ajustar este valor según lo que consideres óptimo
+                maxHeight: 1200,
                 imageSmoothingEnabled: true,
                 imageSmoothingQuality: "high",
             });
@@ -1516,8 +1567,7 @@ if (applyCropBtn) {
             destruirCropper();
             limpiarComparadorRecorte();
             cerrarModal(cropImageModal);
-            errorMessage.textContent = "Recorte aplicado correctamente.";
-            errorMessage.style.color = "#00a76f";
+            mostrarToastExito("Recorte aplicado correctamente.");
         } catch (error) {
             errorMessage.textContent = "No se pudo aplicar el recorte.";
             errorMessage.style.color = "red";
@@ -1534,26 +1584,15 @@ if (cancelFrameBtn) {
 if (applyFrameBtn) {
     applyFrameBtn.addEventListener("click", function() {
         if (!fotoKeyEnEdicion) return;
-
         const prevEdit = edicionesPorFoto.get(fotoKeyEnEdicion);
-        if (prevEdit) {
-            edicionesPorFoto.set(fotoKeyEnEdicion, {
-                blob: prevEdit.blob || null,
-                previewUrl: prevEdit.previewUrl || null,
-                frame: frameSeleccionadoTemporal,
-            });
-        } else {
-            edicionesPorFoto.set(fotoKeyEnEdicion, {
-                blob: null,
-                previewUrl: null,
-                frame: frameSeleccionadoTemporal,
-            });
-        }
-
+        edicionesPorFoto.set(fotoKeyEnEdicion, {
+            blob: prevEdit ? prevEdit.blob || null : null,
+            previewUrl: prevEdit ? prevEdit.previewUrl || null : null,
+            frame: frameSeleccionadoTemporal,
+        });
         renderAsignacionesFotos();
         cerrarModal(frameImageModal);
-        errorMessage.textContent = "Marco guardado correctamente.";
-        errorMessage.style.color = "#00a76f";
+        mostrarToastExito("Marco guardado correctamente.");
     });
 }
 
@@ -1561,13 +1600,10 @@ if (applyFrameAllBtn) {
     applyFrameAllBtn.addEventListener("click", function() {
         const totalFotos = inputImagenes.files ? inputImagenes.files.length : 0;
         if (totalFotos === 0) return;
-
         aplicarMarcoATodasLasFotos(frameSeleccionadoTemporal);
         renderAsignacionesFotos();
         cerrarModal(frameImageModal);
-
-        errorMessage.textContent = `Marco aplicado a ${totalFotos} foto(s).`;
-        errorMessage.style.color = "#00a76f";
+        mostrarToastExito(`Marco aplicado a ${totalFotos} foto(s).`);
     });
 }
 
@@ -1575,14 +1611,11 @@ if (clearFrameAllBtn) {
     clearFrameAllBtn.addEventListener("click", function() {
         const totalFotos = inputImagenes.files ? inputImagenes.files.length : 0;
         if (totalFotos === 0) return;
-
         aplicarMarcoATodasLasFotos("none");
         frameSeleccionadoTemporal = "none";
         renderAsignacionesFotos();
         cerrarModal(frameImageModal);
-
-        errorMessage.textContent = `Marcos quitados de ${totalFotos} foto(s).`;
-        errorMessage.style.color = "#00a76f";
+        mostrarToastExito(`Marcos quitados de ${totalFotos} foto(s).`);
     });
 }
 
@@ -1775,6 +1808,8 @@ async function construirArchivoFinal(file) {
 form.addEventListener("submit", async function(e) {
     e.preventDefault();
 
+    if (enviandoPedido) return;
+
     estadoInteraccionValidacion.intentoEnvio = true;
     const esValido = validarFormulario();
     if (!esValido) {
@@ -1794,6 +1829,7 @@ form.addEventListener("submit", async function(e) {
     }
     delete form.dataset.confirmed;
 
+    enviandoPedido = true;
     mostrarSpinnerPedido();
     bloquearMensajesValidacion = true;
     btnEnviar.disabled = true;
@@ -1903,6 +1939,7 @@ form.addEventListener("submit", async function(e) {
         // Cerrar/resetear modal factura
         if (facturaOverlay) facturaOverlay.classList.remove("active");
         btnEnviar.disabled = false;
+        enviandoPedido = false;
 
         errorMessage.textContent = "Pedido enviado con exito!";
         errorMessage.style.color = "#00ff4c";
@@ -1918,6 +1955,7 @@ form.addEventListener("submit", async function(e) {
 
     } catch (error) {
         bloquearMensajesValidacion = false;
+        enviandoPedido = false;
         errorMessage.textContent = error.message;
         errorMessage.style.color = "red";
         btnEnviar.disabled = false;

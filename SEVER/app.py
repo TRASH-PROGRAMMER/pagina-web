@@ -2,6 +2,7 @@
 import os
 import json
 import re
+import secrets
 import time
 import shutil
 import subprocess
@@ -46,7 +47,8 @@ DB_URL = os.environ.get(
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 150 * 10 * 1024 * 1024  # 150 fotos Ã— 10 MB
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-change-me')
+_default_secret = secrets.token_hex(32)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', _default_secret)
 app.config['SESSION_TYPE'] = os.environ.get('SESSION_TYPE', 'filesystem')
 app.config['SESSION_FILE_DIR'] = os.environ.get(
     'SESSION_FILE_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), '.flask_session')
@@ -653,26 +655,35 @@ with app.app_context():
         db.session.commit()
 
     # Seed inicial de usuarios de acceso (idempotente)
-    default_users = [
-        {
+    # Las contraseñas DEBEN estar configuradas en variables de entorno
+    _admin_pw = os.environ.get("ADMIN_PASSWORD")
+    _operador_pw = os.environ.get("OPERADOR_PASSWORD")
+    _cajero_pw = os.environ.get("CAJERO_PASSWORD")
+    if not _admin_pw or not _operador_pw or not _cajero_pw:
+        print("ADVERTENCIA: Faltan variables de entorno ADMIN_PASSWORD, OPERADOR_PASSWORD o CAJERO_PASSWORD. "
+              "Los usuarios no se crearan sin contraseñas seguras configuradas.")
+    default_users = []
+    if _admin_pw:
+        default_users.append({
             "username": os.environ.get("ADMIN_USERNAME", "admin"),
             "email": os.environ.get("ADMIN_EMAIL", "admin@imagemanager.local"),
-            "password": os.environ.get("ADMIN_PASSWORD", "FUEGOtierra65$admin"),
+            "password": _admin_pw,
             "role": "admin",
-        },
-        {
+        })
+    if _operador_pw:
+        default_users.append({
             "username": os.environ.get("OPERADOR_USERNAME", "operador"),
             "email": os.environ.get("OPERADOR_EMAIL", "operador@imagemanager.local"),
-            "password": os.environ.get("OPERADOR_PASSWORD", "Cocolimon3455Â·#"),
+            "password": _operador_pw,
             "role": "operador",
-        },
-        {
+        })
+    if _cajero_pw:
+        default_users.append({
             "username": os.environ.get("CAJERO_USERNAME", "cajero"),
             "email": os.environ.get("CAJERO_EMAIL", "cajero@imagemanager.local"),
-            "password": os.environ.get("CAJERO_PASSWORD", "dloktrukgr345Â£!3"),
+            "password": _cajero_pw,
             "role": "cajero",
-        },
-    ]
+        })
 
     for u in default_users:
         exists = User.query.filter_by(username=u["username"]).first()
@@ -1284,7 +1295,17 @@ def _extraer_claves_desde_texto(tamano_texto):
 
 
 def _aplicar_descuentos(clave, cantidad, precio_unitario):
+    """
+    Aplica descuentos escalonados según la clave y cantidad.
+    Si no hay descuento, retorna el precio_unitario original.
+    """
     pu = precio_unitario
+    try:
+        cantidad = int(cantidad)
+    except (TypeError, ValueError):
+        return pu
+
+    # Descuentos para 10x15
     if clave == "10x15":
         if 15 <= cantidad <= 24:
             pu = 0.62
@@ -1296,6 +1317,7 @@ def _aplicar_descuentos(clave, cantidad, precio_unitario):
             pu = 0.39
         elif cantidad >= 300:
             pu = 0.32
+    # Descuentos para 15x15
     elif clave == "15x15":
         if 15 <= cantidad <= 24:
             pu = 1.80
@@ -1307,6 +1329,10 @@ def _aplicar_descuentos(clave, cantidad, precio_unitario):
             pu = 0.50
         elif cantidad >= 300:
             pu = 0.40
+    # Aquí puedes agregar más reglas de descuento para otros tamaños
+    # elif clave == "otro_tamano":
+    #     ...
+
     return pu
 
 
@@ -1929,7 +1955,8 @@ def cloudinary_stats():
         print(f'Error obteniendo stats de Cloudinary: {e}')
         return jsonify({'error': str(e)}), 500
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    _debug = os.environ.get('FLASK_DEBUG', '0').lower() in ('1', 'true', 'yes')
+    app.run(host='0.0.0.0', port=5000, debug=_debug)
 
 
 
