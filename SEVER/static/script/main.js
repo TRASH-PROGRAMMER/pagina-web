@@ -37,6 +37,9 @@ let cargaEnCurso = false;
 let cargaToken = 0;
 let ultimoAnuncioLive = "";
 let rafRenderPendiente = 0;
+let slowNetworkTimeout = null;
+let lastEstadoCarga = ESTADO_CARGA.IDLE;
+const btnEnviar = document.getElementById("btnVerResumen");
 
 function claveFoto(file) {
     return `${file.name}__${file.size}__${file.lastModified}`;
@@ -96,15 +99,56 @@ function anunciarLive(texto) {
 }
 
 function actualizarBotonesCarga(estado) {
-    if (cancelButton) {
-        cancelButton.disabled = estado !== ESTADO_CARGA.LOADING;
+    // Estado Inicial: ambos ocultos
+    if (cancelButton) cancelButton.style.display = 'none';
+    if (retryButton) retryButton.style.display = 'none';
+
+    // Estado "Subiendo": solo Cancelar visible
+    if (estado === ESTADO_CARGA.LOADING) {
+        if (cancelButton) {
+            cancelButton.style.display = '';
+            cancelButton.disabled = false;
+        }
+        if (retryButton) retryButton.style.display = 'none';
+        return;
     }
-    if (retryButton) {
-        retryButton.disabled = estado === ESTADO_CARGA.LOADING || archivosGlobal.length === 0;
+    // Estado "Error": solo Reintentar visible (y Cancelar opcional)
+    if (estado === ESTADO_CARGA.ERROR) {
+        if (retryButton) {
+            retryButton.style.display = '';
+            retryButton.disabled = false;
+        }
+        if (cancelButton) {
+            cancelButton.style.display = '';
+            cancelButton.disabled = false;
+        }
+        return;
     }
+    // Estado "Completado" o "Idle": ambos ocultos
+    if (cancelButton) cancelButton.style.display = 'none';
+    if (retryButton) retryButton.style.display = 'none';
 }
 
 function actualizarBarraProgreso(procesados, total, estado, mensaje, announce = false) {
+
+        // Bloqueo de navegación y botón durante subida
+        if (btnEnviar) btnEnviar.disabled = (estado === ESTADO_CARGA.LOADING);
+        window.onbeforeunload = (estado === ESTADO_CARGA.LOADING) ? () => true : null;
+
+        // Mensaje amigable si la red es lenta
+        if (estado === ESTADO_CARGA.LOADING && lastEstadoCarga !== ESTADO_CARGA.LOADING) {
+            if (slowNetworkTimeout) clearTimeout(slowNetworkTimeout);
+            slowNetworkTimeout = setTimeout(() => {
+                if (progressStatusText && progressContainer.dataset.state === ESTADO_CARGA.LOADING) {
+                    progressStatusText.textContent = 'Tu conexión parece un poco lenta, pero seguimos subiendo tus fotos. Por favor, no cierres esta ventana.';
+                }
+            }, 12000);
+        }
+        if (estado !== ESTADO_CARGA.LOADING && slowNetworkTimeout) {
+            clearTimeout(slowNetworkTimeout);
+            slowNetworkTimeout = null;
+        }
+        lastEstadoCarga = estado;
     const totalSeguro = total > 0 ? total : 0;
     const procesadosSeguros = Math.max(0, Math.min(procesados, totalSeguro || procesados));
     const pct = totalSeguro > 0 ? Math.round((procesadosSeguros / totalSeguro) * 100) : 0;

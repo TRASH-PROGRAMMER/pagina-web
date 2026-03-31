@@ -360,19 +360,25 @@ function obtenerEstadoValidacion() {
                 .split(";")[0]
                 .trim();
 
-            if (ext && !extPermitidas.has(ext)) {
-                errores.push(`Formato no permitido: ${nombre}`);
+            let extValida = extPermitidas.has(ext);
+            let mimeValido = mimePermitidos.has(mime);
+
+            if (!extValida && !mimeValido) {
+                errores.push(`Archivo ${nombre}: extensión y tipo MIME no permitidos. (Extensión: .${ext || 'desconocida'}, MIME: ${mime || 'desconocido'})`);
                 return;
             }
-
-            if (mime && !mimePermitidos.has(mime)) {
-                errores.push(`Tipo de archivo no permitido: ${nombre}`);
+            if (!extValida) {
+                errores.push(`Archivo ${nombre}: extensión no permitida (.${ext || 'desconocida'}). Usa PNG, JPG o GIF.`);
+                return;
+            }
+            if (!mimeValido) {
+                errores.push(`Archivo ${nombre}: tipo MIME no permitido (${mime || 'desconocido'}). Usa imágenes exportadas correctamente.`);
                 return;
             }
 
             const sizeBytes = file.size;
             if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
-                errores.push(`Archivo vacio: ${nombre}`);
+                errores.push(`Archivo vacío o corrupto: ${nombre}`);
                 return;
             }
 
