@@ -51,6 +51,9 @@ const clienteChannel = new BroadcastChannel("clientes_channel");
 const form = document.getElementById("formDatos");
 const btnEnviar = document.getElementById("btnVerResumen");
 const errorMessage = document.getElementById("mensajeError");
+const progressContainer = document.getElementById("progressContainer");
+const progressBar = document.getElementById("progressBar");
+const progressStatusText = document.getElementById("progressStatusText");
 
 // Toast visual para mensajes de éxito
 function mostrarToastExito(mensaje) {
@@ -103,6 +106,9 @@ const opcionesPapelGroup = document.querySelector(".opciones-papel");
 const papelHelp = document.getElementById("papelHelp");
 const previewContainer = document.getElementById("previewContainer");
 const pedidoSpinnerOverlay = document.getElementById("pedidoSpinnerOverlay");
+const pedidoSpinnerText = pedidoSpinnerOverlay
+    ? pedidoSpinnerOverlay.querySelector(".pedido-spinner-text")
+    : null;
 const btnFinalizarPedido = document.getElementById("btnFinalizarPedido");
 const cropImageModal = document.getElementById("cropImageModal");
 const cropImageTarget = document.getElementById("cropImageTarget");
@@ -153,6 +159,7 @@ let fotoKeyEnEdicion = "";
 let frameSeleccionadoTemporal = "none";
 let bloquearMensajesValidacion = false;
 let enviandoPedido = false;
+let bloqueoSalidaEnvioActivo = false;
 let restaurarClientePendiente = null;
 let pedidoSeguimientoPendiente = { id: "", correo: "" };
 let ultimoEstadoValidacion = null;
@@ -1288,6 +1295,9 @@ function mostrarSpinnerPedido() {
         pedidoSpinnerOverlay.classList.add("active");
         pedidoSpinnerOverlay.setAttribute("aria-hidden", "false");
     }
+    if (pedidoSpinnerText) {
+        pedidoSpinnerText.textContent = "Enviando pedido...";
+    }
     if (btnFinalizarPedido) {
         btnFinalizarPedido.disabled = true;
     }
@@ -1298,8 +1308,48 @@ function ocultarSpinnerPedido() {
         pedidoSpinnerOverlay.classList.remove("active");
         pedidoSpinnerOverlay.setAttribute("aria-hidden", "true");
     }
+    if (pedidoSpinnerText) {
+        pedidoSpinnerText.textContent = "Enviando pedido...";
+    }
     if (btnFinalizarPedido) {
         btnFinalizarPedido.disabled = false;
+    }
+}
+
+function activarBloqueoSalidaDuranteEnvio() {
+    bloqueoSalidaEnvioActivo = true;
+    window.onbeforeunload = function() {
+        return "Tu pedido se está enviando. Si sales ahora, se puede interrumpir.";
+    };
+}
+
+function desactivarBloqueoSalidaDuranteEnvio() {
+    if (!bloqueoSalidaEnvioActivo) return;
+    bloqueoSalidaEnvioActivo = false;
+    window.onbeforeunload = null;
+}
+
+function actualizarProgresoSubidaPedido(porcentaje, mensaje, estado = "loading") {
+    const pct = Math.max(0, Math.min(100, Math.round(Number(porcentaje) || 0)));
+
+    if (progressContainer) {
+        progressContainer.dataset.state = estado;
+        progressContainer.setAttribute("aria-busy", estado === "loading" ? "true" : "false");
+    }
+
+    if (progressBar) {
+        progressBar.style.width = `${pct}%`;
+        progressBar.textContent = `${pct}%`;
+        progressBar.setAttribute("aria-valuenow", String(pct));
+    }
+
+    const texto = String(mensaje || "").trim();
+    if (progressStatusText && texto) {
+        progressStatusText.textContent = texto;
+    }
+
+    if (pedidoSpinnerText && texto) {
+        pedidoSpinnerText.textContent = texto;
     }
 }
 
@@ -1436,6 +1486,13 @@ function validarFormulario() {
     actualizarEstadoAyuda(papelHelp, papelValido, mensajesAyudaBase.papel, papelError, mostrarPapelError);
 
     const esValido = estado.esValido;
+
+    // Mantener el primer intento disponible; tras un intento fallido,
+    // el botón se habilita solo cuando todo vuelve a estar válido.
+    if (btnEnviar && !enviandoPedido) {
+        const bloquearRevision = estadoInteraccionValidacion.intentoEnvio && !esValido;
+        btnEnviar.disabled = bloquearRevision;
+    }
 
     if (bloquearMensajesValidacion) {
         return esValido;
@@ -1876,6 +1933,7 @@ form.addEventListener("submit", async function(e) {
 
     enviandoPedido = true;
     mostrarSpinnerPedido();
+    activarBloqueoSalidaDuranteEnvio();
     bloquearMensajesValidacion = true;
     btnEnviar.disabled = true;
     errorMessage.textContent = "Procesando fotos…⏳";
@@ -1947,7 +2005,16 @@ form.addEventListener("submit", async function(e) {
     formData.append('cantidades', cantidadesPorFoto.join(','));
 
     try {
-        errorMessage.textContent = "Subiendo fotos…⏳";
+        const estadoSubida = {
+            porcentaje: 0,
+            conexionLentaAvisada: false,
+        };
+
+        const mensajeInicio = "Subiendo fotos... 0%";
+        errorMessage.textContent = mensajeInicio;
+        errorMessage.style.color = "#00a76f";
+        actualizarProgresoSubidaPedido(0, mensajeInicio, "loading");
+
         const infoResumenHtml = facturaInfo ? facturaInfo.innerHTML : "";
         const bodyResumenHtml = facturaBody ? facturaBody.innerHTML : "";
         const clientePersistido = {
@@ -1958,7 +2025,28 @@ form.addEventListener("submit", async function(e) {
             prefijoPais: prefijoPaisSelect ? prefijoPaisSelect.value : "",
         };
 
-        const respuestaGuardado = await guardarCliente(formData);
+        const respuestaGuardado = await guardarCliente(formData, {
+            onUploadProgress: function(loaded, total) {
+                if (!enviandoPedido) return;
+                if (!total || total <= 0) return;
+                const pct = Math.max(1, Math.min(99, Math.round((loaded / total) * 100)));
+                estadoSubida.porcentaje = pct;
+                const mensaje = `Subiendo fotos... ${pct}%`;
+                errorMessage.textContent = mensaje;
+                errorMessage.style.color = "#00a76f";
+                actualizarProgresoSubidaPedido(pct, mensaje, "loading");
+            },
+            onSlowUpload: function() {
+                if (!enviandoPedido || estadoSubida.conexionLentaAvisada) return;
+                estadoSubida.conexionLentaAvisada = true;
+                const mensajeLento = "Tu conexión parece un poco lenta, pero seguimos subiendo tus fotos. Por favor, no cierres esta ventana.";
+                errorMessage.textContent = mensajeLento;
+                errorMessage.style.color = "#c77800";
+                actualizarProgresoSubidaPedido(estadoSubida.porcentaje, mensajeLento, "loading");
+            },
+        });
+
+        actualizarProgresoSubidaPedido(100, "Subida completada. Procesando respuesta del servidor...", "completed");
         const clienteGuardado = respuestaGuardado && respuestaGuardado.cliente
             ? respuestaGuardado.cliente
             : respuestaGuardado;
@@ -2022,6 +2110,7 @@ form.addEventListener("submit", async function(e) {
             errorMessage.textContent = "Pedido enviado con exito!";
             errorMessage.style.color = "#00ff4c";
         }
+        desactivarBloqueoSalidaDuranteEnvio();
         bloquearMensajesValidacion = false;
         ocultarSpinnerPedido();
         const bodyConEstado = (fallosSubida.length > 0 || fotosConEdicionOmitida.length > 0)
@@ -2043,7 +2132,9 @@ form.addEventListener("submit", async function(e) {
             : "No se pudo completar el envío. Revisa tu conexión e inténtalo de nuevo.";
         errorMessage.textContent = mensaje;
         errorMessage.style.color = "red";
+        actualizarProgresoSubidaPedido(0, mensaje, "error");
         btnEnviar.disabled = false;
+        desactivarBloqueoSalidaDuranteEnvio();
         ocultarSpinnerPedido();
         console.error("Error al guardar:", error);
     }

@@ -114,36 +114,58 @@
         });
     }
 
+    async function fetchMeWithCookie() {
+        return fetch("/api/auth/me", {
+            method: "GET",
+            headers: {
+                "Accept": "application/json",
+            },
+            credentials: "same-origin",
+        });
+    }
+
+    function hydrateUserFromPayload(payload) {
+        const role = String((payload && payload.role) || "").toLowerCase();
+        const user = {
+            id: payload ? payload.user_id : undefined,
+            username: payload ? payload.username : undefined,
+            role: role,
+        };
+        setUser(user);
+        paintAuthMeta(user);
+        return role;
+    }
+
     async function ensureRoleAccess() {
         const requiredRoles = parseRequiredRoles();
         if (!requiredRoles.length) return;
 
         const token = getToken();
-        if (!token) {
-            window.location.href = "/login";
-            return;
-        }
-
         try {
-            const res = await fetchMeWithToken(token);
-            if (!res.ok) {
+            if (token) {
+                const res = await fetchMeWithToken(token);
+                if (res.ok) {
+                    const payload = await res.json();
+                    const role = hydrateUserFromPayload(payload);
+                    if (!requiredRoles.includes(role)) {
+                        window.location.href = routeForRole(role);
+                    }
+                    return;
+                }
+            }
+
+            // Fallback: sesion cookie activa aunque el token de tab no exista.
+            const resCookie = await fetchMeWithCookie();
+            if (!resCookie.ok) {
                 clearAuthSession();
                 window.location.href = "/login";
                 return;
             }
 
-            const payload = await res.json();
-            const role = String(payload.role || "").toLowerCase();
-            const user = {
-                id: payload.user_id,
-                username: payload.username,
-                role: role,
-            };
-            setUser(user);
-            paintAuthMeta(user);
-
-            if (!requiredRoles.includes(role)) {
-                window.location.href = routeForRole(role);
+            const payloadCookie = await resCookie.json();
+            const roleCookie = hydrateUserFromPayload(payloadCookie);
+            if (!requiredRoles.includes(roleCookie)) {
+                window.location.href = routeForRole(roleCookie);
             }
         } catch (_error) {
             clearAuthSession();

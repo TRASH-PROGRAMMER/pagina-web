@@ -179,6 +179,12 @@ def api_login_tab_scoped():
     if not user or not user.activo or not check_password_hash(user.password_hash, password):
         return jsonify({"error": "Credenciales invalidas"}), 401
 
+    # Fallback robusto: mantener sesion cookie para navegacion de pagina completa.
+    session.clear()
+    session["user_id"] = user.id
+    session["username"] = user.username
+    session["role"] = user.role
+
     token, auth_row = _create_tab_token_session(user)
 
     redirect_path = "/admin"
@@ -216,8 +222,9 @@ def api_logout_tab_scoped():
         if row and row.revoked_at is None:
             row.revoked_at = _utcnow()
             db.session.commit()
-    else:
-        session.clear()
+
+    # Siempre limpiar tambien la sesion cookie local.
+    session.clear()
 
     return jsonify({"ok": True}), 200
 

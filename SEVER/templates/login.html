@@ -83,6 +83,14 @@
       font-size: 14px;
       padding: 10px 14px;
       cursor: pointer;
+      transition: filter .2s ease, opacity .2s ease;
+    }
+    button:hover {
+      filter: brightness(1.05);
+    }
+    button:disabled {
+      opacity: 0.8;
+      cursor: wait;
     }
     .hint {
       margin-top: 12px;
@@ -110,7 +118,7 @@
     <label for="password">Contrasena</label>
     <input id="password" name="password" type="password" required>
 
-    <button type="submit">Entrar al sistema</button>
+    <button type="submit" id="loginSubmit" data-default-text="Entrar al sistema">Entrar al sistema</button>
     <div class="hint">Pide al administrador tus credenciales.</div>
   </form>
 
@@ -122,6 +130,16 @@
       const errorBox = document.getElementById("loginError");
       const usernameInput = document.getElementById("username");
       const passwordInput = document.getElementById("password");
+      const submitButton = document.getElementById("loginSubmit");
+      let submitting = false;
+
+      function setSubmittingState(isSubmitting) {
+        if (!submitButton) return;
+        const defaultText = submitButton.getAttribute("data-default-text") || "Entrar al sistema";
+        submitButton.disabled = !!isSubmitting;
+        submitButton.setAttribute("aria-busy", isSubmitting ? "true" : "false");
+        submitButton.textContent = isSubmitting ? "Entrando..." : defaultText;
+      }
 
       function showError(message) {
         if (!errorBox) return;
@@ -139,6 +157,7 @@
 
       form.addEventListener("submit", async function(event) {
         event.preventDefault();
+        if (submitting) return;
         clearError();
 
         const username = (usernameInput && usernameInput.value || "").trim();
@@ -148,6 +167,9 @@
           showError("Ingresa usuario y contrasena");
           return;
         }
+
+        submitting = true;
+        setSubmittingState(true);
 
         try {
           const res = await fetch("/api/auth/login", {
@@ -169,6 +191,8 @@
           window.location.href = data.redirect || "/";
         } catch (error) {
           showError(error.message || "Error de inicio de sesion");
+          submitting = false;
+          setSubmittingState(false);
         }
       });
     })();

@@ -56,14 +56,12 @@ function compactarMensajes(mensajes, maxItems = 3) {
     return `${top} | +${mensajes.length - maxItems} mas`;
 }
 
-function mostrarError(texto, esAdvertencia = false) {
+function mostrarError(texto, esAdvertencia = false, enCallout = false) {
     if (!errorMessage) return;
-    errorMessage.textContent = String(texto || "");
-    if (esAdvertencia) {
-        errorMessage.classList.add("warning-message");
-    } else {
-        errorMessage.classList.remove("warning-message");
-    }
+    const mensaje = String(texto || "");
+    errorMessage.textContent = mensaje;
+    errorMessage.classList.toggle("warning-message", !!esAdvertencia);
+    errorMessage.classList.toggle("callout-message", !!enCallout && !!mensaje.trim());
 }
 
 function mostrarExito(texto) {
@@ -162,6 +160,8 @@ function actualizarBarraProgreso(procesados, total, estado, mensaje, announce = 
         container.setAttribute("aria-busy", estado === ESTADO_CARGA.LOADING ? "true" : "false");
     }
 
+    const mensajeNormalizado = typeof mensaje === "string" ? mensaje.trim() : "";
+
     if (progressBar) {
         progressBar.style.width = `${pct}%`;
         progressBar.textContent = `${pct}%`;
@@ -172,12 +172,16 @@ function actualizarBarraProgreso(procesados, total, estado, mensaje, announce = 
         const detalle = totalSeguro > 0
             ? `${procesadosSeguros} de ${totalSeguro} imagenes procesadas (${pct}%).`
             : `${pct}%`;
-        const valueText = `${String(mensaje || "").trim()} ${detalle}`.trim();
+        const valueText = `${mensajeNormalizado} ${detalle}`.trim();
         progressBar.setAttribute("aria-valuetext", valueText);
     }
 
     if (progressStatusText) {
-        progressStatusText.textContent = String(mensaje || "").trim() || "Listo para cargar imagenes.";
+        if (mensaje === null) {
+            progressStatusText.textContent = "";
+        } else {
+            progressStatusText.textContent = mensajeNormalizado || "Listo para cargar imagenes.";
+        }
     }
 
     if (announce) {
@@ -460,6 +464,7 @@ function procesarArchivos(archivos, opciones = {}) {
     const lista = Array.isArray(archivos) ? archivos.slice() : [];
     const advertencias = Array.isArray(opciones.advertencias) ? opciones.advertencias.slice() : [];
     const reiniciarVista = !!opciones.reiniciarVista;
+    const calloutLimite = String(opciones.calloutLimite || "").trim();
 
     if (reiniciarVista) {
         previewsGlobal = [];
@@ -494,6 +499,19 @@ function procesarArchivos(archivos, opciones = {}) {
         if (token !== cargaToken) return;
 
         cargaEnCurso = false;
+
+        if (calloutLimite) {
+            mostrarExito("");
+            if (previewsGlobal.length > 0) {
+                mostrarError(calloutLimite, true, true);
+                actualizarBarraProgreso(total, total, ESTADO_CARGA.COMPLETED, null, false);
+            } else {
+                mostrarError("No se pudieron cargar imagenes validas.", true);
+                actualizarBarraProgreso(total, total, ESTADO_CARGA.ERROR, "No se pudieron cargar imagenes validas.", true);
+            }
+            return;
+        }
+
         establecerMensajeSeleccion();
 
         if (advertencias.length > 0) {
@@ -727,11 +745,12 @@ if (input) {
         const nuevos = noDuplicados.slice(0, disponibles);
         const advertencias = rechazados.slice();
         const excedentes = noDuplicados.length - nuevos.length;
+        const seleccionTotalPedido = archivosGlobal.length + noDuplicados.length;
+        let calloutLimite = "";
 
         if (excedentes > 0) {
-            advertencias.push(
-                `Seleccionaste mas de ${MAX_IMAGENES} imagenes. Se agregaron ${nuevos.length} y se ignoraron ${excedentes}.`
-            );
+            calloutLimite = `⚠️ Límite de imágenes alcanzado\nHas seleccionado ${seleccionTotalPedido} imágenes, pero el máximo permitido por pedido es de ${MAX_IMAGENES}. Hemos cargado las primeras ${nuevos.length} fotos con éxito. Por favor, crea un nuevo pedido más adelante para las imágenes restantes.`;
+            advertencias.push(calloutLimite);
         }
 
         if (nuevos.length === 0) {
@@ -758,11 +777,19 @@ if (input) {
 
         if (cargaEnCurso) {
             const notas = ["Se agregaron archivos durante la carga. Reiniciando progreso."].concat(advertencias);
-            procesarArchivos(archivosGlobal, { reiniciarVista: true, advertencias: notas });
+            procesarArchivos(archivosGlobal, {
+                reiniciarVista: true,
+                advertencias: notas,
+                calloutLimite,
+            });
             return;
         }
 
-        procesarArchivos(nuevos, { reiniciarVista: false, advertencias });
+        procesarArchivos(nuevos, {
+            reiniciarVista: false,
+            advertencias,
+            calloutLimite,
+        });
     });
 }
 

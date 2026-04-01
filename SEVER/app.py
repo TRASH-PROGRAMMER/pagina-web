@@ -891,8 +891,20 @@ def crear_clientes():
     while len(cantidades_lista) < len(archivos):
         cantidades_lista.append(1)
 
-    # Verificar si ya existe el correo â†’ agregar fotos al cliente existente
-    existe = Cliente.query.filter_by(correo=data["correo"]).first()
+    # Endurecimiento de seguridad:
+    # No unir automaticamente por correo en endpoint publico para evitar que terceros
+    # adjunten fotos al pedido de otra persona. Solo personal autenticado y con
+    # bandera explicita puede anexar a un pedido existente.
+    correo_normalizado = str(data.get("correo") or "").strip().lower()
+    append_existing_raw = str(data.get("append_existing") or "").strip().lower()
+    append_existing = append_existing_raw in {"1", "true", "yes", "si", "sí", "on"}
+    role_actual = str(session.get("role") or "").strip().lower()
+    puede_anexar_existente = append_existing and role_actual in {"admin", "operador", "cajero"}
+
+    existe = None
+    if puede_anexar_existente:
+        existe = Cliente.query.filter(db.func.lower(Cliente.correo) == correo_normalizado).first()
+
     if existe:
         # Actualizar datos del pedido (tamaÃ±o, papel, fecha)
         existe.tamano       = data.get("tamano", existe.tamano)

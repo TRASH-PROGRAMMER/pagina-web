@@ -45,6 +45,15 @@
         });
     }
 
+    function forzarInicioPrimerPaso() {
+        // Evita restauraciones del navegador (bfcache/scroll restoration) que pueden
+        // dejar el carrusel en pasos intermedios.
+        carousel.scrollLeft = 0;
+        irA(0, "auto");
+        currentIndex = 0;
+        actualizarEstado();
+    }
+
     function actualizarEstado() {
         currentIndex = indexMasCercano();
 
@@ -136,6 +145,14 @@
         actualizarEstado();
     });
 
+    window.addEventListener("pageshow", function () {
+        forzarInicioPrimerPaso();
+    });
+
     crearDots();
-    actualizarEstado();
+    forzarInicioPrimerPaso();
+    // Segunda pasada corta por si cambian anchos tras fuentes/paint inicial.
+    requestAnimationFrame(function () {
+        forzarInicioPrimerPaso();
+    });
 })();

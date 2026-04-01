@@ -1213,6 +1213,18 @@ button:active {
     color: #c77800;
 }
 
+.error-message.callout-message {
+    margin-top: 15px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid #f0c57b;
+    background: linear-gradient(180deg, #fff9ef 0%, #fff4dd 100%);
+    color: #8a4b00;
+    line-height: 1.45;
+    white-space: pre-line;
+    box-shadow: 0 4px 12px rgba(138, 75, 0, 0.08);
+}
+
 .success-message {
     color: #2e7d32;
     font-weight: 600;
@@ -2260,6 +2272,12 @@ footer {
 
 .dark-mode .progress-container[data-state="error"] .progress-bar {
     background: linear-gradient(90deg, #c06a15, #de8b2b);
+}
+
+.dark-mode .error-message.callout-message {
+    border-color: #8f6726;
+    background: linear-gradient(180deg, #3a2d18 0%, #332613 100%);
+    color: #ffd9a3;
 }
 
 .dark-mode .formulario_datos_personales {

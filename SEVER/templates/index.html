@@ -37,7 +37,6 @@
         </ol>
         <button type="button" class="pasos-nav pasos-next" id="pasosNext" aria-label="Siguiente paso">›</button>
     </div>
-    <p id="pasosCarouselHint" class="campo-ayuda">Desliza con el dedo en móvil, o usa flechas izquierda/derecha y los botones para navegar.</p>
     <div class="pasos-dots" id="pasosDots" role="tablist" aria-label="Navegar entre pasos"></div>
     <p id="pasoActualLive" class="sr-only" aria-live="polite" aria-atomic="true"></p>
 </nav>
@@ -394,14 +393,14 @@
     <div id="scrollMouseHorizontalIndicator" class="scroll-mouse-indicator scroll-mouse-indicator--horizontal" aria-hidden="true" style="display:none;">
         <svg width="60" height="44" viewBox="0 0 60 44" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <rect x="2" y="2" width="56" height="40" rx="20" stroke="#0070e0" stroke-width="3" fill="white"/>
-            <rect x="24" y="20" width="12" height="4" rx="2" fill="#0070e0">
-                <animate attributeName="x" values="24;32;24" dur="1.2s" repeatCount="indefinite" keyTimes="0;0.5;1"/>
+            <rect x="28" y="11" width="4" height="12" rx="2" fill="#0070e0">
+                <animate attributeName="y" values="11;20;11" dur="1.2s" repeatCount="indefinite" keyTimes="0;0.5;1"/>
             </rect>
-            <polygon points="48,22 40,16 40,28" fill="#0070e0">
-                <animate attributeName="points" values="48,22 40,16 40,28;54,22 46,16 46,28;48,22 40,16 40,28" dur="1.2s" repeatCount="indefinite" keyTimes="0;0.5;1"/>
+            <polygon points="30,34 24,26 36,26" fill="#0070e0">
+                <animate attributeName="points" values="30,34 24,26 36,26;30,38 24,30 36,30;30,34 24,26 36,26" dur="1.2s" repeatCount="indefinite" keyTimes="0;0.5;1"/>
             </polygon>
         </svg>
-        <span class="scroll-mouse-text">Desliza o desplaza para ver más</span>
+        <span class="scroll-mouse-text">Desplaza de arriba hacia abajo para ver más</span>
     </div>
     <p>&copy; 2026 Todos los derechos reservados</p>
     <a class="direccion" href="https://www.google.com/maps/place/Manta+Color/data=!4m2!3m1!1s0x0:0x91e1a40e9dd4f55b?sa=X&ved=1t:2428&ictx=111"
@@ -544,6 +543,41 @@ function posicionarFlechasDeGaleria(container, leftEl, rightEl) {
     rightEl.style.top = `${centerY}px`;
 }
 
+function alternarIndicadorMouse(indicador, mostrar) {
+    if (!indicador) return;
+
+    if (indicador._hideTimer) {
+        clearTimeout(indicador._hideTimer);
+        indicador._hideTimer = null;
+    }
+
+    const yaOculto = indicador.style.display === 'none' && !indicador.classList.contains('is-visible');
+    if (!mostrar && yaOculto) {
+        indicador.setAttribute('aria-hidden', 'true');
+        return;
+    }
+
+    if (mostrar) {
+        indicador.style.display = '';
+        indicador.classList.remove('is-hiding');
+        requestAnimationFrame(function() {
+            indicador.classList.add('is-visible');
+            indicador.setAttribute('aria-hidden', 'false');
+        });
+        return;
+    }
+
+    indicador.classList.remove('is-visible');
+    indicador.classList.add('is-hiding');
+    indicador.setAttribute('aria-hidden', 'true');
+    indicador._hideTimer = setTimeout(function() {
+        if (!indicador.classList.contains('is-visible')) {
+            indicador.style.display = 'none';
+            indicador.classList.remove('is-hiding');
+        }
+    }, 290);
+}
+
 function actualizarIndicadoresMouseGlobales(hayContextualActivo) {
     const horizontal = document.getElementById('scrollMouseHorizontalIndicator');
     const vertical = document.getElementById('scrollMouseIndicator');
@@ -556,11 +590,21 @@ function actualizarIndicadoresMouseGlobales(hayContextualActivo) {
         (galeria && galeria.scrollWidth > galeria.clientWidth + 8) ||
         (carrusel && carrusel.scrollWidth > carrusel.clientWidth + 8)
     );
-    const hayScrollVertical = document.documentElement.scrollHeight > window.innerHeight + 8;
+    const docEl = document.documentElement;
+    const body = document.body;
+    const scrollTop = window.pageYOffset || docEl.scrollTop || 0;
+    const docHeight = Math.max(docEl.scrollHeight, body ? body.scrollHeight : 0);
+    const hayScrollVertical = docHeight > window.innerHeight + 8;
+    const UMBRAL_OCULTAR_INDICADOR = 80;
+    const estaAlFinal = (scrollTop + window.innerHeight) >= (docHeight - UMBRAL_OCULTAR_INDICADOR);
+    const puedeSeguirBajando = hayScrollVertical && !estaAlFinal;
     const bloquearGlobales = Boolean(hayContextualActivo);
 
-    horizontal.style.display = (isDesktop && hayOverflowHorizontal && !bloquearGlobales) ? '' : 'none';
-    vertical.style.display = (isDesktop && hayScrollVertical && !hayOverflowHorizontal && !bloquearGlobales) ? '' : 'none';
+    const mostrarHorizontal = isDesktop && hayOverflowHorizontal && !estaAlFinal && !bloquearGlobales;
+    const mostrarVertical = isDesktop && puedeSeguirBajando && !hayOverflowHorizontal && !bloquearGlobales;
+
+    alternarIndicadorMouse(horizontal, mostrarHorizontal);
+    alternarIndicadorMouse(vertical, mostrarVertical);
 }
 
 function scrollGalleryIndicators(estaActiva) {

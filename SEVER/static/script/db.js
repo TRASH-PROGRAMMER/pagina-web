@@ -22,45 +22,121 @@ const dbReady = new Promise((resolve, reject) => {
     };
 });
 
+function esperar(ms) {
+    return new Promise(function(resolve) {
+        setTimeout(resolve, ms);
+    });
+}
+
+function esErrorDeRed(error) {
+    const texto = String((error && error.message) || "").toLowerCase();
+    return texto.includes("network_error")
+        || texto.includes("failed to fetch")
+        || texto.includes("load failed")
+        || texto.includes("network request failed")
+        || texto.includes("conexion")
+        || texto.includes("internet");
+}
+
+function enviarClienteConXhr(formData, opciones) {
+    const timeoutMs = Number(opciones && opciones.timeoutMs) || 120000;
+    const onUploadProgress = typeof (opciones && opciones.onUploadProgress) === "function"
+        ? opciones.onUploadProgress
+        : null;
+    const onSlowUpload = typeof (opciones && opciones.onSlowUpload) === "function"
+        ? opciones.onSlowUpload
+        : null;
+
+    return new Promise(function(resolve, reject) {
+        const xhr = new XMLHttpRequest();
+        let timeoutLento = null;
+
+        if (onSlowUpload) {
+            timeoutLento = setTimeout(function() {
+                onSlowUpload();
+            }, 12000);
+        }
+
+        function limpiarTimers() {
+            if (timeoutLento) {
+                clearTimeout(timeoutLento);
+                timeoutLento = null;
+            }
+        }
+
+        xhr.open("POST", "/api/clientes", true);
+        xhr.timeout = timeoutMs;
+
+        xhr.upload.onprogress = function(event) {
+            if (!onUploadProgress || !event || !event.lengthComputable) return;
+            onUploadProgress(event.loaded, event.total);
+        };
+
+        xhr.onload = function() {
+            limpiarTimers();
+            resolve({
+                status: xhr.status,
+                body: String(xhr.responseText || ""),
+                contentType: String(xhr.getResponseHeader("content-type") || "").toLowerCase(),
+            });
+        };
+
+        xhr.onerror = function() {
+            limpiarTimers();
+            reject(new Error("NETWORK_ERROR"));
+        };
+
+        xhr.ontimeout = function() {
+            limpiarTimers();
+            reject(new Error("TIMEOUT_ERROR"));
+        };
+
+        xhr.onabort = function() {
+            limpiarTimers();
+            reject(new Error("ABORT_ERROR"));
+        };
+
+        try {
+            xhr.send(formData);
+        } catch (_error) {
+            limpiarTimers();
+            reject(new Error("NETWORK_ERROR"));
+        }
+    });
+}
+
 // Guardar cliente + fotos: usa FormData -> API Flask -> PostgreSQL
-export async function guardarCliente(formData) {
+export async function guardarCliente(formData, opciones = {}) {
     const TIMEOUT_MS = 120000;
     const MAX_INTENTOS = 2;
     let ultimoError = null;
 
     for (let intento = 1; intento <= MAX_INTENTOS; intento += 1) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(function() {
-            controller.abort();
-        }, TIMEOUT_MS);
-
         try {
-            const response = await fetch("/api/clientes", {
-                method: "POST",
-                body: formData,
-                signal: controller.signal,
+            const response = await enviarClienteConXhr(formData, {
+                timeoutMs: TIMEOUT_MS,
+                onUploadProgress: opciones.onUploadProgress,
+                onSlowUpload: opciones.onSlowUpload,
             });
 
-            const contentType = String(response.headers.get("content-type") || "").toLowerCase();
             let data = {};
-
-            if (contentType.includes("application/json")) {
-                data = await response.json().catch(function() { return {}; });
+            if (response.contentType.includes("application/json")) {
+                data = JSON.parse(response.body || "{}");
             } else {
-                const text = await response.text().catch(function() { return ""; });
-                data = { error: (text || "").trim() };
+                data = { error: String(response.body || "").trim() };
             }
 
-            if (!response.ok) {
+            if (!(response.status >= 200 && response.status < 300)) {
                 const esTransitorio = [502, 503, 504].includes(response.status);
                 if (esTransitorio && intento < MAX_INTENTOS) {
-                    await new Promise(function(resolve) { setTimeout(resolve, 900); });
+                    await esperar(900);
                     continue;
                 }
 
                 if (response.status === 413) {
                     throw new Error(data.error || "La carga supera el limite permitido del servidor.");
                 }
+
                 throw new Error(data.error || `Error al guardar cliente (HTTP ${response.status})`);
             }
 
@@ -75,15 +151,26 @@ export async function guardarCliente(formData) {
             };
         } catch (error) {
             ultimoError = error;
-            if (error && error.name === "AbortError") {
-                throw new Error("El envio tardo demasiado. Revisa tu conexion y vuelve a intentarlo.");
+
+            const mensaje = String((error && error.message) || "");
+            const esTimeout = mensaje === "TIMEOUT_ERROR";
+            const esRed = esErrorDeRed(error) || !navigator.onLine;
+            const esTransitorio = esTimeout || esRed;
+
+            if (esTransitorio && intento < MAX_INTENTOS) {
+                await esperar(900);
+                continue;
             }
 
-            if (intento >= MAX_INTENTOS) {
-                throw error;
+            if (esTimeout) {
+                throw new Error("Tu conexión parece lenta y el envío tardó demasiado. Revisa tu red y vuelve a intentarlo.");
             }
-        } finally {
-            clearTimeout(timeoutId);
+
+            if (esRed) {
+                throw new Error("Se perdió la conexión a Internet. Revisa tu red y vuelve a intentarlo.");
+            }
+
+            throw error;
         }
     }
 

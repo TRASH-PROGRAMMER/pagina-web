@@ -4,7 +4,7 @@
   right: auto;
   bottom: 24px;
   top: auto;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(10px) scale(0.97);
   flex-direction: row;
   background: none;
   box-shadow: none;
@@ -31,15 +31,24 @@
   position: fixed;
   left: 50%;
   bottom: 24px;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(10px) scale(0.97);
   z-index: 10120;
   display: flex;
   flex-direction: column;
   align-items: center;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 280ms ease, transform 280ms cubic-bezier(.22,1,.36,1);
+}
+
+.scroll-mouse-indicator.is-visible {
   opacity: 0.92;
-  transition: opacity 0.4s;
-  animation: mouse-fade-in 1.2s cubic-bezier(.4,2,.6,1);
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.scroll-mouse-indicator.is-hiding {
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px) scale(0.97);
 }
 .scroll-mouse-indicator svg {
   display: block;
@@ -59,10 +68,6 @@
 }
 @media (max-width: 768px) {
   .scroll-mouse-indicator { display: none !important; }
-}
-@keyframes mouse-fade-in {
-  0% { opacity: 0; transform: translateX(-50%) scale(0.95); }
-  100% { opacity: 0.92; transform: translateX(-50%) scale(1); }
 }
 /* Indicadores de desplazamiento accesibles y adaptativos */
 
