@@ -302,7 +302,7 @@
               </label>
               <label>
                 Subir imagen del marco (PNG/SVG)
-                <input type="file" id="marcoImagen" accept=".png,.svg,image/png,image/svg+xml" required>
+                <input type="file" id="marcoImagen" accept=".png,.svg,image/png,image/svg+xml" multiple required>
               </label>
 
               <label class="switch-field" for="marcoActivo">
@@ -317,7 +317,7 @@
                 <button type="submit" class="btn btn-ghost">Guardar marco</button>
                 <button type="button" class="tamano-btn" id="cancelFormMarco">Cancelar</button>
               </div>
-              <p class="marco-ayuda">Solo se aceptan archivos con transparencia (PNG o SVG).</p>
+              <p class="marco-ayuda">Solo se aceptan archivos con transparencia (PNG o SVG). Puedes seleccionar varios archivos a la vez.</p>
             </form>
 
             <div id="marcoMensaje" class="tamano-mensaje" aria-live="polite"></div>

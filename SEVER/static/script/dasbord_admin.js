@@ -1304,24 +1304,31 @@ document.addEventListener("DOMContentLoaded", async function() {
             const nombre = (document.getElementById("marcoNombre")?.value || "").trim();
             const inputImagen = document.getElementById("marcoImagen");
             const activo = !!document.getElementById("marcoActivo")?.checked;
-            const archivo = inputImagen && inputImagen.files ? inputImagen.files[0] : null;
+            const archivos = inputImagen && inputImagen.files
+                ? Array.from(inputImagen.files)
+                : [];
 
-            if (!nombre || !archivo) {
-                mostrarMensajeMarco("Completa el nombre y selecciona un archivo PNG o SVG", false);
+            if (!nombre || archivos.length === 0) {
+                mostrarMensajeMarco("Completa el nombre y selecciona al menos un archivo PNG o SVG", false);
                 return;
             }
 
-            const nombreArchivo = (archivo.name || "").toLowerCase();
-            const esPngOSvg = nombreArchivo.endsWith(".png") || nombreArchivo.endsWith(".svg");
-            if (!esPngOSvg) {
-                mostrarMensajeMarco("Solo se aceptan marcos en formato PNG o SVG", false);
+            const invalido = archivos.find(function(archivo) {
+                const nombreArchivo = String(archivo.name || "").toLowerCase();
+                return !(nombreArchivo.endsWith(".png") || nombreArchivo.endsWith(".svg"));
+            });
+
+            if (invalido) {
+                mostrarMensajeMarco(`Archivo no permitido: ${invalido.name}. Solo PNG o SVG`, false);
                 return;
             }
 
             try {
                 const payload = new FormData();
                 payload.append("nombre", nombre);
-                payload.append("imagen", archivo);
+                archivos.forEach(function(archivo) {
+                    payload.append("imagen", archivo);
+                });
                 payload.append("activo", activo ? "true" : "false");
 
                 const res = await fetch("/api/admin/marcos", {
@@ -1331,11 +1338,15 @@ document.addEventListener("DOMContentLoaded", async function() {
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "No se pudo guardar el marco");
 
+                const totalGuardados = Array.isArray(data.marcos) ? data.marcos.length : 1;
+
                 formMarco.reset();
                 const activoInput = document.getElementById("marcoActivo");
                 if (activoInput) activoInput.checked = true;
                 setFormMarcoVisible(false);
-                mostrarMensajeMarco("Marco guardado correctamente");
+                mostrarMensajeMarco(totalGuardados > 1
+                    ? `${totalGuardados} marcos guardados correctamente`
+                    : "Marco guardado correctamente");
                 await cargarMarcosAdmin();
             } catch (error) {
                 console.error("Error guardando marco:", error);

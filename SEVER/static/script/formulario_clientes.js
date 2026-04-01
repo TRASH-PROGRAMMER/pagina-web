@@ -658,12 +658,23 @@ async function cargarMarcosPersonalizados() {
         frameOptions.innerHTML = '<div class="spinner-marcos">Cargando marcos...</div>';
     }
     try {
-        const res = await fetch("/api/marcos");
+        const res = await fetch("/api/marcos", {
+            method: "GET",
+            cache: "no-store",
+            headers: {
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache",
+            },
+        });
         if (!res.ok) {
             throw new Error("No se pudo cargar el catalogo de marcos");
         }
         const data = await res.json();
-        const marcos = Array.isArray(data.marcos) ? data.marcos : [];
+        const marcos = Array.isArray(data.marcos)
+            ? data.marcos.filter(function(m) {
+                return !!(m && m.id != null && String(m.imagen_url || "").trim());
+            })
+            : [];
         const marcosDinamicos = marcos.map(function(m) {
             return {
                 value: `custom:${m.id}`,
@@ -1133,6 +1144,30 @@ function renderAsignacionesFotos() {
         const preview = card.querySelector("img");
         if (preview) {
             preview.src = obtenerPreviewFoto(data.file);
+        }
+
+        const editActual = edicionesPorFoto.get(key);
+        const marcoActual = editActual && editActual.frame ? String(editActual.frame) : "none";
+        const tieneMarco = marcoActual !== "none";
+        let marcoBadge = card.querySelector(".card-frame-badge");
+
+        if (tieneMarco) {
+            const infoMarco = obtenerMarcoCatalogo(marcoActual);
+            const labelRaw = infoMarco && infoMarco.label ? String(infoMarco.label) : "Marco aplicado";
+            const labelLimpio = labelRaw.replace(/^[^A-Za-z0-9]+/, "").trim() || "Marco aplicado";
+
+            if (!marcoBadge) {
+                marcoBadge = document.createElement("span");
+                marcoBadge.className = "card-frame-badge";
+                card.appendChild(marcoBadge);
+            }
+
+            marcoBadge.textContent = labelLimpio;
+            marcoBadge.setAttribute("aria-label", `Marco activo: ${labelLimpio}`);
+            card.classList.add("card-con-marco");
+        } else {
+            if (marcoBadge) marcoBadge.remove();
+            card.classList.remove("card-con-marco");
         }
 
         if (!usaAsignacionPorFoto()) {
@@ -1804,7 +1839,11 @@ async function construirArchivoFinal(file) {
         const tipoMime = (file.type && String(file.type).toLowerCase() === "image/gif")
             ? "image/jpeg"
             : (file.type || "image/jpeg");
-        blobBase = await aplicarMarcoABlob(blobBase, edit.frame, tipoMime);
+        try {
+            blobBase = await aplicarMarcoABlob(blobBase, edit.frame, tipoMime);
+        } catch (_error) {
+            blobBase = edit.blob || file;
+        }
     }
 
     return await optimizarArchivoParaSubida(blobBase, file);
@@ -1887,13 +1926,20 @@ form.addEventListener("submit", async function(e) {
 
     // Fotos (con recorte/marco aplicado si existe edición) + cantidades por foto
     const cantidadesPorFoto = [];
+    const fotosConEdicionOmitida = [];
     const cantidadesPorClave = new Map(
         (window.archivosGlobal || []).map(function(file) {
             return [claveFoto(file), file.cantidad || 1];
         })
     );
     for (const foto of inputImagenes.files) {
-        const fotoFinal = await construirArchivoFinal(foto);
+        let fotoFinal = foto;
+        try {
+            fotoFinal = await construirArchivoFinal(foto);
+        } catch (errorEdicion) {
+            console.warn("No se pudo aplicar edicion/marco para una foto. Se enviara original.", errorEdicion);
+            fotosConEdicionOmitida.push(String(foto.name || "archivo"));
+        }
         formData.append('fotos', fotoFinal);
         const cantidadFoto = cantidadesPorClave.get(claveFoto(foto)) || 1;
         cantidadesPorFoto.push(cantidadFoto);
@@ -1912,8 +1958,19 @@ form.addEventListener("submit", async function(e) {
             prefijoPais: prefijoPaisSelect ? prefijoPaisSelect.value : "",
         };
 
-        const clienteGuardado = await guardarCliente(formData);
+        const respuestaGuardado = await guardarCliente(formData);
+        const clienteGuardado = respuestaGuardado && respuestaGuardado.cliente
+            ? respuestaGuardado.cliente
+            : respuestaGuardado;
+        const fallosSubida = respuestaGuardado && Array.isArray(respuestaGuardado.fallos)
+            ? respuestaGuardado.fallos
+            : [];
         clienteChannel.postMessage({ tipo: "nuevo_cliente", cliente: clienteGuardado });
+
+        if (typeof window.resetearEstadoImagenes === "function") {
+            window.resetearEstadoImagenes({ conservarMensajes: true });
+        }
+
         renderMiniaturasSubidas(clienteGuardado.thumbnails || []);
 
         restaurarClientePendiente = function() {
@@ -1947,11 +2004,30 @@ form.addEventListener("submit", async function(e) {
         btnEnviar.disabled = false;
         enviandoPedido = false;
 
-        errorMessage.textContent = "Pedido enviado con exito!";
-        errorMessage.style.color = "#00ff4c";
+        if (fallosSubida.length > 0 || fotosConEdicionOmitida.length > 0) {
+            const partes = [];
+            if (fallosSubida.length > 0) {
+                const resumenFallos = fallosSubida.slice(0, 2).join(", ");
+                const extraFallos = fallosSubida.length > 2 ? ` y ${fallosSubida.length - 2} más` : "";
+                partes.push(`Fallaron ${fallosSubida.length} foto(s): ${resumenFallos}${extraFallos}`);
+            }
+            if (fotosConEdicionOmitida.length > 0) {
+                const resumenEdicion = fotosConEdicionOmitida.slice(0, 2).join(", ");
+                const extraEdicion = fotosConEdicionOmitida.length > 2 ? ` y ${fotosConEdicionOmitida.length - 2} más` : "";
+                partes.push(`Se enviaron sin marco/edicion ${fotosConEdicionOmitida.length} foto(s): ${resumenEdicion}${extraEdicion}`);
+            }
+            errorMessage.textContent = `Pedido enviado parcialmente. ${partes.join(". ")}.`;
+            errorMessage.style.color = "#d97706";
+        } else {
+            errorMessage.textContent = "Pedido enviado con exito!";
+            errorMessage.style.color = "#00ff4c";
+        }
         bloquearMensajesValidacion = false;
         ocultarSpinnerPedido();
-        abrirModalExitoPedido(clienteGuardado.id, clienteGuardado.correo, infoResumenHtml, bodyResumenHtml);
+        const bodyConEstado = (fallosSubida.length > 0 || fotosConEdicionOmitida.length > 0)
+            ? `${bodyResumenHtml}<p style=\"margin-top:10px;color:#b45309;font-weight:700;\">Se procesó el pedido con advertencias: ${fallosSubida.length} foto(s) fallaron y ${fotosConEdicionOmitida.length} foto(s) se enviaron sin marco/edición.</p>`
+            : bodyResumenHtml;
+        abrirModalExitoPedido(clienteGuardado.id, clienteGuardado.correo, infoResumenHtml, bodyConEstado);
         window.dispatchEvent(new CustomEvent("pedido:enviado", {
             detail: {
                 clienteId: clienteGuardado.id,
@@ -1962,7 +2038,10 @@ form.addEventListener("submit", async function(e) {
     } catch (error) {
         bloquearMensajesValidacion = false;
         enviandoPedido = false;
-        errorMessage.textContent = error.message;
+        const mensaje = (error && error.message)
+            ? error.message
+            : "No se pudo completar el envío. Revisa tu conexión e inténtalo de nuevo.";
+        errorMessage.textContent = mensaje;
         errorMessage.style.color = "red";
         btnEnviar.disabled = false;
         ocultarSpinnerPedido();

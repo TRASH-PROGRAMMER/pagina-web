@@ -723,16 +723,22 @@ def seguimiento():
 
 # crea una ruta para la pÃ¡gina de administraciÃ³n
 @app.route('/admin')
+@login_required
+@role_required('admin')
 def admin():
     return render_template('admin.html')
 # imprime un mensaje en la consola para indicar que el programa estÃ¡ funcionando
 print("El programa estÃ¡ funcionando")
 @app.route('/operador')
+@login_required
+@role_required('operador')
 def operador():
     return render_template('operador.html')
 
 
 @app.route('/cajero')
+@login_required
+@role_required('cajero')
 def cajero():
     return render_template('cajero.html')
 
@@ -913,25 +919,30 @@ def crear_clientes():
         resultados_por_idx = {}
 
         def _upload_cloudinary(idx, archivo):
-            try:
+            ultimo_error = None
+            for intento in range(2):
                 try:
-                    archivo.stream.seek(0)
-                except Exception:
-                    pass
+                    try:
+                        archivo.stream.seek(0)
+                    except Exception:
+                        pass
 
-                # Leer bytes para evitar que el stream compartido cause problemas al paralelizar.
-                data = archivo.stream.read()
-                stream = io.BytesIO(data)
-                stream.name = archivo.filename
+                    # Leer bytes para evitar que el stream compartido cause problemas al paralelizar.
+                    data = archivo.stream.read()
+                    stream = io.BytesIO(data)
+                    stream.name = archivo.filename
 
-                resultado = cloudinary.uploader.upload(
-                    stream,
-                    folder=folder,
-                    resource_type="image",
-                )
-                return idx, resultado, None
-            except Exception as e:
-                return idx, None, str(e)
+                    resultado = cloudinary.uploader.upload(
+                        stream,
+                        folder=folder,
+                        resource_type="image",
+                    )
+                    return idx, resultado, None
+                except Exception as e:
+                    ultimo_error = str(e)
+                    if intento == 0:
+                        time.sleep(0.35)
+            return idx, None, ultimo_error
 
         max_workers = min(4, len(indices_validos)) if indices_validos else 1
         if indices_validos:
@@ -1036,24 +1047,29 @@ def crear_clientes():
     resultados_por_idx = {}
 
     def _upload_cloudinary(idx, archivo):
-        try:
+        ultimo_error = None
+        for intento in range(2):
             try:
-                archivo.stream.seek(0)
-            except Exception:
-                pass
+                try:
+                    archivo.stream.seek(0)
+                except Exception:
+                    pass
 
-            data = archivo.stream.read()
-            stream = io.BytesIO(data)
-            stream.name = archivo.filename
+                data = archivo.stream.read()
+                stream = io.BytesIO(data)
+                stream.name = archivo.filename
 
-            resultado = cloudinary.uploader.upload(
-                stream,
-                folder=folder,
-                resource_type="image",
-            )
-            return idx, resultado, None
-        except Exception as e:
-            return idx, None, str(e)
+                resultado = cloudinary.uploader.upload(
+                    stream,
+                    folder=folder,
+                    resource_type="image",
+                )
+                return idx, resultado, None
+            except Exception as e:
+                ultimo_error = str(e)
+                if intento == 0:
+                    time.sleep(0.35)
+        return idx, None, ultimo_error
 
     max_workers = min(4, len(indices_validos)) if indices_validos else 1
     if indices_validos:
@@ -1647,10 +1663,14 @@ def admin_desactivar_tamano(tamano_id):
 @app.route('/api/marcos', methods=['GET'])
 def obtener_marcos_publicos():
     marcos = MarcoDiseno.query.filter_by(activo=True).order_by(MarcoDiseno.id.desc()).all()
-    return jsonify({
+    response = jsonify({
         "version": _catalogo_marcos_version(),
         "marcos": [_marco_to_dict(m) for m in marcos],
-    }), 200
+    })
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response, 200
 
 
 @app.route('/api/admin/marcos', methods=['GET'])
@@ -1669,42 +1689,65 @@ def admin_listar_marcos():
 @role_required('admin')
 def admin_crear_marco():
     nombre = (request.form.get('nombre') or '').strip()
-    archivo = request.files.get('imagen')
+    archivos = [a for a in (request.files.getlist('imagen') or []) if a and getattr(a, 'filename', '')]
+    if not archivos:
+        archivo_unico = request.files.get('imagen')
+        if archivo_unico and archivo_unico.filename:
+            archivos = [archivo_unico]
+
     estado_raw = (request.form.get('activo') or 'true').strip().lower()
     activo = estado_raw in {'true', '1', 'on', 'si', 'sÃ­'}
 
     if not nombre:
         return jsonify({"error": "El nombre del diseÃ±o es requerido"}), 400
 
-    if not archivo or not archivo.filename:
-        return jsonify({"error": "La imagen del marco es requerida"}), 400
+    if not archivos:
+        return jsonify({"error": "Debes subir al menos una imagen de marco"}), 400
 
-    if not allowed_frame_file(archivo):
-        return jsonify({"error": "Solo se aceptan archivos PNG o SVG con transparencia"}), 400
+    errores_archivos = []
+    for archivo in archivos:
+        if not allowed_frame_file(archivo):
+            errores_archivos.append(str(archivo.filename or 'archivo'))
 
-    try:
-        resultado = cloudinary.uploader.upload(
-            archivo,
-            folder="image_manager/frames",
-            resource_type="image",
-            use_filename=False,
-            unique_filename=True,
-            overwrite=False,
-        )
-    except Exception as e:
-        print(f"Error subiendo marco a Cloudinary: {e}")
-        return jsonify({"error": "No se pudo subir el marco. Intenta de nuevo"}), 500
+    if errores_archivos:
+        top = ', '.join(errores_archivos[:3])
+        extra = f" y {len(errores_archivos) - 3} mas" if len(errores_archivos) > 3 else ''
+        return jsonify({"error": f"Formato no permitido en: {top}{extra}. Usa PNG o SVG."}), 400
 
-    imagen_url = resultado.get("secure_url") or ""
-    if not imagen_url:
-        return jsonify({"error": "Cloudinary no devolvio una URL valida"}), 500
+    marcos_creados = []
+    for idx, archivo in enumerate(archivos):
+        nombre_base = os.path.splitext(str(archivo.filename or '').strip())[0].replace('_', ' ').strip()
+        nombre_resuelto = nombre if len(archivos) == 1 else (nombre_base or f"{nombre} {idx + 1}")
 
-    marco = MarcoDiseno(nombre=nombre, imagen_url=imagen_url, activo=activo)
-    db.session.add(marco)
+        try:
+            resultado = cloudinary.uploader.upload(
+                archivo,
+                folder="image_manager/frames",
+                resource_type="image",
+                use_filename=False,
+                unique_filename=True,
+                overwrite=False,
+            )
+        except Exception as e:
+            print(f"Error subiendo marco a Cloudinary: {e}")
+            db.session.rollback()
+            return jsonify({"error": "No se pudo subir uno de los marcos. Intenta de nuevo"}), 500
+
+        imagen_url = resultado.get("secure_url") or ""
+        if not imagen_url:
+            db.session.rollback()
+            return jsonify({"error": "Cloudinary no devolvio una URL valida"}), 500
+
+        marco = MarcoDiseno(nombre=nombre_resuelto, imagen_url=imagen_url, activo=activo)
+        db.session.add(marco)
+        marcos_creados.append(marco)
+
     db.session.commit()
 
     return jsonify({
-        "marco": _marco_to_dict(marco),
+        "marco": _marco_to_dict(marcos_creados[0]),
+        "marcos": [_marco_to_dict(m) for m in marcos_creados],
+        "total": len(marcos_creados),
         "version": _catalogo_marcos_version(),
     }), 201
 

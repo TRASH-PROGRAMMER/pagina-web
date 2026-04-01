@@ -7,6 +7,7 @@
 <title>Image Manager — Carga e impresión de fotos</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style/style.css', v='20260327f') }}" />
 <link rel="stylesheet" href="{{ url_for('static', filename='style/reponsive_index.css', v='20260327f') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/scroll-indicators.css', v='20260331a') }}" />
 <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" />
 </head>
 <body>
@@ -54,10 +55,12 @@
             border: 2.5px dashed #0070e0;
             background: linear-gradient(135deg, #e3f2fd 60%, #f8f9fa 100%);
             border-radius: 18px;
-            min-height: 120px;
+            min-height: 138px;
             width: 100%;
             max-width: 520px;
             margin: 0 auto 18px auto;
+            padding: 18px 16px;
+            gap: 6px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -85,17 +88,37 @@
             font-weight: 700;
             color: #0070e0;
             margin-bottom: 0.2em;
+            line-height: 1.25;
+            text-align: center;
             user-select: none;
         }
         .dropzone-sub {
             font-size: 0.98rem;
             color: #4b618f;
             margin-top: 0.1em;
+            line-height: 1.35;
+            text-align: center;
             user-select: none;
         }
         @media (max-width: 768px) {
-            .dropzone-box { min-height: 80px; max-width: 100%; font-size: 1rem; }
-            .dropzone-icon { font-size: 1.5rem; }
+            .dropzone-box {
+                min-height: 154px;
+                max-width: 100%;
+                border-radius: 14px;
+                padding: 14px 12px;
+                margin-bottom: 12px;
+            }
+            .dropzone-icon { font-size: 1.55rem; margin-bottom: 0.2em; }
+            .dropzone-text { font-size: 1.18rem; margin-bottom: 0.12em; }
+            .dropzone-sub { font-size: 0.95rem; }
+        }
+        @media (max-width: 420px) {
+            .dropzone-box {
+                min-height: 170px;
+                padding: 16px 10px;
+            }
+            .dropzone-text { font-size: 1.05rem; }
+            .dropzone-sub { font-size: 0.9rem; }
         }
         </style>
         <div id="dropzoneOverlay" class="dropzone-overlay" aria-hidden="true" style="display:none;">
@@ -403,8 +426,8 @@
 <!-- Indicadores de desplazamiento accesibles -->
 <span id="galleryScrollLeft" class="scroll-indicator scroll-indicator--left" aria-hidden="true" style="display:none;">&#8592;</span>
 <span id="galleryScrollRight" class="scroll-indicator scroll-indicator--right" aria-hidden="true" style="display:none;">&#8594;</span>
-<span id="gallerySwipeIndicator" class="scroll-indicator scroll-indicator--swipe" aria-hidden="true" style="display:none;">Desliza para ver más fotos</span>
-<span id="carouselScrollIndicator" class="scroll-indicator scroll-indicator--swipe" aria-hidden="true" style="display:none;">Desliza para ver más pasos</span>
+<span id="gallerySwipeIndicator" class="scroll-indicator scroll-indicator--swipe" aria-hidden="true" style="display:none;">Explora más contenido. Desliza para continuar</span>
+<span id="carouselScrollIndicator" class="scroll-indicator scroll-indicator--swipe" aria-hidden="true" style="display:none;">Desliza para continuar</span>
 <script type="module" src="{{ url_for('static', filename='script/main.js', v='20260330g') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/db.js') }}"></script>
 <script src="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.js"></script>
@@ -489,46 +512,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 <script>
-// Indicador de scroll horizontal para desktop
-function mostrarMouseScrollHorizontalIndicator() {
-    const el = document.getElementById('scrollMouseHorizontalIndicator');
-    if (!el) return;
-    const isDesktop = window.matchMedia('(min-width: 769px)').matches;
-    // Galería y carrusel
-    const galeria = document.getElementById('previewContainer');
-    const carrusel = document.getElementById('pasosCarousel');
-    const galeriaOverflow = galeria && galeria.scrollWidth > galeria.clientWidth + 8;
-    const carruselOverflow = carrusel && carrusel.scrollWidth > carrusel.clientWidth + 8;
-    el.style.display = (isDesktop && (galeriaOverflow || carruselOverflow)) ? '' : 'none';
-}
-window.addEventListener('resize', mostrarMouseScrollHorizontalIndicator);
-document.addEventListener('DOMContentLoaded', function() {
-    mostrarMouseScrollHorizontalIndicator();
-    const galeria = document.getElementById('previewContainer');
-    const carrusel = document.getElementById('pasosCarousel');
-    if (galeria) galeria.addEventListener('scroll', mostrarMouseScrollHorizontalIndicator);
-    if (carrusel) carrusel.addEventListener('scroll', mostrarMouseScrollHorizontalIndicator);
-});
-</script>
-</script>
-<script>
-// Indicador de scroll vertical para desktop
-function mostrarMouseScrollIndicator() {
-    const el = document.getElementById('scrollMouseIndicator');
-    if (!el) return;
-    const isDesktop = window.matchMedia('(min-width: 769px)').matches;
-    const scrollable = document.documentElement.scrollHeight > window.innerHeight + 8;
-    el.style.display = (isDesktop && scrollable) ? '' : 'none';
-}
-window.addEventListener('resize', mostrarMouseScrollIndicator);
-window.addEventListener('scroll', mostrarMouseScrollIndicator);
-document.addEventListener('DOMContentLoaded', function() {
-    mostrarMouseScrollIndicator();
-});
-</script>
-</script>
-<script>
-// Indicadores de desplazamiento accesibles para galería y carrusel
+// Indicadores de scroll: mejor ubicacion, sin solapes y con enfoque en usabilidad
 function mostrarIndicadorScroll(id, visible, mensaje) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -536,45 +520,170 @@ function mostrarIndicadorScroll(id, visible, mensaje) {
     if (mensaje) el.textContent = mensaje;
 }
 
-function scrollGalleryIndicators() {
+function posicionarPildoraSobreElemento(indicador, elemento) {
+    if (!indicador || !elemento) return;
+    const rect = elemento.getBoundingClientRect();
+    const visibleEnViewport = rect.bottom >= 0 && rect.top <= window.innerHeight;
+    if (!visibleEnViewport) {
+        indicador.style.display = 'none';
+        return;
+    }
+    const left = Math.min(window.innerWidth - 24, Math.max(24, rect.left + (rect.width / 2)));
+    const top = Math.max(64, Math.min(window.innerHeight - 18, rect.bottom - 8));
+    indicador.style.left = `${left}px`;
+    indicador.style.top = `${top}px`;
+}
+
+function posicionarFlechasDeGaleria(container, leftEl, rightEl) {
+    if (!container || !leftEl || !rightEl) return;
+    const rect = container.getBoundingClientRect();
+    const centerY = Math.max(84, Math.min(window.innerHeight - 84, rect.top + (rect.height / 2)));
+    leftEl.style.left = `${Math.max(10, rect.left + 8)}px`;
+    leftEl.style.top = `${centerY}px`;
+    rightEl.style.left = `${Math.min(window.innerWidth - 10, rect.right - 8)}px`;
+    rightEl.style.top = `${centerY}px`;
+}
+
+function actualizarIndicadoresMouseGlobales(hayContextualActivo) {
+    const horizontal = document.getElementById('scrollMouseHorizontalIndicator');
+    const vertical = document.getElementById('scrollMouseIndicator');
+    const galeria = document.getElementById('previewContainer');
+    const carrusel = document.getElementById('pasosCarousel');
+    if (!horizontal || !vertical) return;
+
+    const isDesktop = window.matchMedia('(min-width: 769px)').matches;
+    const hayOverflowHorizontal = Boolean(
+        (galeria && galeria.scrollWidth > galeria.clientWidth + 8) ||
+        (carrusel && carrusel.scrollWidth > carrusel.clientWidth + 8)
+    );
+    const hayScrollVertical = document.documentElement.scrollHeight > window.innerHeight + 8;
+    const bloquearGlobales = Boolean(hayContextualActivo);
+
+    horizontal.style.display = (isDesktop && hayOverflowHorizontal && !bloquearGlobales) ? '' : 'none';
+    vertical.style.display = (isDesktop && hayScrollVertical && !hayOverflowHorizontal && !bloquearGlobales) ? '' : 'none';
+}
+
+function scrollGalleryIndicators(estaActiva) {
     const container = document.getElementById('previewContainer');
     const left = document.getElementById('galleryScrollLeft');
     const right = document.getElementById('galleryScrollRight');
     const swipe = document.getElementById('gallerySwipeIndicator');
-    if (!container || !left || !right || !swipe) return;
+    if (!container || !left || !right || !swipe) return false;
+
     const isOverflow = container.scrollWidth > container.clientWidth + 8;
     const isMobile = window.matchMedia('(max-width: 768px)').matches;
-    if (isOverflow) {
-        mostrarIndicadorScroll('galleryScrollLeft', container.scrollLeft > 8);
-        mostrarIndicadorScroll('galleryScrollRight', container.scrollLeft + container.clientWidth < container.scrollWidth - 8);
-        mostrarIndicadorScroll('gallerySwipeIndicator', isMobile, 'Desliza para ver más fotos');
+    const canScrollLeft = container.scrollLeft > 8;
+    const canScrollRight = container.scrollLeft + container.clientWidth < container.scrollWidth - 8;
+
+    if (isOverflow && estaActiva) {
+        if (isMobile) {
+            mostrarIndicadorScroll('galleryScrollLeft', false);
+            mostrarIndicadorScroll('galleryScrollRight', false);
+            mostrarIndicadorScroll('gallerySwipeIndicator', true, 'Explora más contenido. Desliza para continuar');
+            posicionarPildoraSobreElemento(swipe, container);
+            return true;
+        }
+
+        // Desktop: un unico indicador contextual (prioriza avanzar a la derecha)
+        const mostrarDerecha = canScrollRight;
+        const mostrarIzquierda = !canScrollRight && canScrollLeft;
+        mostrarIndicadorScroll('gallerySwipeIndicator', false);
+        mostrarIndicadorScroll('galleryScrollLeft', mostrarIzquierda);
+        mostrarIndicadorScroll('galleryScrollRight', mostrarDerecha);
+        posicionarFlechasDeGaleria(container, left, right);
+        return mostrarIzquierda || mostrarDerecha;
     } else {
         mostrarIndicadorScroll('galleryScrollLeft', false);
         mostrarIndicadorScroll('galleryScrollRight', false);
         mostrarIndicadorScroll('gallerySwipeIndicator', false);
+        return false;
     }
 }
-document.addEventListener('DOMContentLoaded', function() {
-    const container = document.getElementById('previewContainer');
-    if (container) {
-        container.addEventListener('scroll', scrollGalleryIndicators);
-        window.addEventListener('resize', scrollGalleryIndicators);
-        setTimeout(scrollGalleryIndicators, 500);
-    }
-    // Carrusel de pasos
+
+function updateCarouselIndicator(estaActiva) {
     const pasosCarousel = document.getElementById('pasosCarousel');
     const carouselIndicator = document.getElementById('carouselScrollIndicator');
-    function updateCarouselIndicator() {
-        if (!pasosCarousel || !carouselIndicator) return;
-        const isOverflow = pasosCarousel.scrollWidth > pasosCarousel.clientWidth + 8;
-        const isMobile = window.matchMedia('(max-width: 768px)').matches;
-        mostrarIndicadorScroll('carouselScrollIndicator', isOverflow, isMobile ? 'Desliza para ver más pasos' : 'Desplázate para ver más pasos');
+    if (!pasosCarousel || !carouselIndicator) return false;
+
+    const isOverflow = pasosCarousel.scrollWidth > pasosCarousel.clientWidth + 8;
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    const mostrar = Boolean(isOverflow && estaActiva);
+    mostrarIndicadorScroll(
+        'carouselScrollIndicator',
+        mostrar,
+        isMobile ? 'Desliza para continuar' : 'Usa flechas o desplaza para ver más pasos'
+    );
+    if (mostrar) {
+        posicionarPildoraSobreElemento(carouselIndicator, pasosCarousel);
+        return true;
     }
-    if (pasosCarousel) {
-        pasosCarousel.addEventListener('scroll', updateCarouselIndicator);
-        window.addEventListener('resize', updateCarouselIndicator);
-        setTimeout(updateCarouselIndicator, 500);
+    return false;
+}
+
+function alturaVisibleEnViewport(el) {
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    const topVisible = Math.max(rect.top, 0);
+    const bottomVisible = Math.min(rect.bottom, window.innerHeight);
+    return Math.max(0, bottomVisible - topVisible);
+}
+
+function detectarSeccionActiva() {
+    const galeria = document.getElementById('previewContainer');
+    const carrusel = document.getElementById('pasosCarousel');
+    const galeriaOverflow = galeria && galeria.scrollWidth > galeria.clientWidth + 8;
+    const carruselOverflow = carrusel && carrusel.scrollWidth > carrusel.clientWidth + 8;
+
+    const galeriaVisible = galeriaOverflow ? alturaVisibleEnViewport(galeria) : 0;
+    const carruselVisible = carruselOverflow ? alturaVisibleEnViewport(carrusel) : 0;
+
+    if (galeriaVisible <= 0 && carruselVisible <= 0) return null;
+    return galeriaVisible >= carruselVisible ? 'galeria' : 'carrusel';
+}
+
+function actualizarSistemaContextual() {
+    const seccionActiva = detectarSeccionActiva();
+    const galeriaActiva = seccionActiva === 'galeria';
+    const carruselActivo = seccionActiva === 'carrusel';
+
+    const indicadorGaleriaActivo = scrollGalleryIndicators(galeriaActiva);
+    const indicadorCarruselActivo = updateCarouselIndicator(carruselActivo);
+    const hayContextualActivo = indicadorGaleriaActivo || indicadorCarruselActivo;
+
+    actualizarIndicadoresMouseGlobales(hayContextualActivo);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const galeria = document.getElementById('previewContainer');
+    const carrusel = document.getElementById('pasosCarousel');
+
+    actualizarSistemaContextual();
+
+    if (galeria) {
+        galeria.addEventListener('scroll', actualizarSistemaContextual);
     }
+    if (carrusel) {
+        carrusel.addEventListener('scroll', actualizarSistemaContextual);
+    }
+
+    window.addEventListener('resize', function() {
+        actualizarSistemaContextual();
+    });
+    window.addEventListener('scroll', function() {
+        actualizarSistemaContextual();
+    });
+
+    if (window.ResizeObserver) {
+        const ro = new ResizeObserver(function() {
+            actualizarSistemaContextual();
+        });
+        if (galeria) ro.observe(galeria);
+        if (carrusel) ro.observe(carrusel);
+    }
+
+    setTimeout(function() {
+        actualizarSistemaContextual();
+    }, 400);
 });
 </script>
 </body>

@@ -39,6 +39,28 @@
         gap: 0.625rem;
     }
 
+    /* Fallback mobile UX: si el input nativo se llega a mostrar, que sea tactil y legible */
+    input[type="file"] {
+        max-width: 100%;
+        margin: 10px auto 0;
+        padding: 12px;
+        border-radius: 14px;
+        font-size: 0.98rem;
+        line-height: 1.35;
+        background: #eef6ff;
+    }
+
+    input[type="file"]::file-selector-button {
+        border: 1px solid #0b69d1;
+        background: #0b69d1;
+        color: #fff;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.94rem;
+        font-weight: 700;
+        margin-right: 10px;
+    }
+
     .formulario_datos_personales fieldset {
         width: 100%;
         min-width: 0;

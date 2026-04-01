@@ -418,6 +418,44 @@ function invalidarCargaActual() {
     }
 }
 
+function resetearEstadoImagenes(opciones = {}) {
+    const conservarMensajes = !!opciones.conservarMensajes;
+
+    invalidarCargaActual();
+    archivosGlobal = [];
+    previewsGlobal = [];
+    window.archivosGlobal = archivosGlobal;
+    window.previewsGlobal = previewsGlobal;
+    paginaActual = 1;
+
+    if (input) {
+        try {
+            input.value = "";
+        } catch (_error) {
+            // Algunos navegadores restringen esta asignacion en ciertos estados.
+        }
+    }
+
+    sincronizarInputFiles();
+    renderizarPaginaActual();
+
+    if (!conservarMensajes) {
+        mostrarError("");
+        mostrarExito("");
+    }
+
+    actualizarBarraProgreso(0, 0, ESTADO_CARGA.IDLE, "Listo para cargar imagenes.", false);
+    actualizarPreciosConCantidad();
+
+    try {
+        localStorage.removeItem("fotos_cantidades");
+    } catch (_error) {
+        // Si localStorage no esta disponible, continuar sin bloquear la UX.
+    }
+}
+
+window.resetearEstadoImagenes = resetearEstadoImagenes;
+
 function procesarArchivos(archivos, opciones = {}) {
     const lista = Array.isArray(archivos) ? archivos.slice() : [];
     const advertencias = Array.isArray(opciones.advertencias) ? opciones.advertencias.slice() : [];
@@ -486,7 +524,7 @@ function procesarArchivos(archivos, opciones = {}) {
             return;
         }
 
-        actualizarBarraProgreso(total, total, ESTADO_CARGA.ERROR, "No se pudieron cargar imagenes.", true);
+        actualizarBarraProgreso(total, total, ESTADO_CARGA.ERROR, "No se pudieron cargar imagenes. Vuelve a seleccionarlas e intenta de nuevo.", true);
     }
 
     function marcarProcesado() {
@@ -499,26 +537,59 @@ function procesarArchivos(archivos, opciones = {}) {
         }
     }
 
-    lista.forEach(function(archivo) {
-        if (token !== cargaToken) return;
+    // En moviles, demasiadas lecturas en paralelo pueden provocar errores de lectura.
+    const esMobile = window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+    const MAX_CONCURRENCIA = esMobile ? 2 : 4;
+    let cursor = 0;
+    let activos = 0;
+
+    function mensajeErrorLectura(archivo, reader) {
+        const nombre = nombreArchivoSeguro(archivo);
+        const detalle = String((reader && reader.error && (reader.error.name || reader.error.message)) || "").trim();
+        if (/notreadable|security|abort/i.test(detalle)) {
+            return `Error al cargar: ${nombre}. Vuelve a seleccionar este archivo.`;
+        }
+        return detalle
+            ? `Error al cargar: ${nombre}. (${detalle})`
+            : `Error al cargar: ${nombre}.`;
+    }
+
+    function procesarUno(archivo, onDone) {
+        let finalizado = false;
+        function done() {
+            if (finalizado) return;
+            finalizado = true;
+            onDone();
+        }
+
+        if (token !== cargaToken) {
+            done();
+            return;
+        }
 
         const errorArchivo = validarArchivo(archivo);
         if (errorArchivo) {
             advertencias.push(errorArchivo);
-            marcarProcesado();
+            done();
             return;
         }
 
         const reader = new FileReader();
 
         reader.onload = function(event) {
-            if (token !== cargaToken) return;
+            if (token !== cargaToken) {
+                done();
+                return;
+            }
 
             const img = new Image();
             img.src = event.target.result;
 
             img.onload = function() {
-                if (token !== cargaToken) return;
+                if (token !== cargaToken) {
+                    done();
+                    return;
+                }
 
                 previewsGlobal.push({
                     archivo,
@@ -528,28 +599,57 @@ function procesarArchivos(archivos, opciones = {}) {
                     cantidad: 1,
                 });
 
-                // Mantener navegación natural: iniciar/continuar desde la primera página.
+                // Mantener navegacion natural: iniciar/continuar desde la primera pagina.
                 paginaActual = 1;
                 // Render por lotes para evitar stuttering al cargar muchas imagenes.
                 solicitarRenderPaginaActual();
-                marcarProcesado();
+                done();
             };
 
             img.onerror = function() {
-                if (token !== cargaToken) return;
+                if (token !== cargaToken) {
+                    done();
+                    return;
+                }
                 advertencias.push(`No se pudo leer la imagen: ${nombreArchivoSeguro(archivo)}.`);
-                marcarProcesado();
+                done();
             };
         };
 
         reader.onerror = function() {
-            if (token !== cargaToken) return;
-            advertencias.push(`Error al cargar: ${nombreArchivoSeguro(archivo)}.`);
-            marcarProcesado();
+            if (token !== cargaToken) {
+                done();
+                return;
+            }
+            advertencias.push(mensajeErrorLectura(archivo, reader));
+            done();
         };
 
-        reader.readAsDataURL(archivo);
-    });
+        try {
+            reader.readAsDataURL(archivo);
+        } catch (_error) {
+            advertencias.push(`Error al cargar: ${nombreArchivoSeguro(archivo)}.`);
+            done();
+        }
+    }
+
+    function drenarCola() {
+        if (token !== cargaToken) return;
+
+        while (activos < MAX_CONCURRENCIA && cursor < lista.length) {
+            const archivo = lista[cursor];
+            cursor += 1;
+            activos += 1;
+
+            procesarUno(archivo, function() {
+                activos = Math.max(0, activos - 1);
+                marcarProcesado();
+                drenarCola();
+            });
+        }
+    }
+
+    drenarCola();
 }
 
 function eliminarPreview(archivo) {
@@ -668,23 +768,7 @@ if (input) {
 
 if (cancelButton) {
     cancelButton.addEventListener("click", function() {
-        invalidarCargaActual();
-        archivosGlobal = [];
-        window.archivosGlobal = archivosGlobal;
-        previewsGlobal = [];
-        window.previewsGlobal = previewsGlobal;
-        paginaActual = 1;
-        
-        // Limpiar cantidades guardadas en localStorage
-        try {
-            localStorage.removeItem("fotos_cantidades");
-        } catch (e) {
-            console.warn("No se pudo limpiar localStorage:", e);
-        }
-        
-        sincronizarInputFiles();
-        renderizarPaginaActual();
-        mostrarExito("");
+        resetearEstadoImagenes({ conservarMensajes: true });
         mostrarError("Carga cancelada.", true);
         actualizarBarraProgreso(0, 0, ESTADO_CARGA.CANCELLED, "Carga cancelada por el usuario.", true);
     });

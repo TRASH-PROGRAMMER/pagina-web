@@ -24,33 +24,70 @@ const dbReady = new Promise((resolve, reject) => {
 
 // Guardar cliente + fotos: usa FormData -> API Flask -> PostgreSQL
 export async function guardarCliente(formData) {
-    const response = await fetch("/api/clientes", {
-        method: "POST",
-        body: formData
-    });
+    const TIMEOUT_MS = 120000;
+    const MAX_INTENTOS = 2;
+    let ultimoError = null;
 
-    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-    let data = {};
+    for (let intento = 1; intento <= MAX_INTENTOS; intento += 1) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(function() {
+            controller.abort();
+        }, TIMEOUT_MS);
 
-    if (contentType.includes("application/json")) {
-        data = await response.json().catch(function() { return {}; });
-    } else {
-        const text = await response.text().catch(function() { return ""; });
-        data = { error: (text || "").trim() };
-    }
+        try {
+            const response = await fetch("/api/clientes", {
+                method: "POST",
+                body: formData,
+                signal: controller.signal,
+            });
 
-    if (!response.ok) {
-        if (response.status === 413) {
-            throw new Error(data.error || "La carga supera el limite permitido del servidor.");
+            const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+            let data = {};
+
+            if (contentType.includes("application/json")) {
+                data = await response.json().catch(function() { return {}; });
+            } else {
+                const text = await response.text().catch(function() { return ""; });
+                data = { error: (text || "").trim() };
+            }
+
+            if (!response.ok) {
+                const esTransitorio = [502, 503, 504].includes(response.status);
+                if (esTransitorio && intento < MAX_INTENTOS) {
+                    await new Promise(function(resolve) { setTimeout(resolve, 900); });
+                    continue;
+                }
+
+                if (response.status === 413) {
+                    throw new Error(data.error || "La carga supera el limite permitido del servidor.");
+                }
+                throw new Error(data.error || `Error al guardar cliente (HTTP ${response.status})`);
+            }
+
+            if (!data || typeof data !== "object" || !data.cliente) {
+                throw new Error("Respuesta invalida del servidor al guardar el pedido.");
+            }
+
+            return {
+                cliente: data.cliente,
+                mensaje: data.mensaje || "",
+                fallos: Array.isArray(data.fallos) ? data.fallos : [],
+            };
+        } catch (error) {
+            ultimoError = error;
+            if (error && error.name === "AbortError") {
+                throw new Error("El envio tardo demasiado. Revisa tu conexion y vuelve a intentarlo.");
+            }
+
+            if (intento >= MAX_INTENTOS) {
+                throw error;
+            }
+        } finally {
+            clearTimeout(timeoutId);
         }
-        throw new Error(data.error || `Error al guardar cliente (HTTP ${response.status})`);
     }
 
-    if (!data || typeof data !== "object" || !data.cliente) {
-        throw new Error("Respuesta invalida del servidor al guardar el pedido.");
-    }
-
-    return data.cliente;
+    throw ultimoError || new Error("No se pudo guardar el pedido.");
 }
 
 // Eliminar cliente por ID
