@@ -28,6 +28,7 @@
 }
 /* Indicador de scroll vertical tipo mouse para desktop */
 .scroll-mouse-indicator {
+  --scroll-end-fade: 1;
   position: fixed;
   left: 50%;
   bottom: 24px;
@@ -38,17 +39,17 @@
   align-items: center;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 280ms ease, transform 280ms cubic-bezier(.22,1,.36,1);
+  transition: opacity 460ms ease, transform 460ms cubic-bezier(.22,1,.36,1);
 }
 
 .scroll-mouse-indicator.is-visible {
-  opacity: 0.92;
-  transform: translateX(-50%) translateY(0) scale(1);
+  opacity: calc(0.92 * var(--scroll-end-fade));
+  transform: translateX(-50%) translateY(calc((1 - var(--scroll-end-fade)) * 10px)) scale(calc(0.97 + (0.03 * var(--scroll-end-fade))));
 }
 
 .scroll-mouse-indicator.is-hiding {
   opacity: 0;
-  transform: translateX(-50%) translateY(10px) scale(0.97);
+  transform: translateX(-50%) translateY(14px) scale(0.96);
 }
 .scroll-mouse-indicator svg {
   display: block;

@@ -144,20 +144,29 @@
     }
 
     .pasos-carousel-wrap {
-        grid-template-columns: 1fr;
+        grid-template-columns: auto 1fr auto;
         gap: 8px;
     }
 
     .pasos-nav {
-        display: none;
+        display: inline-flex;
+        width: 34px;
+        height: 34px;
+        font-size: 20px;
     }
 
     .pasos-carousel .paso {
-        flex-basis: calc(100% - 4px);
+        flex-basis: 100%;
         font-size: 13px;
         padding: 12px 14px;
         line-height: 1.5;
         min-height: 70px;
+    }
+
+    @media (min-width: 560px) and (max-width: 768px) {
+        .pasos-carousel .paso {
+            flex-basis: calc((100% - 12px) / 2);
+        }
     }
 
     .pasos-dots {

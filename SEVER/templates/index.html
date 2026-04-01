@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Image Manager — sube, organiza e imprime tus fotos en distintos tamaños y papeles fotográficos.">
 <title>Image Manager — Carga e impresión de fotos</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style/style.css', v='20260327f') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='style/reponsive_index.css', v='20260327f') }}" />
-<link rel="stylesheet" href="{{ url_for('static', filename='style/scroll-indicators.css', v='20260331a') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/style.css', v='20260401j') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/reponsive_index.css', v='20260401a') }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='style/scroll-indicators.css', v='20260401b') }}" />
 <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css" />
 </head>
 <body>
@@ -434,7 +434,7 @@
 <script type="module" src="{{ url_for('static', filename='script/autosave_pedido.js', v='20260327b') }}"></script>
 <script type="module" src="{{ url_for('static', filename='script/precios_fotos.js') }}?v=2"></script>
 <script type="module" src="{{ url_for('static', filename='script/seguimiento_pedidos.js', v='20260330d') }}"></script>
-<script src="{{ url_for('static', filename='script/pasos_carousel.js') }}"></script>
+<script src="{{ url_for('static', filename='script/pasos_carousel.js', v='20260401f') }}"></script>
 <script src="{{ url_for('static', filename='script/dark-mode-index.js') }}"></script>
 <script>
 // Dropzone fluida: click y drag&drop
@@ -519,7 +519,7 @@ function mostrarIndicadorScroll(id, visible, mensaje) {
     if (mensaje) el.textContent = mensaje;
 }
 
-function posicionarPildoraSobreElemento(indicador, elemento) {
+function posicionarPildoraSobreElemento(indicador, elemento, preferencia = 'below') {
     if (!indicador || !elemento) return;
     const rect = elemento.getBoundingClientRect();
     const visibleEnViewport = rect.bottom >= 0 && rect.top <= window.innerHeight;
@@ -528,7 +528,10 @@ function posicionarPildoraSobreElemento(indicador, elemento) {
         return;
     }
     const left = Math.min(window.innerWidth - 24, Math.max(24, rect.left + (rect.width / 2)));
-    const top = Math.max(64, Math.min(window.innerHeight - 18, rect.bottom - 8));
+    const topDeseado = preferencia === 'above'
+        ? (rect.top - 18)
+        : (rect.bottom + 16);
+    const top = Math.max(64, Math.min(window.innerHeight - 18, topDeseado));
     indicador.style.left = `${left}px`;
     indicador.style.top = `${top}px`;
 }
@@ -575,7 +578,7 @@ function alternarIndicadorMouse(indicador, mostrar) {
             indicador.style.display = 'none';
             indicador.classList.remove('is-hiding');
         }
-    }, 290);
+    }, 480);
 }
 
 function actualizarIndicadoresMouseGlobales(hayContextualActivo) {
@@ -594,14 +597,21 @@ function actualizarIndicadoresMouseGlobales(hayContextualActivo) {
     const body = document.body;
     const scrollTop = window.pageYOffset || docEl.scrollTop || 0;
     const docHeight = Math.max(docEl.scrollHeight, body ? body.scrollHeight : 0);
+    const distanciaAlFinal = Math.max(0, docHeight - (scrollTop + window.innerHeight));
     const hayScrollVertical = docHeight > window.innerHeight + 8;
     const UMBRAL_OCULTAR_INDICADOR = 80;
-    const estaAlFinal = (scrollTop + window.innerHeight) >= (docHeight - UMBRAL_OCULTAR_INDICADOR);
+    const ZONA_DESVANECIMIENTO = 220;
+    const estaAlFinal = distanciaAlFinal <= UMBRAL_OCULTAR_INDICADOR;
     const puedeSeguirBajando = hayScrollVertical && !estaAlFinal;
     const bloquearGlobales = Boolean(hayContextualActivo);
+    const fadeBase = (distanciaAlFinal - UMBRAL_OCULTAR_INDICADOR) / ZONA_DESVANECIMIENTO;
+    const factorFadeFinal = Math.max(0, Math.min(1, fadeBase));
 
     const mostrarHorizontal = isDesktop && hayOverflowHorizontal && !estaAlFinal && !bloquearGlobales;
     const mostrarVertical = isDesktop && puedeSeguirBajando && !hayOverflowHorizontal && !bloquearGlobales;
+
+    horizontal.style.setProperty('--scroll-end-fade', String(factorFadeFinal));
+    vertical.style.setProperty('--scroll-end-fade', String(factorFadeFinal));
 
     alternarIndicadorMouse(horizontal, mostrarHorizontal);
     alternarIndicadorMouse(vertical, mostrarVertical);
@@ -647,9 +657,14 @@ function scrollGalleryIndicators(estaActiva) {
 function updateCarouselIndicator(estaActiva) {
     const pasosCarousel = document.getElementById('pasosCarousel');
     const carouselIndicator = document.getElementById('carouselScrollIndicator');
+    const pasosTitulo = document.querySelector('.instrucciones-pedido h3');
+    const instruccionesPedido = document.querySelector('.instrucciones-pedido');
     if (!pasosCarousel || !carouselIndicator) return false;
 
     const isOverflow = pasosCarousel.scrollWidth > pasosCarousel.clientWidth + 8;
+    if (instruccionesPedido) {
+        instruccionesPedido.classList.toggle('instrucciones-pedido--con-indicador', isOverflow);
+    }
     const isMobile = window.matchMedia('(max-width: 768px)').matches;
     const mostrar = Boolean(isOverflow && estaActiva);
     mostrarIndicadorScroll(
@@ -658,7 +673,11 @@ function updateCarouselIndicator(estaActiva) {
         isMobile ? 'Desliza para continuar' : 'Usa flechas o desplaza para ver más pasos'
     );
     if (mostrar) {
-        posicionarPildoraSobreElemento(carouselIndicator, pasosCarousel);
+        const tituloRect = pasosTitulo ? pasosTitulo.getBoundingClientRect() : null;
+        const tituloVisible = Boolean(tituloRect && tituloRect.bottom >= 0 && tituloRect.top <= window.innerHeight);
+        const anchor = tituloVisible ? pasosTitulo : pasosCarousel;
+        const preferencia = tituloVisible ? 'below' : 'above';
+        posicionarPildoraSobreElemento(carouselIndicator, anchor, preferencia);
         return true;
     }
     return false;
