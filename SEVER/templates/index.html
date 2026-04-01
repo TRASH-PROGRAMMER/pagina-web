@@ -675,8 +675,9 @@ function updateCarouselIndicator(estaActiva) {
     if (mostrar) {
         const tituloRect = pasosTitulo ? pasosTitulo.getBoundingClientRect() : null;
         const tituloVisible = Boolean(tituloRect && tituloRect.bottom >= 0 && tituloRect.top <= window.innerHeight);
-        const anchor = tituloVisible ? pasosTitulo : pasosCarousel;
-        const preferencia = tituloVisible ? 'below' : 'above';
+        const usarTituloComoAncla = !isMobile && tituloVisible;
+        const anchor = usarTituloComoAncla ? pasosTitulo : pasosCarousel;
+        const preferencia = usarTituloComoAncla ? 'below' : 'above';
         posicionarPildoraSobreElemento(carouselIndicator, anchor, preferencia);
         return true;
     }
