@@ -17,7 +17,8 @@ const previewHelp = document.getElementById("previewHelp");
 const MAX_IMAGENES = 150;
 const MAX_BYTES_POR_ARCHIVO = 10 * 1024 * 1024;
 const TIPOS_VALIDOS = ["image/jpeg", "image/png", "image/gif", "image/pjpeg", "image/jpg"];
-const ITEMS_POR_PAGINA = 10;
+const ITEMS_POR_PAGINA_DESKTOP = 10;
+const ITEMS_POR_PAGINA_MOBILE = 2;
 
 const ESTADO_CARGA = Object.freeze({
     IDLE: "idle",
@@ -40,6 +41,15 @@ let rafRenderPendiente = 0;
 let slowNetworkTimeout = null;
 let lastEstadoCarga = ESTADO_CARGA.IDLE;
 const btnEnviar = document.getElementById("btnVerResumen");
+let ultimoItemsPorPagina = obtenerItemsPorPaginaActual();
+let gestoPaginaActivo = {
+    tracking: false,
+    horizontalDominante: false,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+};
 
 function claveFoto(file) {
     return `${file.name}__${file.size}__${file.lastModified}`;
@@ -58,15 +68,25 @@ function compactarMensajes(mensajes, maxItems = 3) {
 
 function mostrarError(texto, esAdvertencia = false, enCallout = false) {
     if (!errorMessage) return;
-    const mensaje = String(texto || "");
-    errorMessage.textContent = mensaje;
+    const mensaje = String(texto || "").trim();
+    const yaTieneIcono = /^[⚠✖✅❌]/.test(mensaje);
+    const prefijo = esAdvertencia ? "⚠ " : "✖ ";
+    const textoVisible = mensaje
+        ? (yaTieneIcono ? mensaje : `${prefijo}${mensaje}`)
+        : "";
+    errorMessage.textContent = textoVisible;
     errorMessage.classList.toggle("warning-message", !!esAdvertencia);
-    errorMessage.classList.toggle("callout-message", !!enCallout && !!mensaje.trim());
+    errorMessage.classList.toggle("callout-message", !!enCallout && !!mensaje);
 }
 
 function mostrarExito(texto) {
     if (!successMessage) return;
-    successMessage.textContent = String(texto || "");
+    const mensaje = String(texto || "").trim();
+    if (!mensaje) {
+        successMessage.textContent = "";
+        return;
+    }
+    successMessage.textContent = /^[✅]/.test(mensaje) ? mensaje : `✅ ${mensaje}`;
 }
 
 function validarArchivo(archivo) {
@@ -189,6 +209,20 @@ function actualizarBarraProgreso(procesados, total, estado, mensaje, announce = 
     }
 
     actualizarBotonesCarga(estado);
+    actualizarVisibilidadProgreso(estado);
+}
+
+function actualizarVisibilidadProgreso(estado) {
+    if (!progressContainer) return;
+
+    const hayFotos = Array.isArray(archivosGlobal) && archivosGlobal.length > 0;
+    const hayErrorVisible = !!(errorMessage && String(errorMessage.textContent || "").trim());
+    const hayExitoVisible = !!(successMessage && String(successMessage.textContent || "").trim());
+    const mostrarSiempre = estado !== ESTADO_CARGA.IDLE;
+    const mostrar = mostrarSiempre || hayFotos || hayErrorVisible || hayExitoVisible;
+
+    progressContainer.hidden = !mostrar;
+    progressContainer.setAttribute("aria-hidden", mostrar ? "false" : "true");
 }
 
 function emitirImagenesActualizadas() {
@@ -200,8 +234,9 @@ function emitirImagenesActualizadas() {
 }
 
 function emitirGaleriaRenderizada() {
-    const inicio = (paginaActual - 1) * ITEMS_POR_PAGINA;
-    const fin = Math.min(inicio + ITEMS_POR_PAGINA, previewsGlobal.length);
+    const itemsPorPagina = obtenerItemsPorPaginaActual();
+    const inicio = (paginaActual - 1) * itemsPorPagina;
+    const fin = Math.min(inicio + itemsPorPagina, previewsGlobal.length);
 
     document.dispatchEvent(new CustomEvent("galeriaRenderizada", {
         detail: {
@@ -230,7 +265,171 @@ function sincronizarInputFiles() {
 }
 
 function totalPaginas() {
-    return Math.max(1, Math.ceil(previewsGlobal.length / ITEMS_POR_PAGINA));
+    const itemsPorPagina = obtenerItemsPorPaginaActual();
+    return Math.max(1, Math.ceil(previewsGlobal.length / itemsPorPagina));
+}
+
+function obtenerItemsPorPaginaActual() {
+    return esVistaMovilTactil() ? ITEMS_POR_PAGINA_MOBILE : ITEMS_POR_PAGINA_DESKTOP;
+}
+
+function esVistaMovilTactil() {
+    const anchoMovil = window.matchMedia("(max-width: 820px)").matches;
+    const pointerCoarse = window.matchMedia("(pointer: coarse)").matches;
+    const sinHover = window.matchMedia("(hover: none)").matches;
+    const touchPoints = Number(navigator.maxTouchPoints || 0) > 0;
+    return anchoMovil || ((pointerCoarse || touchPoints) && sinHover);
+}
+
+function adaptarCopyDropzonePorDispositivo() {
+    const dropzoneBox = document.getElementById("dropzoneBox");
+    const dropzoneText = dropzoneBox ? dropzoneBox.querySelector(".dropzone-text") : null;
+    const dropzoneSub = dropzoneBox ? dropzoneBox.querySelector(".dropzone-sub") : null;
+    const ayudaInput = document.getElementById("inputImagenesHelp");
+
+    const movil = esVistaMovilTactil();
+    if (dropzoneText) {
+        dropzoneText.textContent = movil
+            ? "Toca aquí para seleccionar tus fotos"
+            : "Arrastra tus fotos o haz clic aquí";
+    }
+    if (dropzoneSub) {
+        dropzoneSub.textContent = movil
+            ? "Toca para elegir PNG, JPG o GIF. Máximo 150 imágenes, 10 MB por archivo."
+            : "Formatos: PNG, JPG, GIF — Máximo 150 imágenes, 10 MB por archivo.";
+    }
+    if (dropzoneBox) {
+        dropzoneBox.setAttribute(
+            "aria-label",
+            movil
+                ? "Toca aquí para seleccionar tus fotos"
+                : "Arrastra tus fotos o haz clic aquí para seleccionar"
+        );
+    }
+    if (ayudaInput) {
+        ayudaInput.textContent = movil
+            ? "Toca para elegir tus fotos. Formatos: PNG, JPG, GIF. Máximo 150 imágenes, 10 MB por archivo."
+            : "Formatos: PNG, JPG, GIF — Máximo 150 imágenes, 10 MB por archivo.";
+    }
+}
+
+function puedeNavegarPorGesto() {
+    return esVistaMovilTactil() && totalPaginas() > 1 && previewsGlobal.length > 0;
+}
+
+function animarCambioPaginaPorGesto(direccion) {
+    if (!container || typeof container.animate !== "function") return;
+    const fromX = direccion === "next" ? 22 : -22;
+    container.animate([
+        { opacity: 0.88, transform: `translateX(${fromX}px)` },
+        { opacity: 1, transform: "translateX(0)" },
+    ], {
+        duration: 180,
+        easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+    });
+}
+
+function irAPaginaPorGesto(delta) {
+    const paginaObjetivo = Math.max(1, Math.min(totalPaginas(), paginaActual + delta));
+    if (paginaObjetivo === paginaActual) return;
+
+    const direccion = delta > 0 ? "next" : "prev";
+    paginaActual = paginaObjetivo;
+    renderizarPaginaActual();
+    animarCambioPaginaPorGesto(direccion);
+}
+
+function esElementoInteractivoParaGesto(target) {
+    if (!target || !(target instanceof Element)) return false;
+    return Boolean(target.closest("button, input, select, textarea, a, label, .cantidad-selector"));
+}
+
+function reiniciarGestoPagina() {
+    gestoPaginaActivo = {
+        tracking: false,
+        horizontalDominante: false,
+        startX: 0,
+        startY: 0,
+        lastX: 0,
+        lastY: 0,
+    };
+}
+
+function configurarGestosMovilesPaginacion() {
+    if (!container) return;
+
+    container.addEventListener("touchstart", function(event) {
+        if (!puedeNavegarPorGesto()) {
+            reiniciarGestoPagina();
+            return;
+        }
+        if (!event.touches || event.touches.length !== 1) {
+            reiniciarGestoPagina();
+            return;
+        }
+        if (esElementoInteractivoParaGesto(event.target)) {
+            reiniciarGestoPagina();
+            return;
+        }
+
+        const touch = event.touches[0];
+        gestoPaginaActivo.tracking = true;
+        gestoPaginaActivo.horizontalDominante = false;
+        gestoPaginaActivo.startX = touch.clientX;
+        gestoPaginaActivo.startY = touch.clientY;
+        gestoPaginaActivo.lastX = touch.clientX;
+        gestoPaginaActivo.lastY = touch.clientY;
+    }, { passive: true });
+
+    container.addEventListener("touchmove", function(event) {
+        if (!gestoPaginaActivo.tracking || !event.touches || event.touches.length !== 1) return;
+
+        const touch = event.touches[0];
+        gestoPaginaActivo.lastX = touch.clientX;
+        gestoPaginaActivo.lastY = touch.clientY;
+
+        const dx = gestoPaginaActivo.lastX - gestoPaginaActivo.startX;
+        const dy = gestoPaginaActivo.lastY - gestoPaginaActivo.startY;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+
+        if (!gestoPaginaActivo.horizontalDominante && absDx > 12 && absDx > (absDy + 4)) {
+            gestoPaginaActivo.horizontalDominante = true;
+        }
+
+        if (gestoPaginaActivo.horizontalDominante && absDx > absDy) {
+            // Evita que el navegador interprete el gesto como scroll vertical
+            // mientras se cambia de pagina horizontalmente.
+            event.preventDefault();
+        }
+    }, { passive: false });
+
+    container.addEventListener("touchend", function() {
+        if (!gestoPaginaActivo.tracking) {
+            reiniciarGestoPagina();
+            return;
+        }
+
+        const dx = gestoPaginaActivo.lastX - gestoPaginaActivo.startX;
+        const dy = gestoPaginaActivo.lastY - gestoPaginaActivo.startY;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+
+        const UMBRAL_SWIPE_X = 56;
+        const razonHorizontal = absDy === 0 ? absDx : absDx / absDy;
+        const esSwipeHorizontal = absDx >= UMBRAL_SWIPE_X && razonHorizontal >= 1.2;
+
+        if (esSwipeHorizontal) {
+            // dx < 0: dedo va a la izquierda => siguiente pagina
+            irAPaginaPorGesto(dx < 0 ? 1 : -1);
+        }
+
+        reiniciarGestoPagina();
+    }, { passive: true });
+
+    container.addEventListener("touchcancel", function() {
+        reiniciarGestoPagina();
+    }, { passive: true });
 }
 
 function actualizarMensajeVistaPrevia() {
@@ -241,8 +440,9 @@ function actualizarMensajeVistaPrevia() {
         return;
     }
 
-    const inicio = (paginaActual - 1) * ITEMS_POR_PAGINA + 1;
-    const fin = Math.min(inicio + ITEMS_POR_PAGINA - 1, previewsGlobal.length);
+    const itemsPorPagina = obtenerItemsPorPaginaActual();
+    const inicio = (paginaActual - 1) * itemsPorPagina + 1;
+    const fin = Math.min(inicio + itemsPorPagina - 1, previewsGlobal.length);
     previewHelp.textContent = `Vista previa de imagenes: mostrando ${inicio}-${fin} de ${previewsGlobal.length}.`;
 }
 
@@ -252,8 +452,14 @@ function actualizarControlesPaginacion() {
         paginaActual = total;
     }
 
+    const totalFotos = previewsGlobal.length;
+    const itemsPorPagina = obtenerItemsPorPaginaActual();
+    const mostrarPaginacion = totalFotos > itemsPorPagina;
+
     if (paginationContainer) {
-        paginationContainer.hidden = previewsGlobal.length <= ITEMS_POR_PAGINA;
+        paginationContainer.hidden = !mostrarPaginacion;
+        paginationContainer.setAttribute("aria-hidden", mostrarPaginacion ? "false" : "true");
+        paginationContainer.style.display = mostrarPaginacion ? "flex" : "none";
     }
 
     if (pageInfo) {
@@ -273,8 +479,9 @@ function renderizarPaginaActual() {
     if (!container) return;
     container.innerHTML = "";
 
-    const inicio = (paginaActual - 1) * ITEMS_POR_PAGINA;
-    const fin = inicio + ITEMS_POR_PAGINA;
+    const itemsPorPagina = obtenerItemsPorPaginaActual();
+    const inicio = (paginaActual - 1) * itemsPorPagina;
+    const fin = inicio + itemsPorPagina;
     const pagina = previewsGlobal.slice(inicio, fin);
 
     pagina.forEach(function(item) {
@@ -834,6 +1041,19 @@ if (nextPageButton) {
         }
     });
 }
+
+configurarGestosMovilesPaginacion();
+adaptarCopyDropzonePorDispositivo();
+
+window.addEventListener("resize", function() {
+    adaptarCopyDropzonePorDispositivo();
+    const itemsActuales = obtenerItemsPorPaginaActual();
+    if (itemsActuales !== ultimoItemsPorPagina) {
+        ultimoItemsPorPagina = itemsActuales;
+        paginaActual = Math.max(1, Math.min(totalPaginas(), paginaActual));
+        renderizarPaginaActual();
+    }
+});
 
 sincronizarInputFiles();
 renderizarPaginaActual();

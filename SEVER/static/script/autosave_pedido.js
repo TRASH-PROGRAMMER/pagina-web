@@ -454,16 +454,14 @@ if (form) {
             })
             .filter(function(item) { return item.fotoKey && item.tamano; });
 
-        const files = inputImagenes && inputImagenes.files
-            ? Array.from(inputImagenes.files).map(function(file) {
+        const files = obtenerFotosActualesParaAutosave().map(function(file) {
                 return {
                     name: file.name,
                     size: file.size,
                     type: file.type,
                     lastModified: file.lastModified,
                 };
-            })
-            : [];
+            });
 
         return {
             schemaVersion: 1,
@@ -526,8 +524,42 @@ if (form) {
     }
 
     function hayArchivosSeleccionados() {
+        return obtenerFotosActualesParaAutosave().length > 0;
+    }
+
+    function obtenerFotosActualesParaAutosave() {
         const inputImagenes = document.getElementById("inputImagenes");
-        return !!(inputImagenes && inputImagenes.files && inputImagenes.files.length > 0);
+        const desdeInput = inputImagenes && inputImagenes.files
+            ? Array.from(inputImagenes.files)
+            : [];
+
+        if (desdeInput.length > 0) {
+            return desdeInput;
+        }
+
+        const desdeGlobal = Array.isArray(window.archivosGlobal)
+            ? window.archivosGlobal.filter(function(file) {
+                return file
+                    && typeof file.name === "string"
+                    && Number.isFinite(Number(file.size));
+            })
+            : [];
+
+        if (desdeGlobal.length > 0) {
+            return desdeGlobal;
+        }
+
+        const desdePreviews = Array.isArray(window.previewsGlobal)
+            ? window.previewsGlobal
+                .map(function(item) { return item && item.archivo ? item.archivo : null; })
+                .filter(function(file) {
+                    return file
+                        && typeof file.name === "string"
+                        && Number.isFinite(Number(file.size));
+                })
+            : [];
+
+        return desdePreviews;
     }
 
     function valorCampo(id) {

@@ -12,6 +12,7 @@ Jinja2==3.1.6
 MarkupSafe==3.0.3
 psycopg==3.3.3
 psycopg-binary==3.3.3
+Pillow==10.4.0
 python-dotenv==1.2.2
 six==1.17.0
 SQLAlchemy==2.0.47

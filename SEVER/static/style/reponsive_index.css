@@ -144,19 +144,24 @@
     }
 
     .pasos-carousel-wrap {
-        grid-template-columns: auto 1fr auto;
-        gap: 8px;
+        grid-template-columns: 1fr;
+        gap: 6px;
     }
 
     .pasos-nav {
-        display: inline-flex;
-        width: 34px;
-        height: 34px;
-        font-size: 20px;
+        display: none !important;
+    }
+
+    .pasos-carousel {
+        touch-action: pan-x;
+        overscroll-behavior-x: contain;
+        scroll-snap-type: x proximity;
+        scroll-padding-inline: 8px;
+        padding-inline: 2px;
     }
 
     .pasos-carousel .paso {
-        flex-basis: 100%;
+        flex-basis: calc(100% - 44px);
         font-size: 13px;
         padding: 12px 14px;
         line-height: 1.5;
@@ -165,7 +170,7 @@
 
     @media (min-width: 560px) and (max-width: 768px) {
         .pasos-carousel .paso {
-            flex-basis: calc((100% - 12px) / 2);
+            flex-basis: calc((100% - 24px) / 1.2);
         }
     }
 
@@ -181,6 +186,32 @@
 
     .pasos-dot[aria-selected="true"] {
         width: 32px;
+    }
+
+    .cantidad-selector__btn {
+        width: 42px;
+        height: 42px;
+        font-size: 24px;
+    }
+
+    .cantidad-selector__input {
+        width: 54px;
+        height: 36px;
+        border-radius: 10px;
+        background: rgba(8, 145, 178, 0.08);
+        font-size: 18px;
+    }
+
+    .delete-image-button {
+        width: 44px;
+        height: 44px;
+        top: 10px;
+        right: 10px;
+    }
+
+    .pasos-carousel-hint {
+        font-size: 0.86rem;
+        padding: 4px 10px;
     }
 
     /* Choice chips solo en móvil */

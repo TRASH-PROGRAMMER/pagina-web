@@ -4,6 +4,7 @@
     const nextBtn = document.getElementById("pasosNext");
     const dotsWrap = document.getElementById("pasosDots");
     const live = document.getElementById("pasoActualLive");
+    const hint = document.getElementById("pasosCarouselHint");
 
     if (!carousel || !prevBtn || !nextBtn || !dotsWrap) return;
 
@@ -16,9 +17,62 @@
     let rafId = null;
     let bloqueoInicioActivo = true;
     let timerVigilanciaInicio = null;
+    const HINT_DISMISS_KEY = "pasosCarouselHintDismissed";
 
     function clamp(value, min, max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    function esVistaMovil() {
+        const anchoMovil = window.matchMedia("(max-width: 820px)").matches;
+        const pointerCoarse = window.matchMedia("(pointer: coarse)").matches;
+        const sinHover = window.matchMedia("(hover: none)").matches;
+        const touchPoints = Number(navigator.maxTouchPoints || 0) > 0;
+        return anchoMovil || ((pointerCoarse || touchPoints) && sinHover);
+    }
+
+    function actualizarHint() {
+        if (!hint) return;
+        const hayOverflow = carousel.scrollWidth > carousel.clientWidth + 8;
+        const modoMovil = esVistaMovil();
+        let hintDescartado = false;
+        if (modoMovil) {
+            try {
+                hintDescartado = sessionStorage.getItem(HINT_DISMISS_KEY) === "1";
+            } catch (_error) {
+                hintDescartado = false;
+            }
+        }
+        const texto = esVistaMovil()
+            ? "Desliza para continuar"
+            : "Usa las flechas para navegar";
+        hint.textContent = texto;
+        hint.hidden = !hayOverflow || hintDescartado;
+    }
+
+    function ocultarHintTrasInteraccionMovil() {
+        if (!esVistaMovil()) return;
+        try {
+            sessionStorage.setItem(HINT_DISMISS_KEY, "1");
+        } catch (_error) {
+            // Ignorar si sessionStorage no esta disponible.
+        }
+        actualizarHint();
+    }
+
+    function aplicarModoNavegacion() {
+        const modoMovil = esVistaMovil();
+        [prevBtn, nextBtn].forEach(function(btn) {
+            btn.hidden = modoMovil;
+            btn.setAttribute("aria-hidden", modoMovil ? "true" : "false");
+            btn.tabIndex = modoMovil ? -1 : 0;
+        });
+
+        if (dotsWrap) {
+            dotsWrap.setAttribute("aria-label", modoMovil ? "Progreso de pasos" : "Navegar entre pasos");
+        }
+
+        actualizarHint();
     }
 
     function indexMasCercano() {
@@ -159,6 +213,7 @@
         visibleCount = obtenerVisibleCount();
         currentPage = paginaMasCercana();
         const paginas = totalPaginas();
+        const modoMovil = esVistaMovil();
 
         prevBtn.disabled = currentPage <= 0;
         nextBtn.disabled = currentPage >= paginas - 1;
@@ -166,8 +221,15 @@
         dots.forEach(function (dot, i) {
             const activo = i === currentPage;
             dot.setAttribute("aria-selected", activo ? "true" : "false");
-            dot.setAttribute("tabindex", activo ? "0" : "-1");
+            dot.setAttribute("tabindex", modoMovil ? "-1" : (activo ? "0" : "-1"));
+            if (modoMovil) {
+                dot.setAttribute("aria-disabled", "true");
+            } else {
+                dot.removeAttribute("aria-disabled");
+            }
         });
+
+        aplicarModoNavegacion();
 
         if (live) {
             const inicio = (currentPage * visibleCount) + 1;
@@ -177,6 +239,9 @@
     }
 
     function onScroll() {
+        if (carousel.scrollLeft > 10) {
+            ocultarHintTrasInteraccionMovil();
+        }
         if (rafId) {
             cancelAnimationFrame(rafId);
         }
@@ -201,11 +266,13 @@
             dot.setAttribute("tabindex", i === 0 ? "0" : "-1");
 
             dot.addEventListener("click", function () {
+                if (esVistaMovil()) return;
                 marcarInteraccionUsuario();
                 irAPagina(i, "smooth");
             });
 
             dot.addEventListener("keydown", function (event) {
+                if (esVistaMovil()) return;
                 if (event.key === "ArrowRight") {
                     event.preventDefault();
                     irAPagina(i + 1, "smooth");
@@ -262,10 +329,14 @@
         }
         irAPagina(clamp(paginaAnterior, 0, totalPaginas() - 1), "auto");
         actualizarEstado();
+        aplicarModoNavegacion();
     });
 
     ["pointerdown", "touchstart", "wheel", "mousedown"].forEach(function (evt) {
-        carousel.addEventListener(evt, marcarInteraccionUsuario, { passive: true });
+        carousel.addEventListener(evt, function () {
+            marcarInteraccionUsuario();
+            ocultarHintTrasInteraccionMovil();
+        }, { passive: true });
     });
 
     window.addEventListener("pageshow", function () {
@@ -278,6 +349,7 @@
 
     visibleCount = obtenerVisibleCount();
     crearDots();
+    aplicarModoNavegacion();
     forzarInicioPrimerGrupo();
     // Segunda pasada corta por si cambian anchos tras fuentes/paint inicial.
     requestAnimationFrame(function () {

@@ -105,6 +105,11 @@ const toggleAsignacionFotos = document.getElementById("toggleAsignacionFotos");
 const opcionesPapelGroup = document.querySelector(".opciones-papel");
 const papelHelp = document.getElementById("papelHelp");
 const previewContainer = document.getElementById("previewContainer");
+const pasoTamanoSection = document.getElementById("pasoTamano");
+const pasoPapelSection = document.getElementById("pasoPapel");
+const pasoDatosSection = document.getElementById("pasoDatos");
+const pedidoFlowGuideTitle = document.getElementById("pedidoFlowGuideTitle");
+const pedidoFlowGuideText = document.getElementById("pedidoFlowGuideText");
 const pedidoSpinnerOverlay = document.getElementById("pedidoSpinnerOverlay");
 const pedidoSpinnerText = pedidoSpinnerOverlay
     ? pedidoSpinnerOverlay.querySelector(".pedido-spinner-text")
@@ -139,6 +144,53 @@ const pedidoExitoMasFotos = document.getElementById("pedidoExitoMasFotos");
 const asignacionesPorFoto = new Map();
 const edicionesPorFoto = new Map();
 const previewUrlPorFoto = new Map();
+window.fotosSubidasEnSegundoPlano = new Map();
+let uploadQueue = [];
+let uploadInProgress = 0;
+const MAX_CONCURRENT = 3;
+
+async function procesarSubidasBackground() {
+    if (uploadQueue.length === 0 || uploadInProgress >= MAX_CONCURRENT) return;
+    
+    // Extraer siguiente archivo de la cola
+    const item = uploadQueue.shift();
+    uploadInProgress++;
+    
+    try {
+        const fileFinal = await construirArchivoFinal(item.file);
+        const formDataBg = new FormData();
+        formDataBg.append("foto", fileFinal);
+        
+        // Usar draftKey para organizar la sesión
+        const draftUrlParam = window.location.pathname.split("/").pop() || "temp_" + Date.now();
+        formDataBg.append("draftKey", draftUrlParam);
+        
+        const res = await fetch("/api/upload-temporal", {
+            method: "POST",
+            body: formDataBg
+        });
+        
+        if (res.ok) {
+            const data = await res.json();
+            window.fotosSubidasEnSegundoPlano.set(item.key, {
+                secure_url: data.secure_url,
+                public_id: data.public_id,
+            });
+            
+            // Remover skeleton
+            const cardUI = document.querySelector(`.card[data-foto-key="${item.key}"]`);
+            if (cardUI) {
+                cardUI.classList.remove("skeleton");
+                cardUI.style.border = "2px solid #65b4f1";
+            }
+        }
+    } catch(e) {
+        console.warn("Error background upload:", e);
+    } finally {
+        uploadInProgress--;
+        procesarSubidasBackground();
+    }
+}
 const frameCatalogoBase = [
     { value: "none", label: "🚫 Ninguno" },
     { value: "polaroid", label: "📸 Polaroid" },
@@ -176,6 +228,11 @@ const estadoInteraccionValidacion = {
     },
 };
 
+const estadoInteraccionFlujo = {
+    tamano: false,
+    papel: false,
+};
+
 const nombreApellidoRegex = /^(?=.{2,60}$)[A-Za-zÀ-ÖØ-öø-ÿÑñ]+(?:[ '’-][A-Za-zÀ-ÖØ-öø-ÿÑñ]+)*$/;
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const phoneLocalRegex = /^\d{6,12}$/;
@@ -193,6 +250,134 @@ btnEnviar.disabled = false;
 
 function usaAsignacionPorFoto() {
     return !!(toggleAsignacionFotos && toggleAsignacionFotos.checked);
+}
+
+function setPasoVisible(seccion, visible) {
+    if (!seccion) return;
+
+    if (visible) {
+        if (seccion.hidden) {
+            seccion.hidden = false;
+        }
+        seccion.setAttribute("aria-hidden", "false");
+        requestAnimationFrame(function() {
+            seccion.classList.add("paso-seccion-visible");
+        });
+        return;
+    }
+
+    seccion.setAttribute("aria-hidden", "true");
+    seccion.classList.remove("paso-seccion-visible");
+
+    window.setTimeout(function() {
+        if (seccion.getAttribute("aria-hidden") === "true") {
+            seccion.hidden = true;
+        }
+    }, 230);
+}
+
+function tamanoPasoCompletado() {
+    const fotosActuales = obtenerFotosActuales();
+    if (fotosActuales.length === 0) return false;
+
+    if (usaAsignacionPorFoto()) {
+        return fotosActuales.every(function(file) {
+            return !!asignacionesPorFoto.get(claveFoto(file));
+        });
+    }
+
+    return !!(tamanoSelect && tamanoSelect.selectedOptions && tamanoSelect.selectedOptions.length > 0);
+}
+
+function marcarInteraccionFlujo(paso) {
+    if (!Object.prototype.hasOwnProperty.call(estadoInteraccionFlujo, paso)) return;
+    estadoInteraccionFlujo[paso] = true;
+}
+
+function reiniciarInteraccionFlujo() {
+    estadoInteraccionFlujo.tamano = false;
+    estadoInteraccionFlujo.papel = false;
+}
+
+function pasoHabilitado(seccion) {
+    if (!seccion) return false;
+    return String(seccion.dataset.stepDisabled || "").toLowerCase() !== "true";
+}
+
+function construirPasosFlujo(tieneFotos, tamanoCompletoInteractivo, papelCompletoInteractivo) {
+    const pasos = [
+        {
+            key: "fotos",
+            completed: tieneFotos,
+            texto: "Selecciona tus fotos para empezar.",
+        },
+    ];
+
+    if (pasoHabilitado(pasoTamanoSection)) {
+        pasos.push({
+            key: "tamano",
+            completed: tamanoCompletoInteractivo,
+            texto: usaAsignacionPorFoto()
+                ? "Asigna un tamano a cada foto para continuar."
+                : "Elige el tamano de impresion para tus fotos.",
+        });
+    }
+
+    if (pasoHabilitado(pasoPapelSection)) {
+        pasos.push({
+            key: "papel",
+            completed: papelCompletoInteractivo,
+            texto: "Selecciona el tipo de papel.",
+        });
+    }
+
+    if (pasoHabilitado(pasoDatosSection)) {
+        pasos.push({
+            key: "datos",
+            completed: false,
+            texto: "Completa tus datos personales y revisa el pedido.",
+        });
+    }
+
+    return pasos;
+}
+
+function actualizarFlujoGuiadoPedido() {
+    const totalFotos = obtenerFotosActuales().length;
+    const miniaturasVisibles = previewContainer
+        ? previewContainer.querySelectorAll(".card").length
+        : 0;
+    const tieneFotos = totalFotos > 0 && miniaturasVisibles > 0;
+
+    if (!tieneFotos) {
+        reiniciarInteraccionFlujo();
+    }
+
+    const tamanoCompleto = tamanoPasoCompletado();
+    const tamanoCompletoInteractivo = tamanoCompleto && estadoInteraccionFlujo.tamano;
+    const tienePapel = !!document.querySelector('input[name="papel"]:checked');
+    const papelCompletoInteractivo = tienePapel && estadoInteraccionFlujo.papel;
+
+    setPasoVisible(pasoTamanoSection, tieneFotos);
+    setPasoVisible(pasoPapelSection, tieneFotos && tamanoCompletoInteractivo);
+    setPasoVisible(pasoDatosSection, tieneFotos && tamanoCompletoInteractivo && papelCompletoInteractivo);
+
+    if (!pedidoFlowGuideTitle || !pedidoFlowGuideText) return;
+
+    const pasos = construirPasosFlujo(tieneFotos, tamanoCompletoInteractivo, papelCompletoInteractivo);
+    const totalPasos = Math.max(1, pasos.length);
+    let idxActual = pasos.findIndex(function(paso) {
+        return !paso.completed;
+    });
+    if (idxActual < 0) {
+        idxActual = totalPasos - 1;
+    }
+    const pasoActual = pasos[idxActual] || pasos[0];
+
+    pedidoFlowGuideTitle.textContent = `Paso ${idxActual + 1} de ${totalPasos}`;
+    pedidoFlowGuideText.textContent = pasoActual
+        ? pasoActual.texto
+        : "Completa tus datos personales y revisa el pedido.";
 }
 
 function actualizarVisibilidadAsignacion() {
@@ -344,7 +529,7 @@ function obtenerEstadoValidacion() {
     const MAX_IMAGE_BYTES_PER_FILE = 10 * 1024 * 1024; // 10 MB
     const LIMITE_MB = Math.floor(MAX_IMAGE_BYTES_PER_FILE / (1024 * 1024));
 
-    const fotos = Array.from(inputImagenes.files || []);
+    const fotos = obtenerFotosActuales();
     let fotosValidas = false;
     let fotosError = "";
 
@@ -547,8 +732,70 @@ function claveFoto(file) {
     return `${file.name}__${file.size}__${file.lastModified}`;
 }
 
+function etiquetaFotoVisible(file, index) {
+    const nombre = file && typeof file.name === "string" ? file.name.trim() : "";
+    return nombre || `Foto ${index + 1}`;
+}
+
+function esArchivoCargadoValido(file) {
+    return !!(
+        file
+        && typeof file.name === "string"
+        && Number.isFinite(Number(file.size))
+        && Number(file.size) > 0
+    );
+}
+
+function obtenerFotosGlobalesConFallback() {
+    const desdeGlobal = Array.isArray(window.archivosGlobal)
+        ? window.archivosGlobal.filter(esArchivoCargadoValido)
+        : [];
+    if (desdeGlobal.length > 0) return desdeGlobal;
+
+    const desdePreviews = Array.isArray(window.previewsGlobal)
+        ? window.previewsGlobal
+            .map(function(item) { return item && item.archivo ? item.archivo : null; })
+            .filter(esArchivoCargadoValido)
+        : [];
+
+    return desdePreviews;
+}
+
+function sincronizarInputConEstadoGlobalSiHaceFalta() {
+    if (!inputImagenes || !window.DataTransfer) return;
+    const inputCount = inputImagenes.files ? inputImagenes.files.length : 0;
+    if (inputCount > 0) return;
+
+    const respaldo = obtenerFotosGlobalesConFallback();
+    if (respaldo.length === 0) return;
+
+    try {
+        const dt = new DataTransfer();
+        respaldo.forEach(function(file) {
+            dt.items.add(file);
+        });
+        inputImagenes.files = dt.files;
+    } catch (_error) {
+        // Fallback silencioso: la validacion usa respaldo global aunque no se pueda escribir en input.files.
+    }
+}
+
+function obtenerFotosActuales() {
+    sincronizarInputConEstadoGlobalSiHaceFalta();
+
+    const desdeInput = inputImagenes && inputImagenes.files
+        ? Array.from(inputImagenes.files)
+        : [];
+
+    if (desdeInput.length > 0) {
+        return desdeInput;
+    }
+
+    return obtenerFotosGlobalesConFallback();
+}
+
 function obtenerArchivoPorKey(key) {
-    return Array.from(inputImagenes.files || []).find(function(file) {
+    return obtenerFotosActuales().find(function(file) {
         return claveFoto(file) === key;
     }) || null;
 }
@@ -570,7 +817,7 @@ function limpiarEdicionFoto(key) {
 }
 
 function depurarRecursosDeFotos() {
-    const vigentes = new Set(Array.from(inputImagenes.files || []).map(claveFoto));
+    const vigentes = new Set(obtenerFotosActuales().map(claveFoto));
 
     Array.from(previewUrlPorFoto.keys()).forEach(function(key) {
         if (!vigentes.has(key)) {
@@ -984,7 +1231,7 @@ async function aplicarMarcoABlob(baseBlob, frameValue, tipoMime) {
 }
 
 function aplicarMarcoATodasLasFotos(frameValue) {
-    Array.from(inputImagenes.files || []).forEach(function(file) {
+    obtenerFotosActuales().forEach(function(file) {
         const key = claveFoto(file);
         const prevEdit = edicionesPorFoto.get(key);
 
@@ -1024,7 +1271,7 @@ function sincronizarTamanoBaseEnAsignacion(sobrescribirTodo = false) {
     const tamanoBase = obtenerTamanoBaseSeleccionado();
     if (!tamanoBase) return;
 
-    Array.from(inputImagenes.files || []).forEach(function(file) {
+    obtenerFotosActuales().forEach(function(file) {
         const key = claveFoto(file);
         if (sobrescribirTodo || !asignacionesPorFoto.has(key)) {
             asignacionesPorFoto.set(key, tamanoBase);
@@ -1118,7 +1365,7 @@ function emitirAsignacionesActualizadas() {
 function renderAsignacionesFotos() {
     if (!previewContainer) return;
 
-    const files = Array.from(inputImagenes.files || []);
+    const files = obtenerFotosActuales();
     const clavesActuales = new Set(files.map(claveFoto));
     const filesPorClave = new Map(files.map(function(file, index) {
         return [claveFoto(file), { file, index }];
@@ -1213,14 +1460,25 @@ function renderAsignacionesFotos() {
             select.value = seleccion;
         }
 
-        select.addEventListener("change", function() {
+        select.addEventListener("change", function(event) {
             if (select.value) {
                 asignacionesPorFoto.set(key, select.value);
             } else {
                 asignacionesPorFoto.delete(key);
             }
+            if (event && event.isTrusted) {
+                marcarInteraccionFlujo("tamano");
+            }
+            actualizarFlujoGuiadoPedido();
             emitirAsignacionesActualizadas();
             validarFormulario();
+        });
+
+        select.addEventListener("focus", function(event) {
+            if (event && event.isTrusted) {
+                marcarInteraccionFlujo("tamano");
+                actualizarFlujoGuiadoPedido();
+            }
         });
 
         select.addEventListener("blur", function() {
@@ -1545,17 +1803,39 @@ if (prefijoPaisSelect) {
     });
 }
 
-inputImagenes.addEventListener("change", validarFormulario);
+inputImagenes.addEventListener("change", function(e) {
+    validarFormulario();
+    if(inputImagenes.files) {
+        Array.from(inputImagenes.files).forEach(file => {
+             const k = claveFoto(file);
+             if(!window.fotosSubidasEnSegundoPlano.has(k)) {
+                 // Add subtle overlay indicator while uploading
+                 uploadQueue.push({key: k, file: file});
+                 setTimeout(() => {
+                     const cardUI = document.querySelector(`.card[data-foto-key="${k}"]`);
+                     if (cardUI && !window.fotosSubidasEnSegundoPlano.has(k)) {
+                         cardUI.classList.add("skeleton");
+                     }
+                 }, 100);
+             }
+        });
+        procesarSubidasBackground();
+    }
+});
 inputImagenes.addEventListener("blur", function() {
     marcarBlurCampo("fotos");
     validarFormulario();
 });
 
-tamanoSelect.addEventListener("change", function() {
+tamanoSelect.addEventListener("change", function(event) {
+    if (event && event.isTrusted) {
+        marcarInteraccionFlujo("tamano");
+    }
     sincronizarTamanoBaseEnAsignacion(false);
     actualizarIndicadorTamanoBase();
     renderTamanoChips();
     renderAsignacionesFotos();
+    actualizarFlujoGuiadoPedido();
     validarFormulario();
 });
 tamanoSelect.addEventListener("blur", function() {
@@ -1563,7 +1843,21 @@ tamanoSelect.addEventListener("blur", function() {
     validarFormulario();
 });
 
+tamanoSelect.addEventListener("focus", function(event) {
+    if (event && event.isTrusted) {
+        marcarInteraccionFlujo("tamano");
+        actualizarFlujoGuiadoPedido();
+    }
+});
+
 if (tamanoChipsContainer) {
+    tamanoChipsContainer.addEventListener("click", function(event) {
+        if (event && event.isTrusted) {
+            marcarInteraccionFlujo("tamano");
+            actualizarFlujoGuiadoPedido();
+        }
+    });
+
     tamanoChipsContainer.addEventListener("focusout", function(event) {
         const siguiente = event.relatedTarget;
         if (siguiente && tamanoChipsContainer.contains(siguiente)) {
@@ -1575,7 +1869,19 @@ if (tamanoChipsContainer) {
 }
 
 document.querySelectorAll('input[name="papel"]').forEach(radio => {
-    radio.addEventListener("change", validarFormulario);
+    radio.addEventListener("change", function(event) {
+        if (event && event.isTrusted) {
+            marcarInteraccionFlujo("papel");
+        }
+        actualizarFlujoGuiadoPedido();
+        validarFormulario();
+    });
+    radio.addEventListener("focus", function(event) {
+        if (event && event.isTrusted) {
+            marcarInteraccionFlujo("papel");
+            actualizarFlujoGuiadoPedido();
+        }
+    });
     radio.addEventListener("blur", function() {
         const activo = document.activeElement;
         if (activo && activo.getAttribute && activo.getAttribute("name") === "papel") {
@@ -1599,7 +1905,12 @@ if (opcionesPapelGroup) {
 
 document.addEventListener("imagenesActualizadas", function() {
     sincronizarTamanoBaseEnAsignacion(false);
+    actualizarFlujoGuiadoPedido();
     validarFormulario();
+});
+
+document.addEventListener("asignacionesTamanosActualizadas", function() {
+    actualizarFlujoGuiadoPedido();
 });
 
 document.addEventListener("galeriaRenderizada", function() {
@@ -1608,9 +1919,11 @@ document.addEventListener("galeriaRenderizada", function() {
 
 if (toggleAsignacionFotos) {
     toggleAsignacionFotos.addEventListener("change", function() {
+        estadoInteraccionFlujo.tamano = false;
         actualizarVisibilidadAsignacion();
         sincronizarTamanoBaseEnAsignacion(false);
         renderAsignacionesFotos();
+        actualizarFlujoGuiadoPedido();
         validarFormulario();
     });
 }
@@ -1620,6 +1933,7 @@ window.usaAsignacionPorFoto = usaAsignacionPorFoto;
 autoDetectarPaisInicial();
 cargarMarcosPersonalizados();
 actualizarVisibilidadAsignacion();
+actualizarFlujoGuiadoPedido();
 actualizarIndicadorTamanoBase();
 renderTamanoChips();
 renderAsignacionesFotos();
@@ -1696,7 +2010,7 @@ if (applyFrameBtn) {
 
 if (applyFrameAllBtn) {
     applyFrameAllBtn.addEventListener("click", function() {
-        const totalFotos = inputImagenes.files ? inputImagenes.files.length : 0;
+        const totalFotos = obtenerFotosActuales().length;
         if (totalFotos === 0) return;
         aplicarMarcoATodasLasFotos(frameSeleccionadoTemporal);
         renderAsignacionesFotos();
@@ -1707,7 +2021,7 @@ if (applyFrameAllBtn) {
 
 if (clearFrameAllBtn) {
     clearFrameAllBtn.addEventListener("click", function() {
-        const totalFotos = inputImagenes.files ? inputImagenes.files.length : 0;
+        const totalFotos = obtenerFotosActuales().length;
         if (totalFotos === 0) return;
         aplicarMarcoATodasLasFotos("none");
         frameSeleccionadoTemporal = "none";
@@ -1912,6 +2226,8 @@ form.addEventListener("submit", async function(e) {
 
     if (enviandoPedido) return;
 
+    sincronizarInputConEstadoGlobalSiHaceFalta();
+
     estadoInteraccionValidacion.intentoEnvio = true;
     const esValido = validarFormulario();
     if (!esValido) {
@@ -1946,6 +2262,9 @@ form.addEventListener("submit", async function(e) {
     formData.append('correo', correoInput.value.trim());
     formData.append('telefono', telefonoInternacionalCompleto());
     formData.append('fechaRegistro', new Date().toLocaleString());
+    
+    // Stop background queue from initiating new uploads to avoid conflicts with fallback
+    uploadQueue = [];
 
     if (usaAsignacionPorFoto()) {
         const resumenTamanos = obtenerResumenTamanosAsignados();
@@ -1984,25 +2303,67 @@ form.addEventListener("submit", async function(e) {
 
     // Fotos (con recorte/marco aplicado si existe edición) + cantidades por foto
     const cantidadesPorFoto = [];
+    const fotosPreCargadas = [];
     const fotosConEdicionOmitida = [];
     const cantidadesPorClave = new Map(
         (window.archivosGlobal || []).map(function(file) {
             return [claveFoto(file), file.cantidad || 1];
         })
     );
-    for (const foto of inputImagenes.files) {
-        let fotoFinal = foto;
-        try {
-            fotoFinal = await construirArchivoFinal(foto);
-        } catch (errorEdicion) {
-            console.warn("No se pudo aplicar edicion/marco para una foto. Se enviara original.", errorEdicion);
-            fotosConEdicionOmitida.push(String(foto.name || "archivo"));
-        }
-        formData.append('fotos', fotoFinal);
-        const cantidadFoto = cantidadesPorClave.get(claveFoto(foto)) || 1;
+    let allPreUploaded = true;
+    const fotosActuales = obtenerFotosActuales();
+    for (let idx = 0; idx < fotosActuales.length; idx++) {
+        const foto = fotosActuales[idx];
+        const k = claveFoto(foto);
+        const cantidadFoto = cantidadesPorClave.get(k) || 1;
+        const nombreFoto = etiquetaFotoVisible(foto, idx);
+        const edit = edicionesPorFoto.get(k);
+        const requiereEdicion = !!(
+            edit && (edit.blob || (edit.frame && edit.frame !== "none"))
+        );
         cantidadesPorFoto.push(cantidadFoto);
+
+        const subidaFondo = window.fotosSubidasEnSegundoPlano.get(k);
+        if (subidaFondo && !requiereEdicion) {
+            fotosPreCargadas.push({
+                secure_url: subidaFondo.secure_url,
+                public_id: subidaFondo.public_id,
+                cantidad: cantidadFoto,
+            });
+            continue;
+        }
+
+        try {
+            const fotoFinal = await construirArchivoFinal(foto);
+            allPreUploaded = false;
+            formData.append('fotos', fotoFinal);
+        } catch (err) {
+            console.warn("Error en edicion", err);
+            if (subidaFondo) {
+                fotosPreCargadas.push({
+                    secure_url: subidaFondo.secure_url,
+                    public_id: subidaFondo.public_id,
+                    cantidad: cantidadFoto,
+                });
+                if (requiereEdicion) {
+                    fotosConEdicionOmitida.push(nombreFoto);
+                }
+            } else {
+                allPreUploaded = false;
+                formData.append('fotos', foto); // fallback
+                if (requiereEdicion) {
+                    fotosConEdicionOmitida.push(nombreFoto);
+                }
+            }
+        }
     }
     formData.append('cantidades', cantidadesPorFoto.join(','));
+    formData.append('fotosPreCargadas', JSON.stringify(fotosPreCargadas));
+    
+    // Limpiar 'fotos' del formdata si todo subió en fondo
+    if (allPreUploaded) {
+         formData.delete('fotos');
+    }
 
     try {
         const estadoSubida = {
@@ -2095,14 +2456,20 @@ form.addEventListener("submit", async function(e) {
         if (fallosSubida.length > 0 || fotosConEdicionOmitida.length > 0) {
             const partes = [];
             if (fallosSubida.length > 0) {
-                const resumenFallos = fallosSubida.slice(0, 2).join(", ");
+                const fallosLegibles = fallosSubida.map(function(item, index) {
+                    if (typeof item === "string") return item;
+                    if (item && typeof item.filename === "string") return item.filename;
+                    if (item && typeof item.name === "string") return item.name;
+                    return `Foto ${index + 1}`;
+                });
+                const resumenFallos = fallosLegibles.slice(0, 2).join(", ");
                 const extraFallos = fallosSubida.length > 2 ? ` y ${fallosSubida.length - 2} más` : "";
                 partes.push(`Fallaron ${fallosSubida.length} foto(s): ${resumenFallos}${extraFallos}`);
             }
             if (fotosConEdicionOmitida.length > 0) {
                 const resumenEdicion = fotosConEdicionOmitida.slice(0, 2).join(", ");
                 const extraEdicion = fotosConEdicionOmitida.length > 2 ? ` y ${fotosConEdicionOmitida.length - 2} más` : "";
-                partes.push(`Se enviaron sin marco/edicion ${fotosConEdicionOmitida.length} foto(s): ${resumenEdicion}${extraEdicion}`);
+                partes.push(`No se pudo aplicar marco/edicion en ${fotosConEdicionOmitida.length} foto(s): ${resumenEdicion}${extraEdicion}`);
             }
             errorMessage.textContent = `Pedido enviado parcialmente. ${partes.join(". ")}.`;
             errorMessage.style.color = "#d97706";
@@ -2113,8 +2480,15 @@ form.addEventListener("submit", async function(e) {
         desactivarBloqueoSalidaDuranteEnvio();
         bloquearMensajesValidacion = false;
         ocultarSpinnerPedido();
-        const bodyConEstado = (fallosSubida.length > 0 || fotosConEdicionOmitida.length > 0)
-            ? `${bodyResumenHtml}<p style=\"margin-top:10px;color:#b45309;font-weight:700;\">Se procesó el pedido con advertencias: ${fallosSubida.length} foto(s) fallaron y ${fotosConEdicionOmitida.length} foto(s) se enviaron sin marco/edición.</p>`
+        const advertenciasProcesamiento = [];
+        if (fallosSubida.length > 0) {
+            advertenciasProcesamiento.push(`${fallosSubida.length} foto(s) fallaron`);
+        }
+        if (fotosConEdicionOmitida.length > 0) {
+            advertenciasProcesamiento.push(`${fotosConEdicionOmitida.length} foto(s) quedaron sin marco/edicion`);
+        }
+        const bodyConEstado = advertenciasProcesamiento.length > 0
+            ? `${bodyResumenHtml}<p style=\"margin-top:10px;color:#b45309;font-weight:700;\">Se procesó el pedido con advertencias: ${advertenciasProcesamiento.join(" y ")}.</p>`
             : bodyResumenHtml;
         abrirModalExitoPedido(clienteGuardado.id, clienteGuardado.correo, infoResumenHtml, bodyConEstado);
         window.dispatchEvent(new CustomEvent("pedido:enviado", {

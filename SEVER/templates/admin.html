@@ -388,7 +388,7 @@
   </div>
 </div>
 
-<div id="adminConfirmDialog" class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="adminConfirmTitle" aria-describedby="adminConfirmMessage" aria-hidden="true" hidden>
+<div id="adminConfirmDialog" class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="adminConfirmTitle" aria-describedby="adminConfirmMessage" inert hidden>
   <div class="confirm-dialog-content" role="document">
     <h3 id="adminConfirmTitle" class="confirm-dialog-title">Confirmar acción</h3>
     <p id="adminConfirmMessage" class="confirm-dialog-message">¿Estás seguro de continuar?</p>
@@ -907,6 +907,9 @@
     background: rgba(0, 0, 0, 0.72);
     padding: 18px;
   }
+  .confirm-dialog[hidden] {
+    display: none;
+  }
   .confirm-dialog-content {
     width: min(100%, 460px);
     background: #151823;
@@ -983,6 +986,6 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='script/session_auth_client.js') }}"></script>
-<script src="{{ url_for('static', filename='script/dasbord_admin.js', v='20260402c') }}"></script>
+<script src="{{ url_for('static', filename='script/dasbord_admin.js', v='20260402d') }}"></script>
 </body>
 </html>

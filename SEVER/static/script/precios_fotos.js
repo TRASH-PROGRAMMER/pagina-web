@@ -27,6 +27,34 @@ function usaAsignacionPorFoto() {
     return typeof window.usaAsignacionPorFoto === "function" && window.usaAsignacionPorFoto();
 }
 
+function obtenerFotosActualesParaResumen() {
+    const desdeInput = inputImagenes && inputImagenes.files
+        ? Array.from(inputImagenes.files)
+        : [];
+
+    if (desdeInput.length > 0) {
+        return desdeInput;
+    }
+
+    const desdeGlobal = Array.isArray(window.archivosGlobal)
+        ? window.archivosGlobal.filter(function(file) {
+            return file && typeof file.name === "string";
+        })
+        : [];
+
+    if (desdeGlobal.length > 0) {
+        return desdeGlobal;
+    }
+
+    return Array.isArray(window.previewsGlobal)
+        ? window.previewsGlobal
+            .map(function(item) { return item && item.archivo ? item.archivo : null; })
+            .filter(function(file) {
+                return file && typeof file.name === "string";
+            })
+        : [];
+}
+
 function renderTamanosEnSelect(tamanos) {
     if (!tamanoSelect) return;
 
@@ -105,7 +133,7 @@ async function abrirResumenPedido() {
     const resumenAsignado = obtenerResumenAsignado();
     
     // Calcular cantidad total considerando copias por foto
-    const numFotosArchivos = inputImagenes.files ? inputImagenes.files.length : 0;
+    const numFotosArchivos = obtenerFotosActualesParaResumen().length;
     const cantidadTotal = calcularCantidadTotalConCopias(numFotosArchivos);
     
     const seleccionados = modoAsignado

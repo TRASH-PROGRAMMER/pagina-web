@@ -1,11 +1,14 @@
-import sys
+﻿import sys
 import os
 import json
 import re
 import secrets
+import shlex
 import time
 import shutil
 import subprocess
+import importlib
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock, Thread
@@ -28,6 +31,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from flask_session import Session
 from werkzeug.security import generate_password_hash
 from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.utils import secure_filename
 from sqlalchemy.engine.url import make_url
 from db import AuthSession, Cliente, ClienteDraft, Foto, FotoTamano, MarcoDiseno, User, db
 from auth import auth_bp, login_required, role_required
@@ -86,10 +90,28 @@ cloudinary.config(
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 ALLOWED_IMAGE_MIMETYPES = {'image/png', 'image/jpeg', 'image/gif', 'image/pjpeg', 'image/jpg'}
+ALLOWED_IMAGE_MIME_NORMALIZED = {'image/png', 'image/jpeg', 'image/gif'}
+PIL_FORMAT_TO_MIME = {
+    'PNG': 'image/png',
+    'JPEG': 'image/jpeg',
+    'GIF': 'image/gif',
+}
+MIME_TO_ALLOWED_EXTENSIONS = {
+    'image/png': {'png'},
+    'image/jpeg': {'jpg', 'jpeg'},
+    'image/gif': {'gif'},
+}
 FRAME_ALLOWED_EXTENSIONS = {'png', 'svg'}
 FRAME_ALLOWED_MIMETYPES = {'image/png', 'image/svg+xml'}
 MAX_FILES_PER_ORDER = int(os.environ.get("MAX_FILES_PER_ORDER", "150"))
 MAX_IMAGE_BYTES_PER_FILE = int(os.environ.get("MAX_IMAGE_BYTES_PER_FILE", str(10 * 1024 * 1024)))
+SUSPICIOUS_FILE_MARKERS = [
+    b"<?php",
+    b"<script",
+    b"#!/bin/",
+    b"<html",
+    b"powershell",
+]
 
 DEFAULT_TAMANOS = [
     {"clave": "instax", "nombre": "Instax (5x8cm)", "precio_base": 0.00},
@@ -109,6 +131,13 @@ def _env_bool(name, default=False):
     if raw is None:
         return default
     return str(raw).strip().lower() in {"1", "true", "yes", "on", "si"}
+
+
+FILE_SCAN_ENABLED = _env_bool("FILE_SCAN_ENABLED", False)
+FILE_SCAN_STRICT = _env_bool("FILE_SCAN_STRICT", False)
+FILE_SCAN_COMMAND = str(os.environ.get("FILE_SCAN_COMMAND", "")).strip()
+FILE_SCAN_TIMEOUT_SECONDS = int(os.environ.get("FILE_SCAN_TIMEOUT_SECONDS", "20"))
+FILE_SCAN_BYTES_LIMIT = int(os.environ.get("FILE_SCAN_BYTES_LIMIT", str(1024 * 1024)))
 
 
 DRAFT_KEY_REGEX = re.compile(r'^[A-Za-z0-9_-]{8,80}$')
@@ -133,6 +162,14 @@ _last_db_backup_run_ts = 0.0
 _db_backup_lock = Lock()
 _db_backup_thread_started = False
 
+try:
+    PILImageModule = importlib.import_module('PIL.Image')
+    PILModule = importlib.import_module('PIL')
+    PILUnidentifiedImageError = getattr(PILModule, 'UnidentifiedImageError', Exception)
+except Exception:
+    PILImageModule = None
+    PILUnidentifiedImageError = Exception
+
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -150,6 +187,219 @@ def _file_size_bytes(file_obj):
         return None
 
 
+def _sanitizar_nombre_archivo(filename):
+    raw = str(filename or '').strip()
+    sanitized = secure_filename(raw)
+
+    if not sanitized:
+        sanitized = f"upload_{secrets.token_hex(6)}.jpg"
+
+    base, ext = os.path.splitext(sanitized)
+    base = re.sub(r'[^A-Za-z0-9._-]+', '_', (base or '').strip())[:80] or f"upload_{secrets.token_hex(4)}"
+    ext = (ext or '').lower().lstrip('.')
+    if ext not in ALLOWED_EXTENSIONS:
+        ext = 'jpg'
+
+    return f"{base}.{ext}"
+
+
+def _mime_normalizado(mime):
+    m = (str(mime or '').strip().lower() or '').split(';')[0].strip()
+    if m in {'image/pjpeg', 'image/jpg'}:
+        return 'image/jpeg'
+    return m
+
+
+def _detectar_mime_por_firma(file_obj):
+    stream = getattr(file_obj, 'stream', None)
+    if stream is None:
+        return ''
+
+    current_pos = None
+    try:
+        current_pos = stream.tell()
+        stream.seek(0)
+        head = stream.read(16) or b''
+    except Exception:
+        return ''
+    finally:
+        try:
+            if current_pos is not None:
+                stream.seek(current_pos)
+        except Exception:
+            pass
+
+    if head.startswith(b'\x89PNG\r\n\x1a\n'):
+        return 'image/png'
+    if head.startswith(b'\xff\xd8\xff'):
+        return 'image/jpeg'
+    if head.startswith(b'GIF87a') or head.startswith(b'GIF89a'):
+        return 'image/gif'
+    return ''
+
+
+def _inspeccion_contenido_sospechoso(file_obj):
+    stream = getattr(file_obj, 'stream', None)
+    if stream is None:
+        return False
+
+    current_pos = None
+    try:
+        current_pos = stream.tell()
+        stream.seek(0)
+        sample = stream.read(max(64, FILE_SCAN_BYTES_LIMIT)) or b''
+    except Exception:
+        return False
+    finally:
+        try:
+            if current_pos is not None:
+                stream.seek(current_pos)
+        except Exception:
+            pass
+
+    lowered = sample.lower()
+    return any(marker in lowered for marker in SUSPICIOUS_FILE_MARKERS)
+
+
+def _ejecutar_scan_externo(file_obj):
+    if not FILE_SCAN_ENABLED:
+        return True, ''
+
+    if not FILE_SCAN_COMMAND:
+        if FILE_SCAN_STRICT:
+            return False, 'Escaneo de seguridad no configurado en el servidor.'
+        return True, ''
+
+    stream = getattr(file_obj, 'stream', None)
+    if stream is None:
+        return False, 'No se pudo preparar el archivo para escaneo.'
+
+    current_pos = None
+    tmp_path = None
+    try:
+        current_pos = stream.tell()
+        stream.seek(0)
+        payload = stream.read()
+
+        suffix = f".{str(file_obj.filename or '').split('.')[-1].lower()}" if '.' in str(file_obj.filename or '') else '.bin'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(payload)
+            tmp_path = tmp.name
+
+        if '{file}' in FILE_SCAN_COMMAND:
+            cmd = FILE_SCAN_COMMAND.format(file=tmp_path)
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                timeout=FILE_SCAN_TIMEOUT_SECONDS,
+                capture_output=True,
+                text=True,
+            )
+        else:
+            cmd_parts = shlex.split(FILE_SCAN_COMMAND, posix=False)
+            cmd_parts.append(tmp_path)
+            result = subprocess.run(
+                cmd_parts,
+                shell=False,
+                timeout=FILE_SCAN_TIMEOUT_SECONDS,
+                capture_output=True,
+                text=True,
+            )
+
+        if result.returncode != 0:
+            detalle = (result.stderr or result.stdout or '').strip()
+            return False, detalle or 'Archivo rechazado por el escaneo de seguridad.'
+
+        return True, ''
+    except subprocess.TimeoutExpired:
+        return False, 'Tiempo de escaneo agotado.'
+    except Exception:
+        return False, 'No se pudo completar el escaneo de seguridad.'
+    finally:
+        try:
+            if current_pos is not None:
+                stream.seek(current_pos)
+        except Exception:
+            pass
+        if tmp_path:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+
+def _validar_contenido_imagen_seguro(file_obj):
+    if PILImageModule is None:
+        return False, 'Validador de imagen no disponible en el servidor.'
+
+    stream = getattr(file_obj, 'stream', None)
+    if stream is None:
+        return False, 'No se pudo leer el archivo.'
+
+    mime_firma = _detectar_mime_por_firma(file_obj)
+    if mime_firma not in ALLOWED_IMAGE_MIME_NORMALIZED:
+        return False, 'Contenido de imagen invalido o no permitido.'
+
+    current_pos = None
+    try:
+        current_pos = stream.tell()
+
+        stream.seek(0)
+        with PILImageModule.open(stream) as img:
+            formato = (img.format or '').upper().strip()
+            mime_formato = PIL_FORMAT_TO_MIME.get(formato, '')
+            if not mime_formato:
+                return False, 'Formato de imagen no soportado.'
+            img.verify()
+
+        stream.seek(0)
+        with PILImageModule.open(stream) as img_segura:
+            img_segura.load()
+            if int(getattr(img_segura, 'width', 0) or 0) <= 0 or int(getattr(img_segura, 'height', 0) or 0) <= 0:
+                return False, 'Imagen corrupta o sin dimensiones validas.'
+            formato_seguro = (img_segura.format or '').upper().strip()
+            mime_decodificado = PIL_FORMAT_TO_MIME.get(formato_seguro, '')
+
+        if mime_decodificado != mime_firma:
+            return False, 'El contenido no coincide con el tipo de imagen esperado.'
+
+        return True, ''
+    except PILUnidentifiedImageError:
+        return False, 'No se pudo decodificar la imagen.'
+    except Exception:
+        return False, 'No se pudo validar de forma segura la imagen.'
+    finally:
+        try:
+            if current_pos is not None:
+                stream.seek(current_pos)
+        except Exception:
+            pass
+
+
+def _validar_seguridad_archivo_imagen(file_obj, nombre):
+    mime_firma = _detectar_mime_por_firma(file_obj)
+    if mime_firma not in ALLOWED_IMAGE_MIME_NORMALIZED:
+        return False, 'Contenido de imagen invalido o no permitido.'
+
+    ok_img, motivo_img = _validar_contenido_imagen_seguro(file_obj)
+    if not ok_img:
+        return False, motivo_img
+
+    ext = str(nombre or '').lower().rsplit('.', 1)[-1] if '.' in str(nombre or '') else ''
+    allowed_ext_by_mime = MIME_TO_ALLOWED_EXTENSIONS.get(mime_firma, set())
+    if ext and allowed_ext_by_mime and ext not in allowed_ext_by_mime:
+        return False, 'La extension no coincide con el contenido real de la imagen.'
+
+    if _inspeccion_contenido_sospechoso(file_obj):
+        return False, 'Se detecto contenido sospechoso en el archivo.'
+
+    ok_scan, motivo_scan = _ejecutar_scan_externo(file_obj)
+    if not ok_scan:
+        return False, f'Escaneo de seguridad fallido: {motivo_scan}'
+
+    return True, ''
+
+
 def _validar_archivos_cliente(archivos):
     archivos_limpios = [a for a in (archivos or []) if a and getattr(a, "filename", "")]
     if not archivos_limpios:
@@ -160,7 +410,9 @@ def _validar_archivos_cliente(archivos):
 
     errores = []
     for archivo in archivos_limpios:
-        nombre = str(archivo.filename or "").strip() or "archivo_sin_nombre"
+        nombre_original = str(archivo.filename or "").strip() or "archivo_sin_nombre"
+        nombre = _sanitizar_nombre_archivo(nombre_original)
+        archivo.filename = nombre
 
         if not allowed_file(nombre):
             errores.append(f"Formato no permitido: {nombre}")
@@ -183,6 +435,17 @@ def _validar_archivos_cliente(archivos):
         if size_bytes > MAX_IMAGE_BYTES_PER_FILE:
             limite_mb = int(MAX_IMAGE_BYTES_PER_FILE / (1024 * 1024))
             errores.append(f"{nombre} supera {limite_mb} MB")
+            continue
+
+        ok_seguridad, motivo_seguridad = _validar_seguridad_archivo_imagen(archivo, nombre)
+        if not ok_seguridad:
+            errores.append(f"{nombre}: {motivo_seguridad}")
+            continue
+
+        mime_firma = _detectar_mime_por_firma(archivo)
+        mime_cliente = _mime_normalizado(mime)
+        if mime_cliente and mime_firma and mime_cliente != mime_firma:
+            errores.append(f"{nombre}: el tipo MIME enviado no coincide con el contenido real.")
             continue
 
         try:
@@ -856,18 +1119,111 @@ def autosave_draft_beacon(draft_key):
     db.session.commit()
     return jsonify({"ok": True, "draft": _draft_to_dict(draft)}), 200
 
+@app.route('/api/upload-temporal', methods=['POST'])
+def upload_temporal():
+    if 'foto' not in request.files:
+        return jsonify({"error": "No has enviado ninguna foto"}), 400
+    
+    file = request.files['foto']
+    if not file or not file.filename:
+        return jsonify({"error": "Archivo vacio"}), 400
+
+    file.filename = _sanitizar_nombre_archivo(file.filename)
+        
+    if not allowed_file(file.filename):
+        return jsonify({"error": f"Formato no permitido: {file.filename}"}), 400
+        
+    mime = (file.mimetype or "").lower().split(";")[0].strip()
+    if mime and mime not in ALLOWED_IMAGE_MIMETYPES:
+        return jsonify({"error": f"Tipo de archivo no permitido: {file.filename}"}), 400
+
+    ok_seguridad, motivo_seguridad = _validar_seguridad_archivo_imagen(file, file.filename)
+    if not ok_seguridad:
+        return jsonify({"error": f"Imagen invalida: {motivo_seguridad}"}), 400
+
+    mime_firma = _detectar_mime_por_firma(file)
+    mime_cliente = _mime_normalizado(mime)
+    if mime_cliente and mime_firma and mime_cliente != mime_firma:
+        return jsonify({"error": f"Tipo MIME no coincide con el contenido real: {file.filename}"}), 400
+        
+    size_bytes = _file_size_bytes(file)
+    if size_bytes is not None and size_bytes > MAX_IMAGE_BYTES_PER_FILE:
+        return jsonify({"error": f"Supera limite {MAX_IMAGE_BYTES_PER_FILE/(1024*1024)}MB"}), 413
+        
+    draft_key_or_session = request.form.get("draftKey", "temp_anon")
+    folder = f"image_manager/draft_{draft_key_or_session}"
+    
+    try:
+        data = file.stream.read()
+        stream = io.BytesIO(data)
+        stream.name = file.filename
+        
+        resultado = cloudinary.uploader.upload(
+            stream,
+            folder=folder,
+            resource_type="image",
+        )
+        return jsonify({
+            "secure_url": resultado["secure_url"],
+            "public_id": resultado["public_id"],
+            "filename": file.filename
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
 
 @app.route('/api/clientes', methods=['POST'])
 def crear_clientes():
+    fotos_precargadas = []
+
+    def _normalizar_fotos_precargadas(items):
+        if not isinstance(items, list):
+            return []
+
+        normalizadas = []
+        for pre in items:
+            if not isinstance(pre, dict):
+                continue
+
+            secure_url = str(pre.get('secure_url') or '').strip()
+            public_id = str(pre.get('public_id') or '').strip()
+            if not secure_url or not public_id:
+                continue
+
+            try:
+                cantidad = max(1, int(pre.get('cantidad', 1)))
+            except (TypeError, ValueError):
+                cantidad = 1
+
+            normalizadas.append({
+                'secure_url': secure_url,
+                'public_id': public_id,
+                'cantidad': cantidad,
+            })
+
+        return normalizadas
+    
     # Soporta FormData (con fotos) y JSON (sin fotos)
     if request.content_type and 'multipart/form-data' in request.content_type:
         data = request.form.to_dict()
-        archivos, error_archivos = _validar_archivos_cliente(request.files.getlist('fotos'))
-        if error_archivos:
-            return jsonify({"error": error_archivos}), 400
+
+        precargadas_json_str = data.get('fotosPreCargadas', '[]')
+        try:
+            fotos_precargadas = _normalizar_fotos_precargadas(json.loads(precargadas_json_str))
+        except Exception:
+            fotos_precargadas = []
+
+        archivos_entrantes = request.files.getlist('fotos')
+        archivos_contenido = [a for a in (archivos_entrantes or []) if a and getattr(a, 'filename', '')]
+        if archivos_contenido:
+            archivos, error_archivos = _validar_archivos_cliente(archivos_contenido)
+            if error_archivos:
+                return jsonify({"error": error_archivos}), 400
+        else:
+            archivos = []
     else:
         data = request.get_json() or {}
         archivos = []
+        fotos_precargadas = _normalizar_fotos_precargadas(data.get("fotosPreCargadas", []))
 
     # ValidaciÃ³n bÃ¡sica backend
     campos = ['nombre', 'apellido', 'correo', 'telefono', 'fechaRegistro']
@@ -875,7 +1231,7 @@ def crear_clientes():
         if not data.get(campo):
             return jsonify({"error": f"Campo '{campo}' requerido"}), 400
 
-    if not archivos:
+    if not archivos and not fotos_precargadas:
         return jsonify({"error": "Debes adjuntar al menos una foto valida."}), 400
 
     # Parsear cantidades por foto (viene como "2,1,3" en el mismo orden que los archivos)
@@ -1127,6 +1483,25 @@ def crear_clientes():
         fotos_guardadas.append(url_segura)
         thumbnails_guardadas.append(_thumbnail_url(public_id, url_segura))
         cantidades_guardadas.append(cant_foto)
+
+    # Añadir las fotos que ya fueron subidas en segundo plano
+    if isinstance(fotos_precargadas, list):
+        start_idx = len(resultados_por_idx)
+        for pre in fotos_precargadas:
+            if not isinstance(pre, dict) or 'secure_url' not in pre or 'public_id' not in pre:
+                continue
+            cant_foto = pre.get('cantidad', 1)
+            # si en JS usamos cantidades_raw, asimilamos eso; si no, cantidad viaja en el obj
+            foto = Foto(
+                filename=pre['secure_url'],
+                public_id=pre['public_id'],
+                cantidad=cant_foto,
+                cliente_id=nuevo_cliente.id,
+            )
+            db.session.add(foto)
+            fotos_guardadas.append(pre['secure_url'])
+            thumbnails_guardadas.append(_thumbnail_url(pre['public_id'], pre['secure_url']))
+            cantidades_guardadas.append(cant_foto)
 
     if not fotos_guardadas:
         db.session.rollback()

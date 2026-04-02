@@ -153,23 +153,28 @@ function closeAdminConfirmDialog(confirmed) {
         return;
     }
 
-    dialog.hidden = true;
-    dialog.setAttribute("hidden", "");
-    dialog.setAttribute("aria-hidden", "true");
-
+    // Move focus OUT of the dialog before hiding it,
+    // so the browser does not block inert/hidden on a focused descendant.
     try {
         if (lastFocusedElementBeforeConfirm && document.contains(lastFocusedElementBeforeConfirm)) {
             lastFocusedElementBeforeConfirm.focus();
+        } else {
+            document.body.focus();
         }
     } catch (_error) {
         // Ignorar errores de foco en elementos removidos o no enfocables.
     }
     lastFocusedElementBeforeConfirm = null;
 
+    dialog.hidden = true;
+    dialog.setAttribute("hidden", "");
+    dialog.inert = true;
+
     if (typeof resolve === "function") {
         resolve(Boolean(confirmed));
     }
 }
+
 
 function showAdminConfirmDialog(options) {
     const dialog = document.getElementById("adminConfirmDialog");
@@ -203,7 +208,8 @@ function showAdminConfirmDialog(options) {
 
     dialog.hidden = false;
     dialog.removeAttribute("hidden");
-    dialog.setAttribute("aria-hidden", "false");
+    dialog.inert = false;
+    dialog.removeAttribute("inert");
 
     // Reasignar handlers por seguridad en cada apertura.
     cancelBtn.onclick = onConfirmDialogCancelClick;

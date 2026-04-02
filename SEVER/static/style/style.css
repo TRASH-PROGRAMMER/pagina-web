@@ -1,5 +1,5 @@
-
-/* ===== BOTÓN AZUL UNIFICADO (Revisar pedido, Mis pedidos, Pedido en curso) ===== */
+﻿
+/* ===== BOTÃ“N AZUL UNIFICADO (Revisar pedido, Mis pedidos, Pedido en curso) ===== */
 .btn-azul,
 .btn-ver-mis-pedidos,
 .btn-pedido-curso {
@@ -237,7 +237,7 @@ input[type="file"]:hover {
     border-color: #0056b3;
 }
 
-/* ===== SELECT TAMAÑOS ===== */
+/* ===== SELECT TAMAÃ‘OS ===== */
 
 .tamano-select-native {
     display: block;
@@ -348,6 +348,10 @@ select:focus {
     justify-content: center;
     gap: 10px;
     flex-wrap: wrap;
+}
+
+.preview-pagination[hidden] {
+    display: none !important;
 }
 
 .preview-pagination button {
@@ -464,7 +468,7 @@ select:focus {
     display: block;
 }
 
-/* Selector de cantidad para fotos - Diseño minimalista */
+/* Selector de cantidad para fotos - DiseÃ±o minimalista */
 .cantidad-selector {
     display: flex;
     align-items: center;
@@ -1357,6 +1361,10 @@ button:active {
     color: #fff;
 }
 
+.pasos-nav[hidden] {
+    display: none !important;
+}
+
 .pasos-nav:disabled {
     opacity: 0.45;
     cursor: not-allowed;
@@ -1369,6 +1377,21 @@ button:active {
     justify-content: center;
     gap: 7px;
     flex-wrap: wrap;
+}
+
+.pasos-carousel-hint {
+    margin: 8px auto 0;
+    width: fit-content;
+    max-width: 94%;
+    color: #0a66cc;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(10, 102, 204, 0.24);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.25;
+    text-align: center;
 }
 
 .pasos-dot {
@@ -1409,7 +1432,7 @@ button:active {
     }
 }
 
-/* ===== BOTÓN VER RESUMEN ===== */
+/* ===== BOTÃ“N VER RESUMEN ===== */
 
 .ver-resumen-btn {
     display: block;
@@ -1722,7 +1745,7 @@ footer {
 }
 
 
-/* Botón Cancelar */
+/* BotÃ³n Cancelar */
 
 #cancelButton {
     background: linear-gradient(90deg, #dc3545, #a71d2a);
@@ -1739,7 +1762,7 @@ footer {
 }
 
 
-/* Botón Reintentar */
+/* BotÃ³n Reintentar */
 
 #retryButton {
     background: linear-gradient(90deg, #007BFF, #0056b3);
@@ -3171,3 +3194,49 @@ footer {
 .dark-mode .pasos-dot[aria-selected="true"] {
     background: linear-gradient(90deg, #6ea6ff, #3f88ff);
 }
+
+/* ===== SKELETON LOADERS ===== */
+.skeleton {
+    background-color: #e2e5e7;
+    background-image: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0),
+        rgba(255, 255, 255, 0.6),
+        rgba(255, 255, 255, 0)
+    );
+    background-size: 200% 100%;
+    background-position: 100% 0;
+    animation: shimmer 1.5s infinite;
+    border-radius: 8px;
+}
+
+@keyframes shimmer {
+    100% {
+        background-position: -100% 0;
+    }
+}
+
+.skeleton-text {
+    width: 60%;
+    height: 16px;
+    margin-bottom: 8px;
+}
+
+.skeleton-img {
+    width: 100%;
+    height: 140px;
+    border-radius: 10px;
+}
+
+.skeleton-card {
+    padding: 12px;
+    border: 1px solid #e3e8f5;
+    border-radius: 10px;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+
+
