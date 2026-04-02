@@ -27,6 +27,230 @@ let currentCardsPage = 1;
 const CARDS_PAGE_SIZE = 6;
 let currentTablePage = 1;
 const TABLE_PAGE_SIZE = 8;
+let lastFocusedElementBeforeModal = null;
+let lastFocusedElementBeforeConfirm = null;
+let confirmDialogResolver = null;
+let adminToastTimer = null;
+const liveMessageState = { status: "", alert: "" };
+
+function setLiveText(elementId, text, channel) {
+    const el = document.getElementById(elementId);
+    const value = String(text || "").trim();
+    if (!el || !value) return;
+    if (liveMessageState[channel] === value) return;
+    liveMessageState[channel] = value;
+    el.textContent = "";
+    window.setTimeout(function() {
+        el.textContent = value;
+    }, 30);
+}
+
+function announceAdminStatus(text) {
+    setLiveText("adminStatusLive", text, "status");
+}
+
+function showAdminToast(text, isError = false) {
+    const value = String(text || "").trim();
+    if (!value) return;
+
+    let toast = document.getElementById("adminToast");
+    if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "adminToast";
+        toast.style.position = "fixed";
+        toast.style.right = "16px";
+        toast.style.bottom = "16px";
+        toast.style.zIndex = "1300";
+        toast.style.maxWidth = "min(92vw, 360px)";
+        toast.style.padding = "10px 12px";
+        toast.style.borderRadius = "10px";
+        toast.style.border = "1px solid";
+        toast.style.fontSize = "13px";
+        toast.style.fontWeight = "600";
+        toast.style.lineHeight = "1.35";
+        toast.style.boxShadow = "0 10px 24px rgba(0, 0, 0, 0.35)";
+        toast.style.opacity = "0";
+        toast.style.transform = "translateY(8px)";
+        toast.style.transition = "opacity .16s ease, transform .16s ease";
+        document.body.appendChild(toast);
+    }
+
+    toast.textContent = value;
+    if (isError) {
+        toast.style.background = "#3b1b24";
+        toast.style.borderColor = "#a34b5f";
+        toast.style.color = "#ffd9e0";
+    } else {
+        toast.style.background = "#1c273d";
+        toast.style.borderColor = "#4c77c8";
+        toast.style.color = "#d7e6ff";
+    }
+
+    if (adminToastTimer) {
+        clearTimeout(adminToastTimer);
+        adminToastTimer = null;
+    }
+
+    requestAnimationFrame(function() {
+        toast.style.opacity = "1";
+        toast.style.transform = "translateY(0)";
+    });
+
+    adminToastTimer = window.setTimeout(function() {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateY(8px)";
+    }, 3200);
+}
+
+function announceAdminAlert(text) {
+    setLiveText("adminAlertLive", text, "alert");
+    showAdminToast(text, true);
+}
+
+function getErrorMessage(error, fallbackMessage) {
+    if (error && typeof error.message === "string" && error.message.trim()) {
+        return error.message.trim();
+    }
+    return fallbackMessage;
+}
+
+function openFotoModal() {
+    const modal = document.getElementById("fotoModal");
+    if (!modal) return;
+    if (document.activeElement instanceof HTMLElement) {
+        lastFocusedElementBeforeModal = document.activeElement;
+    }
+    modal.classList.add("active");
+    modal.setAttribute("aria-hidden", "false");
+    const closeBtn = modal.querySelector(".foto-modal-close");
+    if (closeBtn instanceof HTMLElement) {
+        closeBtn.focus();
+    }
+}
+
+function isAdminConfirmOpen() {
+    const dialog = document.getElementById("adminConfirmDialog");
+    return Boolean(dialog && !dialog.hidden);
+}
+
+function getDialogFocusableElements(container) {
+    if (!container) return [];
+    return Array.from(container.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+        .filter(function(el) {
+            return !el.hasAttribute("disabled") && !el.getAttribute("aria-hidden");
+        });
+}
+
+function closeAdminConfirmDialog(confirmed) {
+    const dialog = document.getElementById("adminConfirmDialog");
+    const resolve = confirmDialogResolver;
+    confirmDialogResolver = null;
+
+    if (!dialog) {
+        if (typeof resolve === "function") {
+            resolve(Boolean(confirmed));
+        }
+        return;
+    }
+
+    dialog.hidden = true;
+    dialog.setAttribute("hidden", "");
+    dialog.setAttribute("aria-hidden", "true");
+
+    try {
+        if (lastFocusedElementBeforeConfirm && document.contains(lastFocusedElementBeforeConfirm)) {
+            lastFocusedElementBeforeConfirm.focus();
+        }
+    } catch (_error) {
+        // Ignorar errores de foco en elementos removidos o no enfocables.
+    }
+    lastFocusedElementBeforeConfirm = null;
+
+    if (typeof resolve === "function") {
+        resolve(Boolean(confirmed));
+    }
+}
+
+function showAdminConfirmDialog(options) {
+    const dialog = document.getElementById("adminConfirmDialog");
+    const titleEl = document.getElementById("adminConfirmTitle");
+    const messageEl = document.getElementById("adminConfirmMessage");
+    const cancelBtn = document.getElementById("adminConfirmCancel");
+    const acceptBtn = document.getElementById("adminConfirmAccept");
+
+    const opts = options || {};
+    if (!dialog || !titleEl || !messageEl || !cancelBtn || !acceptBtn) {
+        return Promise.resolve(window.confirm(String(opts.message || "¿Estás seguro de continuar?")));
+    }
+
+    if (typeof confirmDialogResolver === "function") {
+        const pending = confirmDialogResolver;
+        confirmDialogResolver = null;
+        pending(false);
+    }
+
+    titleEl.textContent = String(opts.title || "Confirmar acción");
+    messageEl.textContent = String(opts.message || "¿Estás seguro de continuar?");
+    cancelBtn.textContent = String(opts.cancelText || "Cancelar");
+    acceptBtn.textContent = String(opts.acceptText || "Confirmar");
+
+    const tone = String(opts.tone || "danger").toLowerCase();
+    acceptBtn.classList.toggle("confirm-danger", tone === "danger");
+
+    if (document.activeElement instanceof HTMLElement) {
+        lastFocusedElementBeforeConfirm = document.activeElement;
+    }
+
+    dialog.hidden = false;
+    dialog.removeAttribute("hidden");
+    dialog.setAttribute("aria-hidden", "false");
+
+    // Reasignar handlers por seguridad en cada apertura.
+    cancelBtn.onclick = onConfirmDialogCancelClick;
+    acceptBtn.onclick = onConfirmDialogAcceptClick;
+
+    window.setTimeout(function() {
+        if (opts.focusConfirm) {
+            acceptBtn.focus();
+        } else {
+            cancelBtn.focus();
+        }
+    }, 0);
+
+    return new Promise(function(resolve) {
+        confirmDialogResolver = resolve;
+    });
+}
+
+function onConfirmDialogCancelClick() {
+    closeAdminConfirmDialog(false);
+}
+
+function onConfirmDialogAcceptClick() {
+    closeAdminConfirmDialog(true);
+}
+
+function trapConfirmDialogFocus(event) {
+    if (!isAdminConfirmOpen() || event.key !== "Tab") return;
+    const dialog = document.getElementById("adminConfirmDialog");
+    const focusables = getDialogFocusableElements(dialog);
+    if (!focusables.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+    }
+
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+    }
+}
 
 /** Hay copias extra solo si el stepper subio alguna cantidad por encima de 1 (o total > archivos). */
 function clienteTieneMultiplesCopias(cliente) {
@@ -76,6 +300,11 @@ function mostrarMensajeTamano(texto, ok = true) {
     if (!msg) return;
     msg.textContent = texto;
     msg.style.color = ok ? "#22c55e" : "#ff7a7a";
+    if (ok) {
+        announceAdminStatus(texto);
+    } else {
+        announceAdminAlert(texto);
+    }
 }
 
 function mostrarMensajeMarco(texto, ok = true) {
@@ -83,6 +312,11 @@ function mostrarMensajeMarco(texto, ok = true) {
     if (!msg) return;
     msg.textContent = texto;
     msg.style.color = ok ? "#22c55e" : "#ff7a7a";
+    if (ok) {
+        announceAdminStatus(texto);
+    } else {
+        announceAdminAlert(texto);
+    }
 }
 
 function formatearPrecio(valor) {
@@ -122,7 +356,7 @@ function setAdminMainView(view) {
         dashboardBlocks.forEach(function(el) { el.classList.add("dashboard-hidden"); });
         if (clientesSection) clientesSection.hidden = true;
         if (opcionesSection) opcionesSection.hidden = false;
-        if (title) title.innerHTML = "<span>Configuracion</span> / Opciones";
+        if (title) title.innerHTML = "<span>Configuración</span> / Opciones";
         setActiveNav("navOpciones");
     } else {
         dashboardBlocks.forEach(function(el) { el.classList.remove("dashboard-hidden"); });
@@ -313,6 +547,7 @@ async function cargarClientesCards() {
         renderClientesCards(clientesCache);
     } catch (error) {
         console.error("Error cargando clientes en cards:", error);
+        announceAdminAlert("No se pudieron cargar los clientes");
     }
 }
 
@@ -486,7 +721,15 @@ async function editarTamano(id) {
 }
 
 async function desactivarTamano(id) {
-    if (!confirm("Â¿Deseas desactivar este tamaÃ±o?")) return;
+    const confirmed = await showAdminConfirmDialog({
+        title: "Desactivar tamaño",
+        message: "Este tamaño dejará de estar disponible para nuevos pedidos.",
+        cancelText: "Cancelar",
+        acceptText: "Desactivar",
+        tone: "danger",
+        focusConfirm: false
+    });
+    if (!confirmed) return;
 
     try {
         const res = await fetch(`/api/admin/tamanos/${id}/desactivar`, { method: "PATCH" });
@@ -670,7 +913,17 @@ function filterByAlpha(range) {
 // â”€â”€â”€ Eliminar fila â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function deleteRow(btn) {
     const row = btn.closest("tr");
-    if (!row || !confirm("Â¿Eliminar este pedido?")) return;
+    if (!row) return;
+
+    const confirmed = await showAdminConfirmDialog({
+        title: "Eliminar pedido",
+        message: "Esta acción elimina el pedido y no se puede deshacer.",
+        cancelText: "Cancelar",
+        acceptText: "Eliminar",
+        tone: "danger",
+        focusConfirm: false
+    });
+    if (!confirmed) return;
 
     const id = Number(row.dataset.id);
     const estadoActual = (row.dataset.estado || 'pendiente').toLowerCase();
@@ -687,9 +940,10 @@ async function deleteRow(btn) {
         if (estadoActual === 'pendiente') {
             actualizarBadge(-1);
         }
+        announceAdminStatus("Pedido eliminado");
     } catch (error) {
         console.error("Error al eliminar:", error);
-        alert(error.message);
+        announceAdminAlert(getErrorMessage(error, "No se pudo eliminar el pedido"));
     }
 }
 
@@ -728,6 +982,7 @@ async function changeStatus(btn) {
         badge.classList.add(clases[nuevoIndex]);
         badge.textContent = nuevoEstado;
         row.dataset.estado = nuevoEstado.toLowerCase();
+        announceAdminStatus(`Estado cambiado a ${nuevoEstado.toLowerCase()}`);
         
         // Actualizar badge de pedidos pendientes
         // Si el estado anterior era 'pendiente' y el nuevo no lo es â†’ decrementar
@@ -742,7 +997,7 @@ async function changeStatus(btn) {
         filterTable(false);
     } catch (error) {
         console.error("Error actualizando estado:", error);
-        alert(error.message || "No se pudo cambiar el estado");
+        announceAdminAlert(getErrorMessage(error, "No se pudo cambiar el estado"));
     }
 }
 
@@ -868,7 +1123,7 @@ function verFotos(fotosJSON, clienteNombre, numArchivos, totalCopias, cantidades
         });
     }
 
-    modal.classList.add("active");
+    openFotoModal();
 }
 
 function abrirCarruselCliente(clienteNombre, fotos, indiceInicial = 0, resumenCopias) {
@@ -899,7 +1154,7 @@ function abrirCarruselCliente(clienteNombre, fotos, indiceInicial = 0, resumenCo
 
     if (fotosModalActuales.length === 0) {
         body.innerHTML = '<p style="color:#6b6b85;text-align:center">Sin fotos</p>';
-        modal.classList.add("active");
+        openFotoModal();
         return;
     }
 
@@ -925,7 +1180,7 @@ function abrirCarruselCliente(clienteNombre, fotos, indiceInicial = 0, resumenCo
     }
 
     actualizarCarruselFotosModal();
-    modal.classList.add("active");
+    openFotoModal();
 }
 
 function actualizarCarruselFotosModal() {
@@ -971,7 +1226,14 @@ function cerrarModal() {
     carruselIndiceActual = 0;
     const meta = document.getElementById("fotoModalMeta");
     if (meta) meta.textContent = "";
-    document.getElementById("fotoModal").classList.remove("active");
+    const modal = document.getElementById("fotoModal");
+    if (!modal) return;
+    modal.classList.remove("active");
+    modal.setAttribute("aria-hidden", "true");
+    if (lastFocusedElementBeforeModal && document.contains(lastFocusedElementBeforeModal)) {
+        lastFocusedElementBeforeModal.focus();
+    }
+    lastFocusedElementBeforeModal = null;
 }
 async function descargarImagenComoArchivo(url, nombreArchivo) {
     try {
@@ -1017,15 +1279,16 @@ function extensionDesdeUrl(url) {
 
 async function descargarListaFotos(fotos, nombreBase, btn) {
     if (!Array.isArray(fotos) || fotos.length === 0) {
-        alert("Este pedido no tiene imagenes para descargar");
+        announceAdminAlert("Este pedido no tiene imagenes para descargar");
         return;
     }
 
     const textoOriginal = btn ? btn.textContent : "descargar";
     if (btn) {
         btn.disabled = true;
-        btn.textContent = "descargando...";
+        btn.textContent = "Descargando...";
     }
+    announceAdminStatus("Descarga iniciada");
 
     const base = normalizarNombreArchivoBase(nombreBase);
 
@@ -1041,6 +1304,7 @@ async function descargarListaFotos(fotos, nombreBase, btn) {
             btn.disabled = false;
             btn.textContent = textoOriginal;
         }
+        announceAdminStatus("Descarga finalizada");
     }
 }
 
@@ -1052,7 +1316,7 @@ async function descargarPedido(btn) {
     const cliente = clientesCache.find(function(c) { return Number(c.id) === id; });
 
     if (!cliente) {
-        alert("No se encontro la informacion del pedido");
+        announceAdminAlert("No se encontro la informacion del pedido");
         return;
     }
 
@@ -1067,6 +1331,14 @@ async function descargarFotosDelModal() {
 
 // Cerrar modal con Escape o clic fuera
 document.addEventListener("keydown", function(e) {
+    trapConfirmDialogFocus(e);
+
+    if (isAdminConfirmOpen() && e.key === "Escape") {
+        e.preventDefault();
+        closeAdminConfirmDialog(false);
+        return;
+    }
+
     if (e.key === "Escape") {
         cerrarModal();
         cerrarModalEditarTamano();
@@ -1088,6 +1360,25 @@ document.addEventListener("keydown", function(e) {
 document.getElementById("fotoModal").addEventListener("click", function(e) {
     if (e.target === this) cerrarModal();
 });
+
+const adminConfirmDialog = document.getElementById("adminConfirmDialog");
+if (adminConfirmDialog) {
+    adminConfirmDialog.addEventListener("click", function(e) {
+        if (e.target === this) {
+            closeAdminConfirmDialog(false);
+        }
+    });
+}
+
+const adminConfirmCancel = document.getElementById("adminConfirmCancel");
+if (adminConfirmCancel) {
+    adminConfirmCancel.addEventListener("click", onConfirmDialogCancelClick);
+}
+
+const adminConfirmAccept = document.getElementById("adminConfirmAccept");
+if (adminConfirmAccept) {
+    adminConfirmAccept.addEventListener("click", onConfirmDialogAcceptClick);
+}
 
 const editTamanoModal = document.getElementById("editTamanoModal");
 if (editTamanoModal) {
@@ -1181,6 +1472,11 @@ document.addEventListener("DOMContentLoaded", async function() {
         if (badge) badge.textContent = pedidosPendientes;
     } catch (error) {
         console.error("Error al cargar pedidos:", error);
+        const tbody = document.getElementById("tableBody");
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="9" class="orders-table-empty">No se pudieron cargar los pedidos</td></tr>';
+        }
+        announceAdminAlert("No se pudieron cargar los pedidos");
     }
 
     const navDashboard = document.getElementById("navDashboard");
@@ -1494,17 +1790,34 @@ async function cargarEstadisticas() {
 
         document.getElementById('statPedidosHoy').textContent = fmt(d.pedidos_hoy);
         const flecha = d.cambio_pct >= 0 ? 'â†‘' : 'â†“';
-        document.getElementById('statCambioPct').textContent = `${flecha} ${Math.abs(d.cambio_pct)}% vs ayer`;
+        const elCambioPct = document.getElementById('statCambioPct');
+        if (elCambioPct) { elCambioPct.textContent = `${flecha} ${Math.abs(d.cambio_pct)}% vs ayer`; elCambioPct.removeAttribute('aria-busy'); }
 
         document.getElementById('statTotalFotos').textContent = fmt(d.total_fotos);
         document.getElementById('statFotosSemana').textContent = `â†‘ ${fmt(d.fotos_semana)} esta semana`;
 
         document.getElementById('statClientesActivos').textContent = fmt(d.clientes_activos);
-        document.getElementById('statNuevosHoy').textContent = `${d.nuevos_hoy} nuevo${d.nuevos_hoy !== 1 ? 's' : ''} hoy`;
+        const elNuevosHoy = document.getElementById('statNuevosHoy');
+        if (elNuevosHoy) { elNuevosHoy.textContent = `${d.nuevos_hoy} nuevo${d.nuevos_hoy !== 1 ? 's' : ''} hoy`; elNuevosHoy.removeAttribute('aria-busy'); }
 
         document.getElementById('statPendientes').textContent = fmt(d.pendientes);
+        const _elFotosSemana = document.getElementById('statFotosSemana');
+        if (_elFotosSemana) _elFotosSemana.removeAttribute('aria-busy');
+        const _elPendSub = document.getElementById('statPendientesSub');
+        if (_elPendSub) { _elPendSub.removeAttribute('aria-busy'); _elPendSub.textContent = d.pendientes > 0 ? 'Requieren atención' : 'Al día'; }
     } catch (err) {
         console.error('Error cargando estadÃ­sticas:', err);
+        const ids = ["statPedidosHoy", "statTotalFotos", "statClientesActivos", "statPendientes"];
+        ids.forEach(function(id) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = "—";
+        });
+        const subIds = ["statCambioPct", "statFotosSemana", "statNuevosHoy", "statPendientesSub"];
+        subIds.forEach(function(id) {
+            const el = document.getElementById(id);
+            if (el) { el.textContent = "No disponible"; el.removeAttribute('aria-busy'); }
+        });
+        announceAdminAlert("No se pudieron cargar las estadisticas del dashboard");
     }
 }
 
@@ -1513,15 +1826,18 @@ async function cargarCloudinaryStats() {
     try {
         const res = await fetch('/api/cloudinary-stats');
         const stats = await res.json();
-        
-        if (!res.ok) {
-            console.error('Error en API cloudinary-stats:', stats.error);
-            return;
-        }
-        
         const barraEl = document.getElementById('cloudinaryStorageBar');
         const textEl = document.getElementById('cloudinaryStorageText');
         const valueEl = document.getElementById('cloudinaryStorageValue');
+        
+        if (!res.ok) {
+            console.error('Error en API cloudinary-stats:', stats.error);
+            if (barraEl) barraEl.style.width = '0%';
+            if (valueEl) valueEl.textContent = '—';
+            if (textEl) textEl.textContent = 'No disponible';
+            announceAdminAlert('No se pudo cargar el uso de almacenamiento');
+            return;
+        }
 
         const storageUsedBytes = Number(stats.storage_used_bytes);
         const storageLimitBytes = Number(stats.storage_limit_bytes);
@@ -1568,9 +1884,10 @@ async function cargarCloudinaryStats() {
         
         if (textEl) {
             textEl.textContent = detailsText;
-            textEl.title = hasStorageUsage
-                ? 'Almacenamiento usado / limite del plan en Cloudinary'
-                : 'Cloudinary no devolvio almacenamiento; se muestra proxy de transformaciones';
+            textEl.removeAttribute('aria-busy');
+            textEl.setAttribute('aria-label', hasStorageUsage
+                ? 'Almacenamiento usado sobre límite del plan en Cloudinary'
+                : 'Cloudinary no devuelve almacenamiento; se muestra proxy de transformaciones');
         }
 
         if (valueEl) {
@@ -1578,6 +1895,13 @@ async function cargarCloudinaryStats() {
         }
     } catch (err) {
         console.error('Error cargando stats de Cloudinary:', err);
+        const barraEl = document.getElementById('cloudinaryStorageBar');
+        const textEl = document.getElementById('cloudinaryStorageText');
+        const valueEl = document.getElementById('cloudinaryStorageValue');
+        if (barraEl) barraEl.style.width = '0%';
+        if (valueEl) valueEl.textContent = '—';
+        if (textEl) { textEl.textContent = 'No disponible'; textEl.removeAttribute('aria-busy'); }
+        announceAdminAlert('No se pudo cargar el uso de almacenamiento');
     }
 }
 
@@ -1683,6 +2007,11 @@ async function cargarUltimasSubidas() {
         });
     } catch (err) {
         console.error('Error cargando subidas:', err);
+        const container = document.getElementById('uploadList');
+        if (container) {
+            container.innerHTML = '<p style="color:var(--muted);text-align:center;font-size:13px">No se pudieron cargar las ultimas subidas</p>';
+        }
+        announceAdminAlert('No se pudieron cargar las ultimas subidas');
     }
 }
 
@@ -1712,6 +2041,7 @@ clienteChannel.addEventListener('message', function(event) {
                 statusBadge.textContent = nuevoEstado.charAt(0).toUpperCase() + nuevoEstado.slice(1);
                 statusBadge.className = `status status-${nuevoEstado}`;
                 row.dataset.estado = nuevoEstado.toLowerCase();
+                announceAdminStatus(`Estado actualizado a ${nuevoEstado}`);
                 
                 // Actualizar badge si cambiÃ³ de pendiente a otro estado
                 if (estadoActual === 'pendiente' && nuevoEstado !== 'pendiente') {

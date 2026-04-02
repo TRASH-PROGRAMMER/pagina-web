@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import os
 import json
 import re
@@ -909,6 +909,8 @@ def crear_clientes():
         # Actualizar datos del pedido (tamaÃ±o, papel, fecha)
         existe.tamano       = data.get("tamano", existe.tamano)
         existe.tamano_keys  = data.get("tamano_keys", existe.tamano_keys)
+
+        
         existe.papel        = data.get("papel", existe.papel)
         existe.fecha_registro = data["fechaRegistro"]
         if not existe.estado or (existe.estado or '').strip().lower() == 'cancelado':
@@ -2010,7 +2012,7 @@ def cloudinary_stats():
         print(f'Error obteniendo stats de Cloudinary: {e}')
         return jsonify({'error': str(e)}), 500
 if __name__ == '__main__':
-    _debug = os.environ.get('FLASK_DEBUG', '0').lower() in ('1', 'true', 'yes')
+    _debug = os.environ.get('FLASK_DEBUG', '1').lower() in ('1', 'true', 'yes')
     app.run(host='0.0.0.0', port=5000, debug=_debug)
 
 

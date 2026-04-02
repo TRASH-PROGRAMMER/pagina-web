@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="Panel de administración — Image Manager">
   <title>Admin — Image Manager</title>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style/admin.css') }}">
@@ -59,9 +61,9 @@
 
   <!-- TOPBAR -->
   <div class="topbar">
-    <div class="topbar-title">
+    <h1 class="topbar-title">
       <span>Dashboard</span> / Vista general
-    </div>
+    </h1>
     <div class="topbar-actions">
       <button class="btn btn-ghost" onclick="exportCSV()">↓ Exportar CSV</button>
       <a class="btn btn-ghost" href="{{ url_for('auth.logout') }}" data-auth-logout="tab">Salir</a>
@@ -77,25 +79,25 @@
         <div class="stat-icon">📦</div>
         <div class="stat-label">Pedidos hoy</div>
         <div class="stat-value" id="statPedidosHoy" style="color:var(--accent)">—</div>
-        <div class="stat-sub" id="statCambioPct">Cargando...</div>
+        <div class="stat-sub" id="statCambioPct" aria-live="polite" aria-busy="true">—</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon">🖼️</div>
         <div class="stat-label">Imágenes cargadas</div>
         <div class="stat-value" id="statTotalFotos" style="color:var(--accent2)">—</div>
-        <div class="stat-sub" id="statFotosSemana">Cargando...</div>
+        <div class="stat-sub" id="statFotosSemana" aria-live="polite" aria-busy="true">—</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon">👥</div>
         <div class="stat-label">Clientes activos</div>
         <div class="stat-value" id="statClientesActivos" style="color:var(--accent3)">—</div>
-        <div class="stat-sub" id="statNuevosHoy">Cargando...</div>
+        <div class="stat-sub" id="statNuevosHoy" aria-live="polite" aria-busy="true">—</div>
       </div>
       <div class="stat-card">
         <div class="stat-icon">⏳</div>
         <div class="stat-label"> Pedidos pendientes</div>
         <div class="stat-value" id="statPendientes" style="color:var(--warning)">—</div>
-        <div class="stat-sub">Requieren acción</div>
+        <div class="stat-sub" id="statPendientesSub" aria-live="polite">—</div>
       </div>
       <div class="stat-card cloudinary-wide-card">
         <div class="stat-icon">☁️</div>
@@ -105,7 +107,7 @@
           <div class="cloudinary-progress" style="background: var(--input-bg); border-radius: 4px; height: 6px; overflow: hidden;">
             <div id="cloudinaryStorageBar" style="height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); width: 0%; transition: width 0.3s ease;"></div>
           </div>
-          <div id="cloudinaryStorageText" style="font-size: 11px; color: var(--muted); margin-top: 6px;" title="Almacenamiento usado / limite del plan">Cargando...</div>
+          <div id="cloudinaryStorageText" style="font-size: 11px; color: var(--muted); margin-top: 6px;" aria-live="polite" aria-label="Almacenamiento usado sobre límite del plan">—</div>
         </div>
       </div>
     </div>
@@ -199,7 +201,7 @@
           <div class="section-title">Últimas subidas</div>
         </div>
         <div class="upload-list" id="uploadList">
-          <p style="color:var(--muted);text-align:center;font-size:13px">Cargando...</p>
+          <p style="color:var(--muted);text-align:center;font-size:13px" aria-live="polite" aria-busy="true">—</p>
         </div>
       </div>
     </div>
@@ -345,7 +347,7 @@
 </div><!-- /main -->
 
 <!-- MODAL PARA VER FOTOS -->
-<div id="fotoModal" class="foto-modal">
+<div id="fotoModal" class="foto-modal" aria-modal="true" role="dialog" aria-labelledby="fotoModalTitle" aria-describedby="fotoModalMeta" aria-hidden="true" tabindex="-1">
   <div class="foto-modal-content">
     <div class="foto-modal-header">
       <div class="foto-modal-header-text">
@@ -353,7 +355,7 @@
         <p id="fotoModalMeta" class="foto-modal-meta" aria-live="polite"></p>
       </div>
       <div class="foto-modal-actions">
-        <button type="button" id="descargarpedido" class="descargarpedidobtn" aria-label="Descargar imagenes">descargar</button>
+        <button type="button" id="descargarpedido" class="descargarpedidobtn" aria-label="Descargar imágenes">Descargar</button>
         <button class="foto-modal-close" onclick="cerrarModal()" aria-label="Cerrar modal">&times;</button>
       </div>
     </div>
@@ -386,7 +388,33 @@
   </div>
 </div>
 
+<div id="adminConfirmDialog" class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="adminConfirmTitle" aria-describedby="adminConfirmMessage" aria-hidden="true" hidden>
+  <div class="confirm-dialog-content" role="document">
+    <h3 id="adminConfirmTitle" class="confirm-dialog-title">Confirmar acción</h3>
+    <p id="adminConfirmMessage" class="confirm-dialog-message">¿Estás seguro de continuar?</p>
+    <div class="confirm-dialog-actions">
+      <button type="button" id="adminConfirmCancel" class="confirm-dialog-btn" onclick="onConfirmDialogCancelClick()">Cancelar</button>
+      <button type="button" id="adminConfirmAccept" class="confirm-dialog-btn confirm-danger" onclick="onConfirmDialogAcceptClick()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div id="adminStatusLive" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+<div id="adminAlertLive" class="sr-only" role="alert" aria-live="assertive" aria-atomic="true"></div>
+
 <style>
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
   /* ── Filtros alfabéticos ── */
   .alpha-filters {
     display: flex;
@@ -869,6 +897,70 @@
     margin-top: 4px;
   }
 
+  .confirm-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.72);
+    padding: 18px;
+  }
+  .confirm-dialog-content {
+    width: min(100%, 460px);
+    background: #151823;
+    border: 1px solid #2a2a3a;
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 24px 50px rgba(0, 0, 0, 0.45);
+  }
+  .confirm-dialog-title {
+    margin: 0;
+    color: #f2f3f7;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .confirm-dialog-message {
+    margin: 10px 0 0;
+    color: #b9bdd1;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .confirm-dialog-actions {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  .confirm-dialog-btn {
+    border: 1px solid #2f3250;
+    border-radius: 8px;
+    background: #1a1e31;
+    color: #eceef8;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  .confirm-dialog-btn:hover,
+  .confirm-dialog-btn:focus-visible {
+    border-color: #7c6cfc;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(124, 108, 252, 0.25);
+  }
+  .confirm-dialog-btn.confirm-danger {
+    border-color: #6a2d37;
+    background: #4a1f27;
+    color: #ffd7dd;
+  }
+  .confirm-dialog-btn.confirm-danger:hover,
+  .confirm-dialog-btn.confirm-danger:focus-visible {
+    border-color: #d16274;
+    box-shadow: 0 0 0 2px rgba(209, 98, 116, 0.22);
+  }
+
   @media (max-width: 900px) {
     .tamano-form {
       grid-template-columns: 1fr 1fr;
@@ -891,6 +983,6 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='script/session_auth_client.js') }}"></script>
-<script src="{{ url_for('static', filename='script/dasbord_admin.js', v='20260330b') }}"></script>
+<script src="{{ url_for('static', filename='script/dasbord_admin.js', v='20260402c') }}"></script>
 </body>
 </html>

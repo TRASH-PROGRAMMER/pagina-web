@@ -392,7 +392,7 @@ pagina-web/
 
 ## 16) Estado actual del proyecto
 
-La aplicacion esta enfocada en operacion real de pedidos:
+La aplicacion esta enfocada en la operacion real de pedidos:
 
 - formulario avanzado con UX/a11y
 - autosave resiliente
