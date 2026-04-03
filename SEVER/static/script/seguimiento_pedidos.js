@@ -126,7 +126,7 @@
         if (e === 'procesando' || e === 'en proceso') {
             return {
                 variant: 'processing',
-                badge: '⚙️ Procesando',
+                badge: '⚙️ PROCESANDO',
                 text: 'Estamos trabajando en tu pedido. Pronto estará listo.'
             };
         }
@@ -134,7 +134,7 @@
         if (e === 'listo_retiro') {
             return {
                 variant: 'shipped',
-                badge: '🏪 Listo para retirar',
+                badge: '🏪 LISTO PARA RETIRAR',
                 text: 'Tu pedido está listo para retirar en el local.'
             };
         }
@@ -142,7 +142,7 @@
         if (e === 'entregado') {
             return {
                 variant: 'delivered',
-                badge: '✅ Entregado',
+                badge: '✅ ENTREGADO',
                 text: 'Tu pedido ha sido entregado correctamente.'
             };
         }
@@ -150,14 +150,14 @@
         if (e === 'cancelado' || e === 'error') {
             return {
                 variant: 'problem',
-                badge: '❌ Problema con el pedido',
+                badge: '❌ PROBLEMA',
                 text: 'Hubo un inconveniente. Por favor, revisa o intenta nuevamente.'
             };
         }
 
         return {
             variant: 'pending',
-            badge: '🔄 En curso',
+            badge: '🔄 EN CURSO',
             text: 'Tu pedido aún no ha sido entregado. Te avisaremos cuando esté listo.'
         };
     }
@@ -424,14 +424,45 @@
         }
 
         const n = activos.length;
-        const titulo = n === 1
-            ? 'Tienes un pedido en curso'
-            : `Tienes ${n} pedidos en curso`;
+        const activosOrdenados = activos.slice().sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+        const pedidosPorId = new Map(activosOrdenados.map((p) => [String(p.id), p]));
+        const pedidoInicialId = String(pedidoVista.id);
+        const titulo = `Tienes ${n} pedido${n === 1 ? '' : 's'} en curso`;
         const mensajeEstado = obtenerMensajeDinamicoEstado(pedidoVista.estado);
-        const subtitulo = n === 1
-            ? `Pedido #${pedidoVista.id}`
-            : `Pedido de referencia: #${pedidoVista.id} (más reciente)`;
-        const resumenEstados = obtenerResumenEstadosActivos(activos);
+        const selectorHtml = n > 1
+            ? `
+                <div class="seguimiento-pedido-selector-wrap">
+                    <label for="seguimientoPedidoSelector" class="seguimiento-pedido-selector-label">Elegir pedido:</label>
+                    <select id="seguimientoPedidoSelector" class="seguimiento-pedido-selector" aria-label="Seleccionar pedido activo para ver su estado">
+                        ${activosOrdenados.map((p) => `<option value="${p.id}" ${String(p.id) === pedidoInicialId ? 'selected' : ''}>Pedido #${p.id}</option>`).join('')}
+                    </select>
+                </div>
+            `
+            : `<div class="seguimiento-pedido-selector-wrap"><span class="seguimiento-pedido-selector-label">Pedido:</span><span class="seguimiento-pedido-single">#${pedidoVista.id}</span></div>`;
+        const quickSelectorHtml = n > 1
+            ? `
+                <div class="seguimiento-pedido-quick-nav" data-quick-nav="true">
+                    <button type="button" class="seguimiento-pedido-quick-arrow" data-action="scroll-pedido-mobile" data-dir="-1" aria-label="Ver pedidos anteriores">&#8249;</button>
+                    <div class="seguimiento-pedido-quick-list" role="group" aria-label="Seleccion rápida de pedido en móvil">
+                        ${activosOrdenados.map((p) => `
+                            <button
+                                type="button"
+                                class="seguimiento-pedido-quick-btn ${String(p.id) === pedidoInicialId ? 'is-active' : ''}"
+                                data-action="select-pedido-mobile"
+                                data-order-id="${p.id}"
+                                aria-pressed="${String(p.id) === pedidoInicialId ? 'true' : 'false'}"
+                                aria-label="Seleccionar pedido ${p.id}">
+                                #${p.id}
+                            </button>
+                        `).join('')}
+                    </div>
+                    <button type="button" class="seguimiento-pedido-quick-arrow" data-action="scroll-pedido-mobile" data-dir="1" aria-label="Ver pedidos siguientes">&#8250;</button>
+                </div>
+            `
+            : '';
+        const quickHintHtml = n > 4
+            ? `<p class="seguimiento-pedido-quick-hint" aria-hidden="true">Desliza para ver más pedidos</p>`
+            : '';
 
         const contenedor = document.createElement('div');
         contenedor.id = 'contenedorSeguimientoPedido';
@@ -444,19 +475,25 @@
                 <span class="seguimiento-pedido-icono">📦</span>
                 <div class="seguimiento-pedido-detalles">
                     <div class="seguimiento-pedido-titulo">${titulo}</div>
-                    <div class="seguimiento-pedido-subtitulo">${subtitulo}</div>
-                    ${resumenEstados ? `<div class="seguimiento-pedido-resumen">${resumenEstados}</div>` : ''}
-                    <div class="seguimiento-pedido-texto-estado">
-                        <span class="seguimiento-pedido-badge-estado">${mensajeEstado.badge}</span>
-                        <span>${mensajeEstado.text}</span>
+                    <div class="seguimiento-pedido-controles">
+                        ${selectorHtml}
+                        <a href="/seguimiento?pedido=${pedidoVista.id}&correo=${encodeURIComponent(pedidoVista.correo || '')}" 
+                           class="btn-ver-estado" 
+                           id="btnVerEstadoPedido"
+                           aria-label="Ver estado del pedido ${pedidoVista.id}">
+                            Ver estado
+                        </a>
                     </div>
+                    ${quickSelectorHtml}
+                    ${quickHintHtml}
+                    <div class="seguimiento-pedido-texto-estado">
+                        <span class="seguimiento-pedido-badge-estado" aria-label="Estado actual">${mensajeEstado.badge}</span>
+                        <span class="seguimiento-pedido-separador" aria-hidden="true">—</span>
+                        <span data-seguimiento-texto>${mensajeEstado.text}</span>
+                    </div>
+                    <span class="sr-only seguimiento-pedido-selector-live" aria-live="polite" aria-atomic="true"></span>
                 </div>
             </div>
-            <a href="/seguimiento?pedido=${pedidoVista.id}&correo=${encodeURIComponent(pedidoVista.correo || '')}" 
-               class="btn-ver-estado" 
-               id="btnVerEstadoPedido">
-                Ver estado
-            </a>
         `;
 
         const header = document.querySelector('header.container');
@@ -465,6 +502,105 @@
         } else {
             document.body.insertBefore(contenedor, document.body.firstChild);
         }
+
+        const selector = contenedor.querySelector('#seguimientoPedidoSelector');
+        const quickBtns = Array.from(contenedor.querySelectorAll('[data-action="select-pedido-mobile"]'));
+        const quickListEl = contenedor.querySelector('.seguimiento-pedido-quick-list');
+        const quickArrowBtns = Array.from(contenedor.querySelectorAll('[data-action="scroll-pedido-mobile"]'));
+        const badgeEl = contenedor.querySelector('.seguimiento-pedido-badge-estado');
+        const textoEl = contenedor.querySelector('[data-seguimiento-texto]');
+        const botonEstadoEl = contenedor.querySelector('#btnVerEstadoPedido');
+        const liveEl = contenedor.querySelector('.seguimiento-pedido-selector-live');
+
+        function actualizarEstadoFlechasQuick() {
+            if (!quickListEl || quickArrowBtns.length === 0) return;
+
+            const maxScrollLeft = Math.max(0, quickListEl.scrollWidth - quickListEl.clientWidth);
+            const hasOverflow = maxScrollLeft > 2;
+            const atStart = quickListEl.scrollLeft <= 2;
+            const atEnd = quickListEl.scrollLeft >= (maxScrollLeft - 2);
+
+            quickArrowBtns.forEach((btn) => {
+                const dir = Number(btn.getAttribute('data-dir') || '0');
+                const disable = !hasOverflow || (dir < 0 ? atStart : atEnd);
+                btn.disabled = disable;
+                btn.setAttribute('aria-disabled', disable ? 'true' : 'false');
+            });
+        }
+
+        function aplicarPedidoSeleccionado(orderId, announceChange) {
+            const pedido = pedidosPorId.get(String(orderId)) || pedidoVista;
+            if (!pedido || !botonEstadoEl || !badgeEl || !textoEl) return;
+
+            const msg = obtenerMensajeDinamicoEstado(pedido.estado);
+            contenedor.className = `seguimiento-pedido-banner seguimiento-pedido-banner--${msg.variant}`;
+            if (n > 1) contenedor.classList.add('seguimiento-pedido-banner--multi');
+            badgeEl.textContent = msg.badge;
+            textoEl.textContent = msg.text;
+
+            const href = `/seguimiento?pedido=${pedido.id}&correo=${encodeURIComponent(pedido.correo || '')}`;
+            botonEstadoEl.setAttribute('href', href);
+            botonEstadoEl.setAttribute('aria-label', `Ver estado del pedido ${pedido.id}`);
+
+            if (selector && selector.value !== String(pedido.id)) {
+                selector.value = String(pedido.id);
+            }
+
+            if (announceChange && liveEl) {
+                liveEl.textContent = `Pedido ${pedido.id} seleccionado. Estado ${msg.badge}.`;
+            }
+
+            if (quickBtns.length > 0) {
+                let selectedQuickBtn = null;
+                quickBtns.forEach((btn) => {
+                    const active = String(btn.getAttribute('data-order-id')) === String(pedido.id);
+                    btn.classList.toggle('is-active', active);
+                    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+                    if (active) selectedQuickBtn = btn;
+                });
+
+                if (selectedQuickBtn && quickListEl) {
+                    selectedQuickBtn.scrollIntoView({
+                        behavior: announceChange ? 'smooth' : 'auto',
+                        inline: 'center',
+                        block: 'nearest'
+                    });
+                }
+            }
+
+            actualizarEstadoFlechasQuick();
+        }
+
+        if (selector) {
+            selector.addEventListener('change', function() {
+                aplicarPedidoSeleccionado(selector.value, true);
+            });
+        }
+
+        if (quickBtns.length > 0) {
+            quickBtns.forEach((btn) => {
+                btn.addEventListener('click', function() {
+                    const id = btn.getAttribute('data-order-id');
+                    aplicarPedidoSeleccionado(id, true);
+                });
+            });
+        }
+
+        if (quickListEl && quickArrowBtns.length > 0) {
+            quickArrowBtns.forEach((btn) => {
+                btn.addEventListener('click', function() {
+                    const dir = Number(btn.getAttribute('data-dir') || '0');
+                    if (!dir) return;
+                    const delta = Math.max(140, Math.round(quickListEl.clientWidth * 0.75)) * dir;
+                    quickListEl.scrollBy({ left: delta, behavior: 'smooth' });
+                });
+            });
+
+            quickListEl.addEventListener('scroll', actualizarEstadoFlechasQuick, { passive: true });
+            window.addEventListener('resize', actualizarEstadoFlechasQuick);
+        }
+
+        aplicarPedidoSeleccionado(pedidoInicialId, false);
     }
 
     /**

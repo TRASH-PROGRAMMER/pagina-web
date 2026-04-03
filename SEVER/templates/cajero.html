@@ -84,6 +84,26 @@
 			font-size: 13px;
 			cursor: pointer;
 		}
+		.header-actions {
+			display: flex;
+			gap: 8px;
+			align-items: center;
+		}
+		.realtime-badge {
+			border: 1px solid var(--line);
+			border-radius: 999px;
+			padding: 6px 10px;
+			font-size: 11px;
+			letter-spacing: 0.05em;
+			text-transform: uppercase;
+			color: #fde68a;
+			background: rgba(250, 204, 21, 0.12);
+		}
+		.realtime-badge.online {
+			color: #bbf7d0;
+			border-color: rgba(34, 197, 94, 0.5);
+			background: rgba(34, 197, 94, 0.13);
+		}
 		.btn:hover { filter: brightness(1.08); }
 		.wrap {
 			max-width: 1280px;
@@ -176,6 +196,9 @@
 			text-align: left;
 			font-size: 12.5px;
 		}
+		#cashierBody tr.row-realtime-flash td {
+			animation: rowRealtimeFlash 2.3s ease;
+		}
 		th {
 			color: var(--muted);
 			text-transform: uppercase;
@@ -236,6 +259,14 @@
 				max-height: none;
 			}
 		}
+		@keyframes rowRealtimeFlash {
+			0% {
+				background: rgba(34, 197, 94, 0.35);
+			}
+			100% {
+				background: transparent;
+			}
+		}
 	</style>
 </head>
 <body data-auth-roles="cajero">
@@ -247,7 +278,10 @@
 			<p>Cobra rapido: busca pedido, marca pagado y continua con el siguiente.</p>
 			<div class="meta">Usuario: <span data-auth-username>Usuario</span> | Rol: <span data-auth-role>cajero</span></div>
 		</div>
-		<a class="btn" href="{{ url_for('auth.logout') }}" data-auth-logout="tab">Salir</a>
+		<div class="header-actions">
+			<span id="realtimeBadge" class="realtime-badge" role="status" aria-live="polite">Sin conexion</span>
+			<a class="btn" href="{{ url_for('auth.logout') }}" data-auth-logout="tab">Salir</a>
+		</div>
 	</header>
 
 	<main id="contenido-cajero" class="wrap" tabindex="-1" role="main">
@@ -320,9 +354,21 @@
 	<script src="{{ url_for('static', filename='script/session_auth_client.js') }}"></script>
 	<script>
 		const PAGE_SIZE = 20;
+		const FALLBACK_SYNC_INTERVAL_MS = 12000;
+		const REALTIME_RETRY_BASE_MS = 3000;
+		const REALTIME_RETRY_MAX_MS = 20000;
+		const REALTIME_LAST_EVENT_STORAGE_KEY = "cajero_realtime_last_event_id";
 		let pedidosAll = [];
 		let pedidosFiltrados = [];
 		let paginaActual = 1;
+		let pedidosSignature = "";
+		let realtimeSource = null;
+		let realtimeConnected = false;
+		let realtimeRetryMs = REALTIME_RETRY_BASE_MS;
+		let realtimeReconnectTimerId = null;
+		let realtimeFallbackTimerId = null;
+		let realtimeNoticeCache = new Set();
+		let notificationPermissionBound = false;
 
 		function normalizarEstado(estado) {
 			const raw = String(estado || "pendiente").trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -352,11 +398,139 @@
 		function showFeedback(msg, type = "info") {
 			const box = document.getElementById("feedback");
 			const live = document.getElementById("liveRegion");
+			const raw = String(msg || "").replace(/\s+/g, " ").trim();
+			let shortMsg = raw;
+			const lower = raw.toLowerCase();
+			if (lower.includes("no se pudo cargar pedidos")) {
+				shortMsg = "No se cargaron pedidos. Reintenta.";
+			} else if (lower.includes("no se pudo marcar") && lower.includes("pagado")) {
+				shortMsg = "No se marco pagado. Reintenta.";
+			} else if (lower.includes("error de red") && lower.includes("cobro")) {
+				shortMsg = "Fallo de red en cobro. Reintenta.";
+			} else if (raw.length > 110) {
+				const base = raw.split(/[.;:]/)[0].trim();
+				shortMsg = type === "error" ? `${base}. Reintenta.` : base;
+			}
 			if (box) {
 				box.className = `feedback show ${type}`;
-				box.textContent = msg;
+				box.setAttribute("role", type === "error" ? "alert" : "status");
+				box.setAttribute("aria-live", type === "error" ? "assertive" : "polite");
+				box.textContent = shortMsg;
 			}
-			if (live) live.textContent = msg;
+			if (live) live.textContent = shortMsg;
+		}
+
+		function setRealtimeBadge(texto, online = false) {
+			const badge = document.getElementById("realtimeBadge");
+			if (!badge) return;
+			badge.textContent = texto;
+			badge.classList.toggle("online", Boolean(online));
+		}
+
+		function construirFirmaPedidos(lista) {
+			const arr = Array.isArray(lista) ? lista : [];
+			return arr.map(function(p) {
+				const id = Number(p && p.id) || 0;
+				const estado = normalizarEstado(p && p.estado);
+				const pagado = p && p.pagado ? 1 : 0;
+				const nf = Number(p && p.numFotos != null
+					? p.numFotos
+					: (Array.isArray(p && p.fotos) ? p.fotos.length : 0)) || 0;
+				const tc = Number(p && p.totalCopias != null ? p.totalCopias : nf) || 0;
+				const fecha = String(p && p.fechaRegistro || "");
+				return `${id}:${estado}:${pagado}:${nf}:${tc}:${fecha}`;
+			}).join("|");
+		}
+
+		function resaltarFilaPedido(id) {
+			const n = Number(id);
+			if (!Number.isFinite(n) || n <= 0) return;
+			const row = document.getElementById(`pedido-${n}`);
+			if (!row) return;
+			row.classList.remove("row-realtime-flash");
+			void row.offsetWidth;
+			row.classList.add("row-realtime-flash");
+			window.setTimeout(function() {
+				row.classList.remove("row-realtime-flash");
+			}, 2400);
+		}
+
+		function parseRealtimePayload(raw) {
+			if (!raw) return {};
+			try {
+				const parsed = JSON.parse(raw);
+				return parsed && typeof parsed === "object" ? parsed : {};
+			} catch (_error) {
+				return {};
+			}
+		}
+
+		function getStoredRealtimeLastEventId() {
+			try {
+				const raw = window.sessionStorage.getItem(REALTIME_LAST_EVENT_STORAGE_KEY) || "0";
+				const n = Number(raw);
+				return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
+			} catch (_error) {
+				return 0;
+			}
+		}
+
+		function setStoredRealtimeLastEventId(lastEventId) {
+			const n = Number(lastEventId);
+			if (!Number.isFinite(n) || n < 0) return;
+			try {
+				window.sessionStorage.setItem(REALTIME_LAST_EVENT_STORAGE_KEY, String(Math.trunc(n)));
+			} catch (_error) {
+				// Ignorar storage bloqueado.
+			}
+		}
+
+		function bindNotificationPermissionRequest() {
+			if (notificationPermissionBound) return;
+			notificationPermissionBound = true;
+
+			const requestPermission = function() {
+				if (!("Notification" in window)) return;
+				if (Notification.permission !== "default") return;
+				Notification.requestPermission().catch(function() {
+					// Ignorar errores de permiso.
+				});
+			};
+
+			document.addEventListener("click", requestPermission, { once: true, capture: true });
+			document.addEventListener("keydown", requestPermission, { once: true, capture: true });
+		}
+
+		function notifyDesktop(eventName, payload, eventId) {
+			if (!("Notification" in window) || Notification.permission !== "granted") return;
+			const id = Number(payload && payload.order_id);
+			const safeId = Number.isFinite(id) && id > 0 ? id : null;
+			const key = `${String(eventId || "0")}:${eventName}:${safeId || "na"}`;
+			if (realtimeNoticeCache.has(key)) return;
+			realtimeNoticeCache.add(key);
+			if (realtimeNoticeCache.size > 100) {
+				const first = realtimeNoticeCache.values().next();
+				if (!first.done) realtimeNoticeCache.delete(first.value);
+			}
+
+			let title = "Actualizacion de pedidos";
+			let body = "Se detecto un cambio en pedidos.";
+			if (eventName === "new_order") {
+				title = "Nuevo pedido";
+				body = safeId ? `Ingreso el pedido #${String(safeId).padStart(4, "0")}.` : "Ingreso un nuevo pedido.";
+			} else if (eventName === "payment_confirmed") {
+				title = "Pago confirmado";
+				body = safeId ? `Se confirmo el pago del pedido #${String(safeId).padStart(4, "0")}.` : "Se confirmo un pago.";
+			}
+
+			const n = new Notification(title, {
+				body,
+				tag: `cajero-${eventName}-${safeId || "na"}`,
+			});
+			n.onclick = function() {
+				window.focus();
+				this.close();
+			};
 		}
 
 		function clearFeedback() {
@@ -484,11 +658,18 @@
 			body.setAttribute("aria-busy", "false");
 		}
 
-		async function cargarPedidos() {
+		async function cargarPedidos(options = {}) {
+			const opts = options || {};
+			const silent = Boolean(opts.silent);
+			const force = Boolean(opts.force);
+			const focusOrderId = Number(opts.focusOrderId);
+
 			const body = document.getElementById("cashierBody");
-			clearFeedback();
+			if (!silent) {
+				clearFeedback();
+			}
 			try {
-				if (body) {
+				if (body && !silent) {
 					body.setAttribute("aria-busy", "true");
 					body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Cargando...</td></tr>';
 				}
@@ -498,21 +679,41 @@
 					return;
 				}
 				const pedidos = await res.json();
+				const nuevos = Array.isArray(pedidos) ? pedidos : [];
+				const firmaNueva = construirFirmaPedidos(nuevos);
+
+				if (!force && firmaNueva === pedidosSignature) {
+					if (Number.isFinite(focusOrderId) && focusOrderId > 0) {
+						resaltarFilaPedido(focusOrderId);
+					}
+					return;
+				}
+
+				pedidosSignature = firmaNueva;
 				if (!Array.isArray(pedidos) || pedidos.length === 0) {
 					pedidosAll = [];
 					pedidosFiltrados = [];
 					renderRows();
-					showFeedback("No hay pedidos para cobrar.", "info");
+					if (!silent) {
+						showFeedback("No hay pedidos para cobrar.", "info");
+					}
 					return;
 				}
 
 				pedidosAll = pedidos.slice();
 				pedidosFiltrados = pedidos.slice();
 				renderRows();
-				showFeedback("Pedidos cargados correctamente.", "ok");
+				if (Number.isFinite(focusOrderId) && focusOrderId > 0) {
+					resaltarFilaPedido(focusOrderId);
+				}
+				if (!silent) {
+					showFeedback("Pedidos cargados correctamente.", "ok");
+				}
 			} catch (_error) {
-				if (body) body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Error al cargar pedidos</td></tr>';
-				showFeedback("No se pudo cargar pedidos. Intenta recargar.", "error");
+				if (body && !silent) body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Error al cargar pedidos</td></tr>';
+				if (!silent) {
+					showFeedback("No se pudo cargar pedidos. Intenta recargar.", "error");
+				}
 			}
 		}
 
@@ -576,6 +777,7 @@
 
 				showFeedback(`Pedido #${String(id).padStart(4, "0")} marcado como pagado.`, "ok");
 				applyFilters();
+				await cargarPedidos({ silent: true, force: true, focusOrderId: id });
 			} catch (_err) {
 				if (btn) {
 					btn.disabled = false;
@@ -594,6 +796,133 @@
 			if (e) e.value = "";
 			applyFilters();
 			showFeedback("Filtros limpiados.", "info");
+		}
+
+		function closeRealtimeSource() {
+			if (realtimeSource) {
+				try {
+					realtimeSource.close();
+				} catch (_error) {
+					// Ignorar errores de cierre.
+				}
+				realtimeSource = null;
+			}
+			realtimeConnected = false;
+		}
+
+		function scheduleRealtimeReconnect() {
+			if (realtimeReconnectTimerId) return;
+			const delay = Math.max(REALTIME_RETRY_BASE_MS, Math.min(realtimeRetryMs, REALTIME_RETRY_MAX_MS));
+			realtimeReconnectTimerId = window.setTimeout(function() {
+				realtimeReconnectTimerId = null;
+				conectarRealtimePedidos();
+			}, delay);
+			realtimeRetryMs = Math.min(Math.round(delay * 1.6), REALTIME_RETRY_MAX_MS);
+		}
+
+		function handleRealtimeEvent(eventName, ev) {
+			const payload = parseRealtimePayload(ev && ev.data);
+			const eventId = ev && ev.lastEventId;
+			setStoredRealtimeLastEventId(eventId);
+			const orderId = Number(payload && payload.order_id);
+			const focusOrderId = Number.isFinite(orderId) && orderId > 0 ? orderId : null;
+
+			if (eventName === "new_order") {
+				showFeedback("Nuevo pedido recibido.", "info");
+				notifyDesktop(eventName, payload, eventId);
+			} else if (eventName === "payment_confirmed") {
+				showFeedback("Pago confirmado en tiempo real.", "ok");
+				notifyDesktop(eventName, payload, eventId);
+			}
+
+			cargarPedidos({ silent: true, force: true, focusOrderId });
+		}
+
+		function conectarRealtimePedidos() {
+			if (typeof EventSource === "undefined") {
+				setRealtimeBadge("Tiempo real no disponible", false);
+				return;
+			}
+			if (realtimeSource) return;
+
+			setRealtimeBadge("Conectando...", false);
+
+			const storedLastId = getStoredRealtimeLastEventId();
+			const streamUrl = storedLastId > 0
+				? `/api/realtime/pedidos/stream?lastEventId=${storedLastId}`
+				: "/api/realtime/pedidos/stream";
+
+			const source = new EventSource(streamUrl, { withCredentials: true });
+			realtimeSource = source;
+
+			source.onopen = function() {
+				realtimeConnected = true;
+				realtimeRetryMs = REALTIME_RETRY_BASE_MS;
+				setRealtimeBadge("En vivo", true);
+			};
+
+			source.onerror = function() {
+				closeRealtimeSource();
+				setRealtimeBadge("Reconectando...", false);
+				cargarPedidos({ silent: true, force: true });
+				scheduleRealtimeReconnect();
+			};
+
+			source.addEventListener("connected", function(ev) {
+				setStoredRealtimeLastEventId(ev && ev.lastEventId);
+				realtimeConnected = true;
+				realtimeRetryMs = REALTIME_RETRY_BASE_MS;
+				setRealtimeBadge("En vivo", true);
+			});
+
+			source.addEventListener("sync_needed", function(ev) {
+				handleRealtimeEvent("sync_needed", ev);
+			});
+			source.addEventListener("new_order", function(ev) {
+				handleRealtimeEvent("new_order", ev);
+			});
+			source.addEventListener("order_updated", function(ev) {
+				handleRealtimeEvent("order_updated", ev);
+			});
+			source.addEventListener("order_deleted", function(ev) {
+				handleRealtimeEvent("order_deleted", ev);
+			});
+			source.addEventListener("status_changed", function(ev) {
+				handleRealtimeEvent("status_changed", ev);
+			});
+			source.addEventListener("payment_confirmed", function(ev) {
+				handleRealtimeEvent("payment_confirmed", ev);
+			});
+			source.addEventListener("payment_reverted", function(ev) {
+				handleRealtimeEvent("payment_reverted", ev);
+			});
+		}
+
+		function iniciarRealtimeCajero() {
+			bindNotificationPermissionRequest();
+			conectarRealtimePedidos();
+
+			if (!realtimeFallbackTimerId) {
+				realtimeFallbackTimerId = window.setInterval(function() {
+					if (document.visibilityState !== "visible") return;
+					if (!realtimeConnected) {
+						cargarPedidos({ silent: true });
+					}
+				}, FALLBACK_SYNC_INTERVAL_MS);
+			}
+
+			document.addEventListener("visibilitychange", function() {
+				if (document.visibilityState === "visible") {
+					cargarPedidos({ silent: true, force: true });
+					if (!realtimeConnected) {
+						conectarRealtimePedidos();
+					}
+				}
+			});
+
+			window.addEventListener("beforeunload", function() {
+				closeRealtimeSource();
+			});
 		}
 
 		function wireEvents() {
@@ -662,7 +991,8 @@
 		}
 
 		wireEvents();
-		cargarPedidos();
+		iniciarRealtimeCajero();
+		cargarPedidos({ silent: true, force: true });
 	</script>
 </body>
 </html>

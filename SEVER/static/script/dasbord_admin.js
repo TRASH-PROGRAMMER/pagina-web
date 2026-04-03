@@ -4,6 +4,14 @@ clienteChannel.onmessage = function(event) {
     if (event.data?.tipo === "nuevo_cliente") {
         clientesCache.unshift(event.data.cliente);
         renderClienteRow(event.data.cliente);
+        const fotosNuevas = Number(
+            event.data.cliente && event.data.cliente.numFotos != null
+                ? event.data.cliente.numFotos
+                : (Array.isArray(event.data.cliente && event.data.cliente.fotos)
+                    ? event.data.cliente.fotos.length
+                    : 0)
+        );
+        ajustarTotalImagenes(Number.isFinite(fotosNuevas) ? fotosNuevas : 0);
         if (!document.getElementById("clientesCardsContainer")?.hidden) {
             renderClientesCards(clientesCache);
         }
@@ -33,9 +41,41 @@ let confirmDialogResolver = null;
 let adminToastTimer = null;
 const liveMessageState = { status: "", alert: "" };
 
+function compactAdminMessage(text, isError = false) {
+    const raw = String(text || "").replace(/\s+/g, " ").trim();
+    if (!raw) return "";
+
+    const lower = raw.toLowerCase();
+    if (lower.includes("no se pudieron cargar") && lower.includes("estad")) {
+        return "No se cargaron estadisticas. Reintenta.";
+    }
+    if (lower.includes("no se pudo cargar") && lower.includes("almacenamiento")) {
+        return "No se cargo almacenamiento. Reintenta.";
+    }
+    if (lower.includes("no se pudieron cargar") && lower.includes("pedidos")) {
+        return "No se cargaron pedidos. Reintenta.";
+    }
+    if (lower.includes("no se pudieron cargar") && lower.includes("clientes")) {
+        return "No se cargaron clientes. Reintenta.";
+    }
+    if (lower.includes("no se pudo cambiar el estado")) {
+        return "No se actualizo estado. Reintenta.";
+    }
+    if (lower.includes("no se pudo eliminar") && lower.includes("pedido")) {
+        return "No se elimino pedido. Reintenta.";
+    }
+
+    if (raw.length <= 120) return raw;
+
+    const corte = raw.split(/[.;:]/)[0].trim();
+    if (!corte) return isError ? "Ocurrio un error. Reintenta." : "Operacion completada.";
+    if (isError) return `${corte}. Reintenta.`;
+    return corte;
+}
+
 function setLiveText(elementId, text, channel) {
     const el = document.getElementById(elementId);
-    const value = String(text || "").trim();
+    const value = compactAdminMessage(text, channel === "alert");
     if (!el || !value) return;
     if (liveMessageState[channel] === value) return;
     liveMessageState[channel] = value;
@@ -46,11 +86,14 @@ function setLiveText(elementId, text, channel) {
 }
 
 function announceAdminStatus(text) {
-    setLiveText("adminStatusLive", text, "status");
+    const value = compactAdminMessage(text, false);
+    if (!value) return;
+    setLiveText("adminStatusLive", value, "status");
+    showAdminToast(value, false);
 }
 
 function showAdminToast(text, isError = false) {
-    const value = String(text || "").trim();
+    const value = compactAdminMessage(text, isError);
     if (!value) return;
 
     let toast = document.getElementById("adminToast");
@@ -103,15 +146,17 @@ function showAdminToast(text, isError = false) {
 }
 
 function announceAdminAlert(text) {
-    setLiveText("adminAlertLive", text, "alert");
-    showAdminToast(text, true);
+    const value = compactAdminMessage(text, true);
+    if (!value) return;
+    setLiveText("adminAlertLive", value, "alert");
+    showAdminToast(value, true);
 }
 
 function getErrorMessage(error, fallbackMessage) {
     if (error && typeof error.message === "string" && error.message.trim()) {
-        return error.message.trim();
+        return compactAdminMessage(error.message.trim(), true);
     }
-    return fallbackMessage;
+    return compactAdminMessage(fallbackMessage, true);
 }
 
 function openFotoModal() {
@@ -933,12 +978,14 @@ async function deleteRow(btn) {
 
     const id = Number(row.dataset.id);
     const estadoActual = (row.dataset.estado || 'pendiente').toLowerCase();
+    const numFotosEliminadas = Math.max(0, parseInt(row.dataset.numFotos || "0", 10) || 0);
     try {
         const res = await fetch(`/api/clientes/${id}`, { method: "DELETE" });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Error al eliminar");
         row.remove();
         clientesCache = clientesCache.filter(function(c) { return Number(c.id) !== id; });
+        ajustarTotalImagenes(-numFotosEliminadas);
         if (!document.getElementById("clientesCardsContainer")?.hidden) {
             renderClientesCards(clientesCache);
         }
@@ -1065,6 +1112,408 @@ function exportCSV() {
 function getBadge() {
     return document.getElementById("badgePedidos");
 }
+
+function getBadgeImagenes() {
+    return document.getElementById("badgeImagenes");
+}
+
+function getStatTotalFotosEl() {
+    return document.getElementById("statTotalFotos");
+}
+
+function parseEnteroUI(text) {
+    const raw = String(text || "").replace(/[^\d-]/g, "");
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function totalImagenesVisibleActual() {
+    const statEl = getStatTotalFotosEl();
+    const badge = getBadgeImagenes();
+    const desdeStat = statEl ? parseEnteroUI(statEl.textContent) : 0;
+    if (desdeStat > 0) return desdeStat;
+    return badge ? parseEnteroUI(badge.textContent) : 0;
+}
+
+function actualizarBadgeImagenes(total) {
+    const badge = getBadgeImagenes();
+    const statEl = getStatTotalFotosEl();
+    if (!badge && !statEl) return;
+
+    const n = Number(total);
+    if (!Number.isFinite(n) || n < 0) {
+        if (badge) {
+            badge.textContent = "—";
+            badge.setAttribute("aria-label", "Total de imagenes no disponible");
+        }
+        if (statEl) {
+            statEl.textContent = "—";
+        }
+        return;
+    }
+
+    const valor = Math.trunc(n);
+    const valorFmt = valor.toLocaleString("es-MX");
+    if (badge) {
+        badge.textContent = valorFmt;
+        badge.setAttribute("aria-label", `Total de imagenes subidas: ${valorFmt}`);
+    }
+    if (statEl) {
+        statEl.textContent = valorFmt;
+    }
+}
+
+function ajustarTotalImagenes(delta) {
+    const d = Number(delta);
+    if (!Number.isFinite(d) || d === 0) return;
+    const base = totalImagenesVisibleActual();
+    const siguiente = Math.max(0, Math.trunc(base + d));
+    actualizarBadgeImagenes(siguiente);
+}
+
+const CLIENTES_SYNC_INTERVAL_MS = 12000;
+const REALTIME_RETRY_BASE_MS = 3000;
+const REALTIME_RETRY_MAX_MS = 20000;
+const REALTIME_LAST_EVENT_STORAGE_KEY = "admin_realtime_last_event_id";
+let clientesSyncInFlight = false;
+let clientesSyncTimerId = null;
+let lastClientesSignature = "";
+let realtimeSource = null;
+let realtimeConnected = false;
+let realtimeRetryMs = REALTIME_RETRY_BASE_MS;
+let realtimeReconnectTimerId = null;
+let realtimeDesktopNoticeCache = new Set();
+let notificationPermissionBound = false;
+
+function contarPedidosPendientes(list) {
+    const arr = Array.isArray(list) ? list : [];
+    return arr.filter(function(c) {
+        return normalizarEstadoPedido(c && c.estado) === "pendiente";
+    }).length;
+}
+
+function contarImagenesClientes(list) {
+    const arr = Array.isArray(list) ? list : [];
+    return arr.reduce(function(acc, c) {
+        const n = Number(c && c.numFotos != null
+            ? c.numFotos
+            : (Array.isArray(c && c.fotos) ? c.fotos.length : 0));
+        return acc + (Number.isFinite(n) && n > 0 ? n : 0);
+    }, 0);
+}
+
+function construirFirmaClientes(list) {
+    const arr = Array.isArray(list) ? list : [];
+    return arr.map(function(c) {
+        const id = Number(c && c.id) || 0;
+        const estado = normalizarEstadoPedido(c && c.estado);
+        const pagado = c && c.pagado ? 1 : 0;
+        const nf = Number(c && c.numFotos != null
+            ? c.numFotos
+            : (Array.isArray(c && c.fotos) ? c.fotos.length : 0)) || 0;
+        const tc = Number(c && c.totalCopias != null ? c.totalCopias : nf) || 0;
+        const fecha = String(c && c.fechaRegistro || "");
+        return `${id}:${estado}:${pagado}:${nf}:${tc}:${fecha}`;
+    }).join("|");
+}
+
+function aplicarClientesCacheEnUI(resetPage = false) {
+    const tbody = document.getElementById("tableBody");
+    if (tbody) {
+        tbody.innerHTML = "";
+        clientesCache.forEach(function(cliente) {
+            renderClienteRow(cliente, false);
+        });
+    }
+
+    filterTable(resetPage);
+
+    const badge = getBadge();
+    if (badge) {
+        badge.textContent = contarPedidosPendientes(clientesCache);
+    }
+    actualizarBadgeImagenes(contarImagenesClientes(clientesCache));
+
+    if (!document.getElementById("clientesCardsContainer")?.hidden) {
+        renderClientesCards(clientesCache);
+    }
+}
+
+function setAdminRealtimeBadge(text, online = false) {
+    const el = document.getElementById("realtimeBadge");
+    if (!el) return;
+    el.textContent = text;
+    el.classList.toggle("online", Boolean(online));
+    el.classList.toggle("offline", !online);
+}
+
+function parseRealtimePayload(raw) {
+    if (!raw) return {};
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (_error) {
+        return {};
+    }
+}
+
+function getStoredRealtimeLastEventId() {
+    try {
+        const raw = window.sessionStorage.getItem(REALTIME_LAST_EVENT_STORAGE_KEY) || "0";
+        const n = Number(raw);
+        return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
+    } catch (_error) {
+        return 0;
+    }
+}
+
+function setStoredRealtimeLastEventId(lastEventId) {
+    const n = Number(lastEventId);
+    if (!Number.isFinite(n) || n < 0) return;
+    try {
+        window.sessionStorage.setItem(REALTIME_LAST_EVENT_STORAGE_KEY, String(Math.trunc(n)));
+    } catch (_error) {
+        // Ignorar storage bloqueado.
+    }
+}
+
+function tryRequestNotificationPermission() {
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "default") return;
+    Notification.requestPermission().catch(function() {
+        // Ignorar errores de permisos del navegador.
+    });
+}
+
+function bindNotificationPermissionRequest() {
+    if (notificationPermissionBound) return;
+    notificationPermissionBound = true;
+
+    const onceRequest = function() {
+        tryRequestNotificationPermission();
+    };
+
+    document.addEventListener("click", onceRequest, { once: true, capture: true });
+    document.addEventListener("keydown", onceRequest, { once: true, capture: true });
+}
+
+function notifyDesktopAdmin(eventName, payload, eventId) {
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+
+    const id = Number(payload && payload.order_id);
+    const safeId = Number.isFinite(id) && id > 0 ? id : null;
+    const dedupeKey = `${String(eventId || "0")}:${eventName}:${safeId || "na"}`;
+    if (realtimeDesktopNoticeCache.has(dedupeKey)) return;
+    realtimeDesktopNoticeCache.add(dedupeKey);
+    if (realtimeDesktopNoticeCache.size > 120) {
+        const first = realtimeDesktopNoticeCache.values().next();
+        if (!first.done) {
+            realtimeDesktopNoticeCache.delete(first.value);
+        }
+    }
+
+    let title = "Actualizacion de pedidos";
+    let body = "Hubo una actualizacion en el panel.";
+    if (eventName === "new_order") {
+        title = "Nuevo pedido";
+        body = safeId ? `Llego el pedido #${String(safeId).padStart(4, "0")}.` : "Llego un nuevo pedido.";
+    } else if (eventName === "payment_confirmed") {
+        title = "Pago confirmado";
+        body = safeId ? `El pedido #${String(safeId).padStart(4, "0")} fue marcado como pagado.` : "Se confirmo un pago.";
+    }
+
+    const notice = new Notification(title, {
+        body,
+        tag: `admin-${eventName}-${safeId || "na"}`,
+    });
+    notice.onclick = function() {
+        window.focus();
+        this.close();
+    };
+}
+
+function resaltarFilaPedido(orderId) {
+    const id = Number(orderId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    const row = document.querySelector(`#tableBody tr[data-id="${id}"]`);
+    if (!row) return;
+
+    row.classList.remove("row-realtime-flash");
+    void row.offsetWidth;
+    row.classList.add("row-realtime-flash");
+    window.setTimeout(function() {
+        row.classList.remove("row-realtime-flash");
+    }, 2600);
+}
+
+async function sincronizarClientesEnSegundoPlano(force = false, focusOrderId = null) {
+    if (clientesSyncInFlight) return;
+    clientesSyncInFlight = true;
+
+    try {
+        const res = await fetch("/api/clientes", { cache: "no-store" });
+        if (res.status === 401 || res.status === 403) {
+            window.location.href = "/login";
+            return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const clientes = await res.json();
+        const nuevos = Array.isArray(clientes) ? clientes : [];
+        const firmaNueva = construirFirmaClientes(nuevos);
+
+        if (!force && firmaNueva === lastClientesSignature) {
+            return;
+        }
+
+        clientesCache = nuevos;
+        lastClientesSignature = firmaNueva;
+        aplicarClientesCacheEnUI(false);
+        if (focusOrderId != null) {
+            resaltarFilaPedido(focusOrderId);
+        }
+    } catch (error) {
+        console.error("Error en sincronizacion automatica de pedidos:", error);
+    } finally {
+        clientesSyncInFlight = false;
+    }
+}
+
+function closeAdminRealtimeSource() {
+    if (realtimeSource) {
+        try {
+            realtimeSource.close();
+        } catch (_error) {
+            // Ignorar errores de cierre.
+        }
+        realtimeSource = null;
+    }
+    realtimeConnected = false;
+}
+
+function scheduleAdminRealtimeReconnect() {
+    if (realtimeReconnectTimerId) return;
+    const delay = Math.max(REALTIME_RETRY_BASE_MS, Math.min(realtimeRetryMs, REALTIME_RETRY_MAX_MS));
+    realtimeReconnectTimerId = window.setTimeout(function() {
+        realtimeReconnectTimerId = null;
+        conectarAdminRealtime();
+    }, delay);
+    realtimeRetryMs = Math.min(Math.round(delay * 1.6), REALTIME_RETRY_MAX_MS);
+}
+
+function handleAdminRealtimeEvent(eventName, eventObj) {
+    const payload = parseRealtimePayload(eventObj && eventObj.data);
+    const eventId = eventObj && eventObj.lastEventId;
+    setStoredRealtimeLastEventId(eventId);
+    const orderId = Number(payload && payload.order_id);
+    const focusOrderId = Number.isFinite(orderId) && orderId > 0 ? orderId : null;
+
+    if (eventName === "new_order") {
+        announceAdminStatus("Nuevo pedido recibido.");
+        notifyDesktopAdmin(eventName, payload, eventId);
+    } else if (eventName === "payment_confirmed") {
+        announceAdminStatus("Pago confirmado en tiempo real.");
+        notifyDesktopAdmin(eventName, payload, eventId);
+    }
+
+    sincronizarClientesEnSegundoPlano(true, focusOrderId);
+
+    if (["new_order", "order_deleted", "payment_confirmed", "status_changed", "order_updated"].includes(eventName)) {
+        cargarEstadisticas();
+        cargarGraficoPedidos();
+        cargarUltimasSubidas();
+    }
+}
+
+function conectarAdminRealtime() {
+    if (typeof EventSource === "undefined") {
+        setAdminRealtimeBadge("Tiempo real no soportado", false);
+        return;
+    }
+    if (realtimeSource) return;
+
+    setAdminRealtimeBadge("Conectando…", false);
+
+    const storedLastId = getStoredRealtimeLastEventId();
+    const streamUrl = storedLastId > 0
+        ? `/api/realtime/pedidos/stream?lastEventId=${storedLastId}`
+        : "/api/realtime/pedidos/stream";
+
+    const source = new EventSource(streamUrl, { withCredentials: true });
+    realtimeSource = source;
+
+    source.onopen = function() {
+        realtimeConnected = true;
+        realtimeRetryMs = REALTIME_RETRY_BASE_MS;
+        setAdminRealtimeBadge("En vivo", true);
+    };
+
+    source.onerror = function() {
+        closeAdminRealtimeSource();
+        setAdminRealtimeBadge("Reconectando…", false);
+        sincronizarClientesEnSegundoPlano(true);
+        scheduleAdminRealtimeReconnect();
+    };
+
+    source.addEventListener("connected", function(ev) {
+        setStoredRealtimeLastEventId(ev && ev.lastEventId);
+        realtimeConnected = true;
+        realtimeRetryMs = REALTIME_RETRY_BASE_MS;
+        setAdminRealtimeBadge("En vivo", true);
+    });
+
+    source.addEventListener("sync_needed", function(ev) {
+        handleAdminRealtimeEvent("sync_needed", ev);
+    });
+    source.addEventListener("new_order", function(ev) {
+        handleAdminRealtimeEvent("new_order", ev);
+    });
+    source.addEventListener("order_updated", function(ev) {
+        handleAdminRealtimeEvent("order_updated", ev);
+    });
+    source.addEventListener("order_deleted", function(ev) {
+        handleAdminRealtimeEvent("order_deleted", ev);
+    });
+    source.addEventListener("status_changed", function(ev) {
+        handleAdminRealtimeEvent("status_changed", ev);
+    });
+    source.addEventListener("payment_confirmed", function(ev) {
+        handleAdminRealtimeEvent("payment_confirmed", ev);
+    });
+    source.addEventListener("payment_reverted", function(ev) {
+        handleAdminRealtimeEvent("payment_reverted", ev);
+    });
+}
+
+function iniciarSincronizacionClientes() {
+    if (clientesSyncTimerId) return;
+
+    bindNotificationPermissionRequest();
+    conectarAdminRealtime();
+
+    clientesSyncTimerId = window.setInterval(function() {
+        if (document.visibilityState === "visible") {
+            if (!realtimeConnected) {
+                sincronizarClientesEnSegundoPlano(false);
+            }
+        }
+    }, CLIENTES_SYNC_INTERVAL_MS);
+
+    document.addEventListener("visibilitychange", function() {
+        if (document.visibilityState === "visible") {
+            sincronizarClientesEnSegundoPlano(true);
+            if (!realtimeConnected) {
+                conectarAdminRealtime();
+            }
+        }
+    });
+
+    window.addEventListener("beforeunload", function() {
+        closeAdminRealtimeSource();
+    });
+}
+
 function actualizarBadge(delta) {
     const badge = getBadge();
     if (!badge) return;
@@ -1493,19 +1942,8 @@ document.addEventListener("DOMContentLoaded", async function() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const clientes = await res.json();
         clientesCache = Array.isArray(clientes) ? clientes : [];
-        const tbody = document.getElementById("tableBody");
-        tbody.innerHTML = "";  // Limpiar filas anteriores
-        clientesCache.forEach(function(cliente) {
-            renderClienteRow(cliente, false);
-        });
-        filterTable(true);
-        
-        // Contar solo pedidos en estado 'pendiente' para el badge
-        const pedidosPendientes = clientesCache.filter(function(c) {
-            return normalizarEstadoPedido(c.estado) === 'pendiente';
-        }).length;
-        const badge = getBadge();
-        if (badge) badge.textContent = pedidosPendientes;
+        lastClientesSignature = construirFirmaClientes(clientesCache);
+        aplicarClientesCacheEnUI(true);
     } catch (error) {
         console.error("Error al cargar pedidos:", error);
         const tbody = document.getElementById("tableBody");
@@ -1735,6 +2173,7 @@ document.addEventListener("DOMContentLoaded", async function() {
     setFormMarcoVisible(false);
     initOpcionesAccordion();
     setAdminMainView("dashboard");
+    iniciarSincronizacionClientes();
 });
 
 // â”€â”€â”€ Exponer funciones al scope global (usadas en onclick del HTML) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1830,6 +2269,7 @@ async function cargarEstadisticas() {
         if (elCambioPct) { elCambioPct.textContent = `${flecha} ${Math.abs(d.cambio_pct)}% vs ayer`; elCambioPct.removeAttribute('aria-busy'); }
 
         document.getElementById('statTotalFotos').textContent = fmt(d.total_fotos);
+        actualizarBadgeImagenes(d.total_fotos);
         document.getElementById('statFotosSemana').textContent = `â†‘ ${fmt(d.fotos_semana)} esta semana`;
 
         document.getElementById('statClientesActivos').textContent = fmt(d.clientes_activos);

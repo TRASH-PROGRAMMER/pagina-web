@@ -107,7 +107,7 @@ function enviarClienteConXhr(formData, opciones) {
 
 // Guardar cliente + fotos: usa FormData -> API Flask -> PostgreSQL
 export async function guardarCliente(formData, opciones = {}) {
-    const TIMEOUT_MS = 120000;
+    const TIMEOUT_MS = 300000;
     const MAX_INTENTOS = 2;
     let ultimoError = null;
 

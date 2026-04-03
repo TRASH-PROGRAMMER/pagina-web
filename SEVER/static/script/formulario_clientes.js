@@ -315,7 +315,7 @@ const mensajesAyudaBase = Object.freeze({
     nombre: "Usa letras y separadores internos validos (espacio, apostrofe o guion). Ej: Maria Jose, O'Connor, Marie-Claire.",
     apellido: "Usa letras y separadores internos validos (espacio, apostrofe o guion). Ej: Lopez, Iñaki, D'Angelo.",
     correo: "Formato recomendado: usuario@dominio.com",
-    imagenes: "Formatos: PNG, JPG, GIF. Maximo 150 imagenes, 10 MB por archivo.",
+    imagenes: "Formatos: PNG, JPG, GIF. Maximo 100 imagenes, 20 MB por archivo.",
     tamano: "Elige un solo tamano base. Toca el mismo chip otra vez para quitar la seleccion.",
     papel: "Selecciona el tipo de papel para tu impresion.",
 });
@@ -599,8 +599,8 @@ function obtenerEstadoValidacion() {
     const totalDigitos = `${prefijo}${telefonoLocal}`.length;
     const telefonoValido = !!prefijo && phoneLocalRegex.test(telefonoLocal) && totalDigitos >= 7 && totalDigitos <= 15;
 
-    const MAX_FILES_PER_ORDER = 150;
-    const MAX_IMAGE_BYTES_PER_FILE = 10 * 1024 * 1024; // 10 MB
+    const MAX_FILES_PER_ORDER = 100;
+    const MAX_IMAGE_BYTES_PER_FILE = 20 * 1024 * 1024; // 20 MB
     const LIMITE_MB = Math.floor(MAX_IMAGE_BYTES_PER_FILE / (1024 * 1024));
 
     const fotos = obtenerFotosActuales();
@@ -629,17 +629,19 @@ function obtenerEstadoValidacion() {
             let extValida = extPermitidas.has(ext);
             let mimeValido = mimePermitidos.has(mime);
 
+            // Browsers moviles pueden omitir MIME; se acepta si extension es valida.
+            // La validacion fuerte de contenido la hace backend por firma y decodificacion.
             if (!extValida && !mimeValido) {
                 errores.push(`Archivo ${nombre}: extensión y tipo MIME no permitidos. (Extensión: .${ext || 'desconocida'}, MIME: ${mime || 'desconocido'})`);
                 return;
             }
-            if (!extValida) {
-                errores.push(`Archivo ${nombre}: extensión no permitida (.${ext || 'desconocida'}). Usa PNG, JPG o GIF.`);
-                return;
+            if (!extValida && mimeValido) {
+                // Sin extension confiable, permitimos por MIME y backend vuelve a validar.
+                extValida = true;
             }
-            if (!mimeValido) {
-                errores.push(`Archivo ${nombre}: tipo MIME no permitido (${mime || 'desconocido'}). Usa imágenes exportadas correctamente.`);
-                return;
+            if (!mimeValido && extValida) {
+                // MIME vacio o no reportado: permitir por extension.
+                mimeValido = true;
             }
 
             const sizeBytes = file.size;

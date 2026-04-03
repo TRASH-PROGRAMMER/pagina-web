@@ -811,11 +811,125 @@
             font-weight: var(--font-weight-semibold);
         }
 
+        .selected-order-panel {
+            margin-bottom: var(--space-6);
+            border: 2px solid var(--color-primary-200);
+            box-shadow: var(--shadow-md);
+        }
+
+        .selected-order-panel[hidden] {
+            display: none !important;
+        }
+
+        .selected-order-panel__header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: var(--space-4);
+            flex-wrap: wrap;
+        }
+
+        .selected-order-panel__eyebrow {
+            font-size: var(--font-size-xs);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-primary-700);
+            font-weight: var(--font-weight-semibold);
+            margin-bottom: var(--space-1);
+        }
+
+        .selected-order-panel__title {
+            font-size: var(--font-size-xl);
+            color: var(--color-gray-900);
+            margin-bottom: var(--space-2);
+        }
+
+        .selected-order-panel__meta {
+            color: var(--color-gray-600);
+            font-size: var(--font-size-sm);
+            margin-bottom: var(--space-2);
+        }
+
+        .selected-order-panel__summary {
+            color: var(--color-gray-700);
+            font-size: var(--font-size-xs);
+            font-weight: var(--font-weight-medium);
+        }
+
+        .selected-order-panel__status-badge {
+            align-self: flex-start;
+        }
+
+        .selected-order-panel__message {
+            margin-top: var(--space-4);
+            font-size: var(--font-size-sm);
+            color: var(--color-gray-700);
+        }
+
+        .selected-order-panel__progress {
+            margin-top: var(--space-4);
+        }
+
+        .selected-order-panel__progress-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: var(--font-size-xs);
+            color: var(--color-gray-600);
+            margin-bottom: var(--space-2);
+        }
+
+        .selected-order-panel__progress-track {
+            height: 10px;
+            border-radius: var(--border-radius-full);
+            background: var(--color-gray-100);
+            overflow: hidden;
+        }
+
+        .selected-order-panel__progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--color-primary-500), var(--color-primary-700));
+            transition: width var(--transition-normal);
+        }
+
+        .selected-order-panel__timeline {
+            margin-top: var(--space-5);
+            padding: var(--space-4);
+            border-radius: var(--border-radius-lg);
+            background: var(--color-gray-50);
+            border: 1px solid var(--color-gray-200);
+        }
+
+        .selected-order-panel__actions {
+            display: flex;
+            gap: var(--space-3);
+            flex-wrap: wrap;
+            margin-top: var(--space-5);
+        }
+
+        .orders-list-grid {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-5);
+        }
+
         /* ============================================
            Tarjeta de pedido
            ============================================ */
         .order-card {
-            margin-bottom: var(--space-5);
+            margin-bottom: 0;
+            cursor: pointer;
+        }
+
+        .order-card--selected {
+            border: 2px solid var(--color-primary-500);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .order-card__selected-chip {
+            background: var(--color-primary-100);
+            color: var(--color-primary-700);
+            border: 1px solid var(--color-primary-300);
         }
 
         .order-card__header {
@@ -1188,6 +1302,8 @@
                 </button>
             </div>
 
+            <section id="selectedOrderPanel" class="card selected-order-panel" hidden tabindex="-1" aria-live="polite" aria-atomic="true" aria-label="Detalle del pedido seleccionado"></section>
+
             <div id="ordersList" role="region" aria-label="Pedidos del usuario">
                 <!-- Los pedidos se cargan dinámicamente -->
             </div>
@@ -1247,11 +1363,14 @@
         const loginBtn = document.getElementById('loginBtn');
         const loginAlert = document.getElementById('loginAlert');
         const ordersList = document.getElementById('ordersList');
+        const selectedOrderPanel = document.getElementById('selectedOrderPanel');
         const ordersCount = document.getElementById('ordersCount');
         const changeEmailBtn = document.getElementById('changeEmailBtn');
 
         let currentEmail = '';
         let refreshTimer = null;
+        let selectedOrderId = '';
+        let currentOrders = [];
         const AUTO_REFRESH_MS = 45000;
 
         // Utilidades
@@ -1313,7 +1432,7 @@
 
             return {
                 variant: 'pending',
-                badge: '🔄 En curso',
+                badge: '🔄 EN CURSO',
                 text: 'Tu pedido aún no ha sido entregado. Te avisaremos cuando esté listo.'
             };
         };
@@ -1347,6 +1466,101 @@
             if (contador.listo_retiro > 0) partes.push(`${contador.listo_retiro} listos para retirar`);
 
             return partes.length > 0 ? `Resumen por estado: ${partes.join(' · ')}.` : '';
+        };
+
+        const getProgressByEstado = (estado) => {
+            const orden = ['pendiente', 'procesando', 'listo_retiro', 'entregado'];
+            const e = normalizeEstado(estado);
+            if (e === 'cancelado') return 100;
+            const idx = orden.indexOf(e);
+            if (idx < 0) return 25;
+            return Math.round(((idx + 1) / orden.length) * 100);
+        };
+
+        const getOrderById = (orderId) => {
+            return currentOrders.find((o) => String(o.id) === String(orderId)) || null;
+        };
+
+        const renderSelectedOrderPanel = (order) => {
+            if (!selectedOrderPanel) return;
+            if (!order) {
+                selectedOrderPanel.hidden = true;
+                selectedOrderPanel.innerHTML = '';
+                return;
+            }
+
+            const estadoNorm = normalizeEstado(order.estado);
+            const stateConfig = ORDER_STATES[estadoNorm] || ORDER_STATES.pendiente;
+            const mensajeEstado = getDynamicStatusMessage(estadoNorm);
+            const progress = getProgressByEstado(estadoNorm);
+            const activos = currentOrders.filter((o) => isPedidoActivo(o.estado));
+            const resumen = getResumenEstadosActivos(activos);
+            const numFotos = Number(order.numFotos || 0);
+            const totalCopias = Number(order.totalCopias != null ? order.totalCopias : numFotos);
+
+            selectedOrderPanel.hidden = false;
+            selectedOrderPanel.innerHTML = `
+                <div class="card__body">
+                    <div class="selected-order-panel__header">
+                        <div>
+                            <p class="selected-order-panel__eyebrow">Pedido seleccionado</p>
+                            <h2 class="selected-order-panel__title">Pedido #${order.id}</h2>
+                            <p class="selected-order-panel__meta">Fecha: ${formatDate(order.fechaRegistro)} · Total: ${formatCurrency(order.total)} · Fotos/copia: ${numFotos}/${totalCopias}</p>
+                            ${resumen ? `<p class="selected-order-panel__summary">${resumen}</p>` : ''}
+                        </div>
+                        <span class="badge ${stateConfig.class} selected-order-panel__status-badge">
+                            <span aria-hidden="true">${stateConfig.icon}</span>
+                            ${stateConfig.label}
+                        </span>
+                    </div>
+
+                    <p class="selected-order-panel__message"><strong>${mensajeEstado.badge}</strong> — ${mensajeEstado.text}</p>
+
+                    <div class="selected-order-panel__progress" role="group" aria-label="Progreso del pedido seleccionado">
+                        <div class="selected-order-panel__progress-head">
+                            <span>Progreso del pedido</span>
+                            <strong>${progress}%</strong>
+                        </div>
+                        <div class="selected-order-panel__progress-track" aria-hidden="true">
+                            <div class="selected-order-panel__progress-fill" style="width: ${progress}%;"></div>
+                        </div>
+                    </div>
+
+                    <div class="selected-order-panel__timeline" aria-label="Historial de estado del pedido seleccionado">
+                        ${generateTimeline(estadoNorm)}
+                    </div>
+
+                    <div class="selected-order-panel__actions">
+                        <button type="button" class="btn btn--secondary btn--sm" onclick="window.focusSelectedOrderCard && window.focusSelectedOrderCard()">Ver tarjeta en la lista</button>
+                        <a href="/seguimiento?pedido=${order.id}&correo=${encodeURIComponent(order.correo || '')}" class="btn btn--primary btn--sm" aria-label="Ver estado completo del pedido ${order.id}">Ver estado completo</a>
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderOrdersList = (orders) => {
+            const lista = Array.isArray(orders) ? orders : [];
+            ordersList.innerHTML = `
+                <div class="orders-list-grid" role="list" aria-label="Listado de pedidos">
+                    ${lista.map(createOrderCard).join('')}
+                </div>
+            `;
+        };
+
+        const selectOrder = (orderId, options = {}) => {
+            const opts = options || {};
+            const order = getOrderById(orderId);
+            if (!order) return;
+
+            selectedOrderId = String(order.id);
+            if (!opts.skipListRender) {
+                renderOrdersList(currentOrders);
+            }
+            renderSelectedOrderPanel(order);
+
+            if (opts.focusPanel && selectedOrderPanel) {
+                selectedOrderPanel.focus();
+            }
         };
 
         const ordenarPedidosVista = (lista) => {
@@ -1454,6 +1668,7 @@
             const estadoNorm = normalizeEstado(order.estado);
             const stateConfig = ORDER_STATES[estadoNorm] || ORDER_STATES.pendiente;
             const activo = isPedidoActivo(estadoNorm);
+            const selected = String(order.id) === String(selectedOrderId);
             const numFotos = Number(order.numFotos || 0);
             const totalCopias = Number(order.totalCopias != null ? order.totalCopias : numFotos);
             const muestraCopias = numFotos > 0 && totalCopias > numFotos;
@@ -1471,7 +1686,15 @@
             `).join('');
 
             return `
-                <article class="card order-card card--hover${activo ? ' order-card--activo' : ''}" data-order-id="${order.id}">
+                <article
+                    class="card order-card card--hover${activo ? ' order-card--activo' : ''}${selected ? ' order-card--selected' : ''}"
+                    data-order-card="true"
+                    data-order-id="${order.id}"
+                    role="listitem"
+                    tabindex="0"
+                    aria-current="${selected ? 'true' : 'false'}"
+                    aria-label="Pedido #${order.id}, estado ${stateConfig.label}, fecha ${formatDate(order.fechaRegistro)}"
+                >
                     <div class="card__body">
                         <header class="order-card__header">
                             <div>
@@ -1487,6 +1710,7 @@
                                 </div>
                             </div>
                             <div class="order-card__badges">
+                                ${selected ? '<span class="badge order-card__selected-chip">Seleccionado</span>' : ''}
                                 ${activo ? '<span class="badge badge--in-progress">En curso</span>' : ''}
                                 <span class="badge ${stateConfig.class}">
                                     <span aria-hidden="true">${stateConfig.icon}</span>
@@ -1515,6 +1739,9 @@
                         </div>
 
                         <footer class="order-card__actions">
+                            <button type="button" class="btn btn--primary btn--sm" data-action="select-order" data-order-id="${order.id}" aria-pressed="${selected ? 'true' : 'false'}">
+                                Ver estado
+                            </button>
                             <button type="button" class="btn btn--secondary btn--sm" 
                                     onclick="toggleOrderDetail(${order.id})"
                                     aria-expanded="false"
@@ -1526,7 +1753,7 @@
                                 Ver detalle
                             </button>
                             <a href="/seguimiento?pedido=${order.id}&correo=${encodeURIComponent(order.correo)}" 
-                               class="btn btn--primary btn--sm">
+                               class="btn btn--ghost btn--sm">
                                 <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                                     <path d="M10 17.5a7.5 7.5 0 100-15 7.5 7.5 0 000 15z" stroke="currentColor" stroke-width="1.5"/>
                                     <path d="M10 6.667V10l2.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -1575,6 +1802,7 @@
         window.toggleOrderDetail = function(orderId) {
             const detail = document.getElementById(`order-detail-${orderId}`);
             const button = document.querySelector(`[aria-controls="order-detail-${orderId}"]`);
+            if (!detail || !button) return;
             const isOpen = detail.classList.contains('order-card__detail--open');
             
             if (isOpen) {
@@ -1600,6 +1828,13 @@
                     Ocultar detalle
                 `;
             }
+        };
+
+        window.focusSelectedOrderCard = function() {
+            const selectedCard = ordersList.querySelector('[data-order-card="true"][aria-current="true"]');
+            if (!selectedCard) return;
+            selectedCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            selectedCard.focus();
         };
 
         // Cargar pedidos
@@ -1640,6 +1875,9 @@
 
                 // Renderizar pedidos
                 if (!data.pedidos || data.pedidos.length === 0) {
+                    currentOrders = [];
+                    selectedOrderId = '';
+                    renderSelectedOrderPanel(null);
                     ordersList.innerHTML = `
                         <div class="empty-state">
                             <div class="empty-state__icon" aria-hidden="true">📭</div>
@@ -1650,30 +1888,14 @@
                     `;
                 } else {
                     const ordenados = ordenarPedidosVista(data.pedidos);
+                    currentOrders = ordenados;
                     const activos = ordenados.filter(o => isPedidoActivo(o.estado));
-                    const numActivos = activos.length;
-                    const pedidoReferencia = numActivos > 0 ? activos[0] : ordenados[0];
-                    const mensajeEstado = getDynamicStatusMessage(pedidoReferencia ? pedidoReferencia.estado : 'pendiente');
-                    const bannerTitulo = numActivos > 0
-                        ? (numActivos === 1 ? 'Tienes 1 pedido en curso' : `Tienes ${numActivos} pedidos en curso`)
-                        : 'No tienes pedidos activos';
-                    const bannerMeta = pedidoReferencia
-                        ? `Pedido de referencia: #${pedidoReferencia.id}${numActivos > 1 ? ' (mostrando el estado del más reciente)' : ''}`
-                        : 'Aún no hay pedidos para mostrar estado.';
-                    const resumenEstados = getResumenEstadosActivos(activos);
+                    const fallbackOrder = activos[0] || ordenados[0];
+                    const existeSeleccion = ordenados.some((o) => String(o.id) === String(selectedOrderId));
+                    selectedOrderId = existeSeleccion ? String(selectedOrderId) : String(fallbackOrder.id);
 
-                    const bannerHtml = `
-                        <div class="orders-status-banner orders-status-banner--state-${mensajeEstado.variant}" role="status" aria-live="polite" aria-atomic="true">
-                            <strong>${bannerTitulo}</strong>
-                            <p class="orders-status-banner__headline">
-                                <span class="orders-status-banner__badge">${mensajeEstado.badge}</span>
-                                <span>${mensajeEstado.text}</span>
-                            </p>
-                            <span class="orders-status-banner__meta">${bannerMeta}</span>
-                            ${resumenEstados ? `<span class="orders-status-banner__meta orders-status-banner__meta--summary">${resumenEstados}</span>` : ''}
-                        </div>`;
-
-                    ordersList.innerHTML = bannerHtml + ordenados.map(createOrderCard).join('');
+                    renderOrdersList(ordenados);
+                    selectOrder(selectedOrderId, { skipListRender: true });
                 }
 
                 iniciarAutoRefresh();
@@ -1708,11 +1930,55 @@
             loadOrders(email);
         });
 
+        ordersList.addEventListener('click', (event) => {
+            const selectBtn = event.target.closest('[data-action="select-order"]');
+            if (selectBtn) {
+                selectOrder(selectBtn.getAttribute('data-order-id'), { focusPanel: true });
+                return;
+            }
+
+            const card = event.target.closest('[data-order-card="true"]');
+            if (!card) return;
+
+            const interactive = event.target.closest('button, a, input, select, textarea');
+            if (interactive) return;
+
+            selectOrder(card.getAttribute('data-order-id'));
+        });
+
+        ordersList.addEventListener('keydown', (event) => {
+            const card = event.target.closest('[data-order-card="true"]');
+            if (!card || event.target !== card) return;
+
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                selectOrder(card.getAttribute('data-order-id'), { focusPanel: true });
+                return;
+            }
+
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                const cards = Array.from(ordersList.querySelectorAll('[data-order-card="true"]'));
+                const currentIdx = cards.indexOf(card);
+                if (currentIdx < 0) return;
+                const nextIdx = event.key === 'ArrowDown'
+                    ? Math.min(cards.length - 1, currentIdx + 1)
+                    : Math.max(0, currentIdx - 1);
+                const nextCard = cards[nextIdx];
+                if (!nextCard) return;
+                nextCard.focus();
+                selectOrder(nextCard.getAttribute('data-order-id'));
+            }
+        });
+
         emailInput.addEventListener('input', clearFieldError);
 
         changeEmailBtn.addEventListener('click', () => {
             detenerAutoRefresh();
             currentEmail = '';
+            currentOrders = [];
+            selectedOrderId = '';
+            renderSelectedOrderPanel(null);
             ordersPage.classList.remove('orders-page--active');
             loginPage.style.display = 'flex';
             document.title = 'Mis Pedidos | Image Manager';

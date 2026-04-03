@@ -165,6 +165,36 @@ body {
     color: #e8e8f0;
 }
 
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.realtime-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid #2a2a3a;
+    padding: 6px 10px;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+}
+
+.realtime-badge.online {
+    color: #86efac;
+    border-color: rgba(34, 197, 94, 0.55);
+    background: rgba(34, 197, 94, 0.14);
+}
+
+.realtime-badge.offline {
+    color: #fcd34d;
+    border-color: rgba(251, 191, 36, 0.45);
+    background: rgba(251, 191, 36, 0.12);
+}
+
 
 .btn {
     display: inline-block;
@@ -391,6 +421,10 @@ tr:last-child td {
 
 tr:hover td {
     background: rgba(124, 108, 252, 0.04);
+}
+
+#tableBody tr.row-realtime-flash td {
+    animation: rowRealtimeFlash 2.4s ease;
 }
 
 .orders-table-empty {
@@ -823,6 +857,15 @@ tr:hover td {
     to {
         transform: scaleY(1);
         transform-origin: bottom;
+    }
+}
+
+@keyframes rowRealtimeFlash {
+    0% {
+        background: rgba(34, 197, 94, 0.38);
+    }
+    100% {
+        background: transparent;
     }
 }
 

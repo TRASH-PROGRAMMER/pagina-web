@@ -14,9 +14,11 @@ const nextPageButton = document.getElementById("nextPageButton");
 const pageInfo = document.getElementById("pageInfo");
 const previewHelp = document.getElementById("previewHelp");
 
-const MAX_IMAGENES = 150;
-const MAX_BYTES_POR_ARCHIVO = 10 * 1024 * 1024;
+const MAX_IMAGENES = 100;
+const MAX_BYTES_POR_ARCHIVO = 20 * 1024 * 1024;
+const LIMITE_MB_POR_ARCHIVO = Math.floor(MAX_BYTES_POR_ARCHIVO / (1024 * 1024));
 const TIPOS_VALIDOS = ["image/jpeg", "image/png", "image/gif", "image/pjpeg", "image/jpg"];
+const EXTENSIONES_VALIDAS = ["jpg", "jpeg", "png", "gif"];
 const ITEMS_POR_PAGINA_DESKTOP = 10;
 const ITEMS_POR_PAGINA_MOBILE = 2;
 
@@ -93,7 +95,16 @@ function validarArchivo(archivo) {
     if (!archivo) return "Archivo invalido.";
 
     const tipo = String(archivo.type || "").toLowerCase();
-    if (!TIPOS_VALIDOS.includes(tipo)) {
+    const nombre = nombreArchivoSeguro(archivo);
+    const ext = nombre.includes(".")
+        ? nombre.split(".").pop().toLowerCase()
+        : "";
+    const mimeValido = !!tipo && TIPOS_VALIDOS.includes(tipo);
+    const extValida = !!ext && EXTENSIONES_VALIDAS.includes(ext);
+
+    // Algunos navegadores devuelven file.type vacio; permitimos extension valida
+    // y dejamos la validacion estricta final al backend por firma binaria.
+    if (!mimeValido && !extValida) {
         return `Tipo no valido: ${nombreArchivoSeguro(archivo)}.`;
     }
 
@@ -102,7 +113,7 @@ function validarArchivo(archivo) {
     }
 
     if (archivo.size > MAX_BYTES_POR_ARCHIVO) {
-        return `Archivo demasiado grande: ${nombreArchivoSeguro(archivo)} (max 10 MB).`;
+        return `Archivo demasiado grande: ${nombreArchivoSeguro(archivo)} (max ${LIMITE_MB_POR_ARCHIVO} MB).`;
     }
 
     return "";
@@ -295,8 +306,8 @@ function adaptarCopyDropzonePorDispositivo() {
     }
     if (dropzoneSub) {
         dropzoneSub.textContent = movil
-            ? "Toca para elegir PNG, JPG o GIF. Máximo 150 imágenes, 10 MB por archivo."
-            : "Formatos: PNG, JPG, GIF — Máximo 150 imágenes, 10 MB por archivo.";
+            ? `Toca para elegir PNG, JPG o GIF. Máximo ${MAX_IMAGENES} imágenes, ${LIMITE_MB_POR_ARCHIVO} MB por archivo.`
+            : `Formatos: PNG, JPG, GIF — Máximo ${MAX_IMAGENES} imágenes, ${LIMITE_MB_POR_ARCHIVO} MB por archivo.`;
     }
     if (dropzoneBox) {
         dropzoneBox.setAttribute(
@@ -308,8 +319,8 @@ function adaptarCopyDropzonePorDispositivo() {
     }
     if (ayudaInput) {
         ayudaInput.textContent = movil
-            ? "Toca para elegir tus fotos. Formatos: PNG, JPG, GIF. Máximo 150 imágenes, 10 MB por archivo."
-            : "Formatos: PNG, JPG, GIF — Máximo 150 imágenes, 10 MB por archivo.";
+            ? `Toca para elegir tus fotos. Formatos: PNG, JPG, GIF. Máximo ${MAX_IMAGENES} imágenes, ${LIMITE_MB_POR_ARCHIVO} MB por archivo.`
+            : `Formatos: PNG, JPG, GIF — Máximo ${MAX_IMAGENES} imágenes, ${LIMITE_MB_POR_ARCHIVO} MB por archivo.`;
     }
 }
 

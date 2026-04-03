@@ -9,9 +9,10 @@ import shutil
 import subprocess
 import importlib
 import tempfile
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from threading import Lock, Thread
+from threading import Condition, Lock, Thread
 import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -27,7 +28,7 @@ for env_candidate in [
         load_dotenv(env_candidate)
         break
 
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, Response, render_template, request, jsonify, session, redirect, stream_with_context, url_for
 from flask_session import Session
 from werkzeug.security import generate_password_hash
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -35,7 +36,7 @@ from werkzeug.utils import secure_filename
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import IntegrityError
 from db import AuthSession, Cliente, ClienteDraft, Foto, FotoTamano, MarcoDiseno, User, db
-from auth import auth_bp, login_required, role_required
+from auth import auth_bp, current_user_role, login_required, role_required
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
@@ -51,7 +52,7 @@ DB_URL = os.environ.get(
 )
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['MAX_CONTENT_LENGTH'] = 150 * 10 * 1024 * 1024  # 150 fotos Ã— 10 MB
+app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', str(100 * 20 * 1024 * 1024)))
 _default_secret = secrets.token_hex(32)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', _default_secret)
 app.config['SESSION_TYPE'] = os.environ.get('SESSION_TYPE', 'filesystem')
@@ -104,8 +105,8 @@ MIME_TO_ALLOWED_EXTENSIONS = {
 }
 FRAME_ALLOWED_EXTENSIONS = {'png', 'svg'}
 FRAME_ALLOWED_MIMETYPES = {'image/png', 'image/svg+xml'}
-MAX_FILES_PER_ORDER = int(os.environ.get("MAX_FILES_PER_ORDER", "150"))
-MAX_IMAGE_BYTES_PER_FILE = int(os.environ.get("MAX_IMAGE_BYTES_PER_FILE", str(10 * 1024 * 1024)))
+MAX_FILES_PER_ORDER = int(os.environ.get("MAX_FILES_PER_ORDER", "100"))
+MAX_IMAGE_BYTES_PER_FILE = int(os.environ.get("MAX_IMAGE_BYTES_PER_FILE", str(20 * 1024 * 1024)))
 SUSPICIOUS_FILE_MARKERS = [
     b"<?php",
     b"<script",
@@ -182,6 +183,98 @@ _cancelled_cleanup_lock = Lock()
 _last_db_backup_run_ts = 0.0
 _db_backup_lock = Lock()
 _db_backup_thread_started = False
+
+REALTIME_SSE_RETRY_MS = int(os.environ.get("REALTIME_SSE_RETRY_MS", "3000"))
+REALTIME_SSE_HEARTBEAT_SECONDS = int(os.environ.get("REALTIME_SSE_HEARTBEAT_SECONDS", "20"))
+REALTIME_SSE_HISTORY_SIZE = int(os.environ.get("REALTIME_SSE_HISTORY_SIZE", "300"))
+_realtime_event_condition = Condition()
+_realtime_event_state = {
+    "seq": 0,
+    "event": "sync_needed",
+    "payload": {
+        "event": "sync_needed",
+        "reason": "bootstrap",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    },
+}
+_realtime_event_history = deque([
+    {
+        "seq": 0,
+        "event": "sync_needed",
+        "payload": dict(_realtime_event_state["payload"]),
+    }
+], maxlen=max(30, REALTIME_SSE_HISTORY_SIZE))
+
+
+def _utc_iso_now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _format_sse_event(event_name, payload=None, event_id=None, retry_ms=None):
+    lines = []
+    if retry_ms is not None:
+        lines.append(f"retry: {int(retry_ms)}")
+    if event_name:
+        lines.append(f"event: {event_name}")
+    if event_id is not None:
+        lines.append(f"id: {event_id}")
+
+    data_str = json.dumps(payload or {}, ensure_ascii=False, separators=(",", ":"))
+    data_lines = data_str.splitlines() or [data_str]
+    for line in data_lines:
+        lines.append(f"data: {line}")
+
+    return "\n".join(lines) + "\n\n"
+
+
+def _emit_realtime_event(event_type, order_id=None, **extra):
+    event_name = str(event_type or "sync_needed").strip().lower().replace(" ", "_")
+    payload = {
+        "event": event_name,
+        "timestamp": _utc_iso_now(),
+    }
+    if order_id is not None:
+        payload["order_id"] = int(order_id)
+
+    for key, value in extra.items():
+        if value is not None:
+            payload[key] = value
+
+    with _realtime_event_condition:
+        next_seq = int(_realtime_event_state.get("seq", 0)) + 1
+        _realtime_event_state["seq"] = next_seq
+        _realtime_event_state["event"] = event_name
+        _realtime_event_state["payload"] = payload
+        _realtime_event_history.append({
+            "seq": next_seq,
+            "event": event_name,
+            "payload": dict(payload),
+        })
+        _realtime_event_condition.notify_all()
+
+
+def _snapshot_realtime_events_since(last_seen_seq):
+    history = list(_realtime_event_history)
+    if not history:
+        return {
+            "events": [],
+            "oldest_seq": last_seen_seq,
+            "latest_seq": last_seen_seq,
+            "gap": False,
+        }
+
+    oldest_seq = int(history[0].get("seq", 0))
+    latest_seq = int(history[-1].get("seq", 0))
+    last_seq = max(0, int(last_seen_seq))
+    gap = last_seq < (oldest_seq - 1)
+
+    pending = [e for e in history if int(e.get("seq", 0)) > last_seq]
+    return {
+        "events": pending,
+        "oldest_seq": oldest_seq,
+        "latest_seq": latest_seq,
+        "gap": gap,
+    }
 
 try:
     PILImageModule = importlib.import_module('PIL.Image')
@@ -1436,6 +1529,12 @@ def crear_clientes():
             }), 502
 
         db.session.commit()
+        _emit_realtime_event(
+            "order_updated",
+            order_id=existe.id,
+            source="append_existing",
+            num_fotos=len(fotos_guardadas),
+        )
         # Calcular total de copias sumando cantidades de todas las fotos del cliente
         total_copias = sum(f.cantidad or 1 for f in existe.fotos)
         respuesta = {
@@ -1599,6 +1698,13 @@ def crear_clientes():
         }), 502
 
     db.session.commit()
+    _emit_realtime_event(
+        "new_order",
+        order_id=nuevo_cliente.id,
+        estado=_normalizar_estado_pedido(nuevo_cliente.estado),
+        pagado=bool(nuevo_cliente.pagado),
+        num_fotos=len(fotos_guardadas),
+    )
     total_copias = sum(cantidades_guardadas) if cantidades_guardadas else len(fotos_guardadas)
 
     respuesta = {
@@ -1657,6 +1763,89 @@ def obtener_clientes():
             c.tamano_keys, sum(f.cantidad or 1 for f in c.fotos), c.tamano)
     } for c in clientes]), 200
 
+
+@app.route('/api/realtime/pedidos/stream', methods=['GET'])
+@login_required
+@role_required('admin', 'operador', 'cajero')
+def realtime_pedidos_stream():
+    last_event_id_raw = request.headers.get("Last-Event-ID") or request.args.get("lastEventId") or "0"
+    try:
+        last_event_id = int(str(last_event_id_raw).strip())
+    except (TypeError, ValueError):
+        last_event_id = 0
+
+    role = current_user_role() or "desconocido"
+
+    @stream_with_context
+    def _stream():
+        heartbeat_seconds = max(10, int(REALTIME_SSE_HEARTBEAT_SECONDS))
+        seen_seq = max(0, int(last_event_id))
+
+        yield _format_sse_event(
+            "connected",
+            {
+                "event": "connected",
+                "role": role,
+                "timestamp": _utc_iso_now(),
+            },
+            event_id=seen_seq,
+            retry_ms=REALTIME_SSE_RETRY_MS,
+        )
+
+        if seen_seq <= 0:
+            yield _format_sse_event(
+                "sync_needed",
+                {
+                    "event": "sync_needed",
+                    "reason": "initial_sync",
+                    "timestamp": _utc_iso_now(),
+                },
+            )
+
+        while True:
+            snapshot = None
+
+            with _realtime_event_condition:
+                snapshot = _snapshot_realtime_events_since(seen_seq)
+                if not snapshot["events"] and not snapshot["gap"]:
+                    _realtime_event_condition.wait(timeout=heartbeat_seconds)
+                    snapshot = _snapshot_realtime_events_since(seen_seq)
+
+            if snapshot["gap"]:
+                seen_seq = int(snapshot["latest_seq"])
+                yield _format_sse_event(
+                    "sync_needed",
+                    {
+                        "event": "sync_needed",
+                        "reason": "replay_gap",
+                        "oldest_available_seq": int(snapshot["oldest_seq"]),
+                        "latest_available_seq": int(snapshot["latest_seq"]),
+                        "timestamp": _utc_iso_now(),
+                    },
+                    event_id=seen_seq,
+                )
+                continue
+
+            events = snapshot["events"] if snapshot else []
+            if not events:
+                yield ": keep-alive\n\n"
+                continue
+
+            for item in events:
+                ev_seq = int(item.get("seq", seen_seq))
+                ev_name = str(item.get("event") or "sync_needed")
+                ev_payload = dict(item.get("payload") or {})
+                seen_seq = ev_seq
+                yield _format_sse_event(ev_name, ev_payload, event_id=ev_seq)
+
+    headers = {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return Response(_stream(), headers=headers)
+
 @app.route('/api/clientes/<int:id>', methods=['DELETE'])
 @login_required
 @role_required('admin', 'operador')
@@ -1673,6 +1862,7 @@ def eliminar_cliente(id):
                 print(f"Error eliminando de Cloudinary: {e}")
     db.session.delete(cliente)
     db.session.commit()
+    _emit_realtime_event("order_deleted", order_id=id)
     return jsonify({"mensaje": "Cliente eliminado correctamente"}), 200
 
 
@@ -1699,6 +1889,12 @@ def actualizar_estado_cliente(id):
 
     cliente.estado = estado
     db.session.commit()
+    _emit_realtime_event(
+        "status_changed",
+        order_id=cliente.id,
+        estado=_normalizar_estado_pedido(cliente.estado),
+        cancelled=bool(cliente.cancelled_at),
+    )
     return jsonify({
         "mensaje": "Estado actualizado",
         "estado": _normalizar_estado_pedido(cliente.estado),
@@ -1725,6 +1921,12 @@ def actualizar_pago_cliente(id):
     if cliente.pagado:
         cliente.estado = 'procesando'
     db.session.commit()
+    _emit_realtime_event(
+        "payment_confirmed" if bool(cliente.pagado) else "payment_reverted",
+        order_id=cliente.id,
+        pagado=bool(cliente.pagado),
+        estado=_normalizar_estado_pedido(cliente.estado),
+    )
     return jsonify({
         "mensaje": "Pago actualizado",
         "pagado": bool(cliente.pagado),

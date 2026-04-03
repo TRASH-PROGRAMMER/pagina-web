@@ -32,9 +32,9 @@
     <a class="nav-item" id="navClientes" href="#">
       <span class="icon">◎</span> Clientes
     </a>
-    <a class="nav-item" href="#">
+    <a class="nav-item" href="#" aria-label="Imagenes totales en el sistema">
       <span class="icon">⬡</span> Imágenes
-      <span class="badge">128</span>
+      <span class="badge" id="badgeImagenes">—</span>
     </a>
 
     <div class="nav-section-label">Configuración</div>
@@ -65,6 +65,7 @@
       <span>Dashboard</span> / Vista general
     </h1>
     <div class="topbar-actions">
+      <span id="realtimeBadge" class="realtime-badge offline" role="status" aria-live="polite">Sin conexion</span>
       <button class="btn btn-ghost" onclick="exportCSV()">↓ Exportar CSV</button>
       <a class="btn btn-ghost" href="{{ url_for('auth.logout') }}" data-auth-logout="tab">Salir</a>
     </div>
@@ -987,6 +988,6 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='script/session_auth_client.js') }}"></script>
-<script src="{{ url_for('static', filename='script/dasbord_admin.js', v='20260403e') }}"></script>
+<script src="{{ url_for('static', filename='script/dasbord_admin.js', v='20260403j') }}"></script>
 </body>
 </html>
