@@ -147,6 +147,8 @@ export async function guardarCliente(formData, opciones = {}) {
             return {
                 cliente: data.cliente,
                 mensaje: data.mensaje || "",
+                operacion: data.operacion || "",
+                pedidoActivo: data.pedidoActivo || null,
                 fallos: Array.isArray(data.fallos) ? data.fallos : [],
             };
         } catch (error) {

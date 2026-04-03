@@ -134,6 +134,7 @@ const facturaOverlay = document.getElementById("facturaOverlay");
 const facturaInfo = document.getElementById("facturaInfo");
 const facturaBody = document.getElementById("facturaBody");
 const pedidoExitoOverlay = document.getElementById("pedidoExitoOverlay");
+const pedidoExitoTitle = document.getElementById("pedidoExitoTitle");
 const pedidoExitoNumero = document.getElementById("pedidoExitoNumero");
 const pedidoExitoInfo = document.getElementById("pedidoExitoInfo");
 const pedidoExitoBody = document.getElementById("pedidoExitoBody");
@@ -215,6 +216,79 @@ let bloqueoSalidaEnvioActivo = false;
 let restaurarClientePendiente = null;
 let pedidoSeguimientoPendiente = { id: "", correo: "" };
 let ultimoEstadoValidacion = null;
+const PEDIDO_ACTIVO_SESSION_KEY = "imageManager_pedido_activo";
+let contextoEnvioPedido = { modo: "create_new", pedidoId: "", correo: "" };
+
+function _esRecargaPagina() {
+    const navEntries = (typeof performance !== "undefined" && typeof performance.getEntriesByType === "function")
+        ? performance.getEntriesByType("navigation")
+        : [];
+    if (Array.isArray(navEntries) && navEntries.length > 0) {
+        return navEntries[0] && navEntries[0].type === "reload";
+    }
+    return false;
+}
+
+function _guardarPedidoActivoEnSesion(pedidoId, correo) {
+    if (!pedidoId) return;
+    const payload = {
+        id: String(pedidoId),
+        correo: String(correo || "").trim(),
+        ts: Date.now(),
+    };
+    try {
+        sessionStorage.setItem(PEDIDO_ACTIVO_SESSION_KEY, JSON.stringify(payload));
+    } catch (_error) {
+        // Si sessionStorage no esta disponible, continuamos en memoria.
+    }
+}
+
+function _obtenerPedidoActivoSesion() {
+    try {
+        const raw = sessionStorage.getItem(PEDIDO_ACTIVO_SESSION_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (!data || !data.id) return null;
+        return {
+            id: String(data.id),
+            correo: String(data.correo || "").trim(),
+        };
+    } catch (_error) {
+        return null;
+    }
+}
+
+function _limpiarPedidoActivoSesion() {
+    try {
+        sessionStorage.removeItem(PEDIDO_ACTIVO_SESSION_KEY);
+    } catch (_error) {
+        // Ignorar errores de almacenamiento.
+    }
+}
+
+function activarModoAnexarPedidoActual() {
+    const pedidoActivo = _obtenerPedidoActivoSesion();
+    if (!pedidoActivo || !pedidoActivo.id) {
+        contextoEnvioPedido = { modo: "create_new", pedidoId: "", correo: "" };
+        return false;
+    }
+
+    contextoEnvioPedido = {
+        modo: "append_existing",
+        pedidoId: pedidoActivo.id,
+        correo: pedidoActivo.correo,
+    };
+    return true;
+}
+
+function resetearModoEnvioPedido() {
+    contextoEnvioPedido = { modo: "create_new", pedidoId: "", correo: "" };
+}
+
+if (_esRecargaPagina()) {
+    _limpiarPedidoActivoSesion();
+    resetearModoEnvioPedido();
+}
 const estadoInteraccionValidacion = {
     intentoEnvio: false,
     blur: {
@@ -1611,12 +1685,15 @@ function actualizarProgresoSubidaPedido(porcentaje, mensaje, estado = "loading")
     }
 }
 
-function abrirModalExitoPedido(clienteId, correoCliente, infoHtml, bodyHtml) {
+function abrirModalExitoPedido(clienteId, correoCliente, infoHtml, bodyHtml, opciones = {}) {
     if (!pedidoExitoOverlay) return;
+    const operacion = String(opciones.operacion || "create_new").trim().toLowerCase();
     pedidoSeguimientoPendiente = {
         id: clienteId ? String(clienteId) : "",
         correo: String(correoCliente || "").trim(),
     };
+
+    _guardarPedidoActivoEnSesion(clienteId, correoCliente);
     
     // Guardar pedido en localStorage para persistencia
     try {
@@ -1671,8 +1748,19 @@ function abrirModalExitoPedido(clienteId, correoCliente, infoHtml, bodyHtml) {
         console.error('Error guardando pedido en localStorage:', e);
     }
     
-    if (pedidoExitoNumero) pedidoExitoNumero.textContent = String(clienteId || "-");
-    if (pedidoExitoInfo) pedidoExitoInfo.innerHTML = infoHtml || "";
+    if (pedidoExitoTitle) {
+        pedidoExitoTitle.innerHTML = operacion === "append_existing"
+            ? `¡Fotos anexadas al Pedido #<span id="pedidoExitoNumero">${String(clienteId || "-")}</span>!`
+            : `¡Pedido #<span id="pedidoExitoNumero">${String(clienteId || "-")}</span> Creado con Exito!`;
+    } else if (pedidoExitoNumero) {
+        pedidoExitoNumero.textContent = String(clienteId || "-");
+    }
+    if (pedidoExitoInfo) {
+        const contextoHtml = operacion === "append_existing"
+            ? '<p style="margin:0 0 8px;color:#0a66cc;font-weight:700;">Modo aplicado: se agregaron fotos al pedido existente.</p>'
+            : '<p style="margin:0 0 8px;color:#0a8f3d;font-weight:700;">Modo aplicado: se creó un pedido nuevo independiente.</p>';
+        pedidoExitoInfo.innerHTML = `${contextoHtml}${infoHtml || ""}`;
+    }
     if (pedidoExitoBody) pedidoExitoBody.innerHTML = bodyHtml || "";
     pedidoExitoOverlay.classList.add("active");
 }
@@ -2092,6 +2180,16 @@ if (pedidoExitoOverlay) {
 
 if (pedidoExitoMasFotos) {
     pedidoExitoMasFotos.addEventListener("click", function() {
+        const seActivo = activarModoAnexarPedidoActual();
+        if (!seActivo) {
+            if (errorMessage) {
+                errorMessage.textContent = "No se detecto un pedido activo para anexar. Se creara un pedido nuevo.";
+                errorMessage.style.color = "#b45309";
+            }
+        } else if (errorMessage) {
+            errorMessage.textContent = `Modo activo: las fotos se anexaran al pedido #${contextoEnvioPedido.pedidoId}.`;
+            errorMessage.style.color = "#0a66cc";
+        }
         if (typeof restaurarClientePendiente === "function") {
             restaurarClientePendiente();
         }
@@ -2262,6 +2360,13 @@ form.addEventListener("submit", async function(e) {
     formData.append('correo', correoInput.value.trim());
     formData.append('telefono', telefonoInternacionalCompleto());
     formData.append('fechaRegistro', new Date().toLocaleString());
+
+    if (contextoEnvioPedido.modo === "append_existing" && contextoEnvioPedido.pedidoId) {
+        formData.append('append_existing', '1');
+        formData.append('pedido_id', String(contextoEnvioPedido.pedidoId));
+    } else {
+        formData.append('append_existing', '0');
+    }
     
     // Stop background queue from initiating new uploads to avoid conflicts with fallback
     uploadQueue = [];
@@ -2490,7 +2595,14 @@ form.addEventListener("submit", async function(e) {
         const bodyConEstado = advertenciasProcesamiento.length > 0
             ? `${bodyResumenHtml}<p style=\"margin-top:10px;color:#b45309;font-weight:700;\">Se procesó el pedido con advertencias: ${advertenciasProcesamiento.join(" y ")}.</p>`
             : bodyResumenHtml;
-        abrirModalExitoPedido(clienteGuardado.id, clienteGuardado.correo, infoResumenHtml, bodyConEstado);
+        abrirModalExitoPedido(
+            clienteGuardado.id,
+            clienteGuardado.correo,
+            infoResumenHtml,
+            bodyConEstado,
+            { operacion: respuestaGuardado.operacion || "create_new" }
+        );
+        resetearModoEnvioPedido();
         window.dispatchEvent(new CustomEvent("pedido:enviado", {
             detail: {
                 clienteId: clienteGuardado.id,

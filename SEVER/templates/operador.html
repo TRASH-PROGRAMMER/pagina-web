@@ -207,6 +207,7 @@
         }
         .estado-pendiente { color: var(--warn); }
         .estado-procesando { color: #60a5fa; }
+        .estado-listo_retiro { color: #34d399; }
         .estado-entregado { color: var(--ok); }
         .estado-cancelado { color: var(--danger); }
         .actions {
@@ -309,6 +310,7 @@
                         <option value="">Todos</option>
                         <option value="pendiente">Pendiente</option>
                         <option value="procesando">Procesando</option>
+                        <option value="listo_retiro">Listo para retirar</option>
                         <option value="entregado">Entregado</option>
                         <option value="cancelado">Cancelado</option>
                     </select>
@@ -361,14 +363,31 @@
 
     <script src="{{ url_for('static', filename='script/session_auth_client.js') }}"></script>
     <script>
-        const estados = ["pendiente", "procesando", "entregado", "cancelado"];
+        const estados = ["pendiente", "procesando", "listo_retiro", "entregado", "cancelado"];
         const PAGE_SIZE = 20;
         let pedidosAll = [];
         let pedidosFiltrados = [];
         let paginaActual = 1;
 
+        function normalizarEstado(estado) {
+            const raw = String(estado || "pendiente").trim().toLowerCase().replace(/[\s-]+/g, "_");
+            if (raw === "enviado" || raw === "listo_para_retirar") return "listo_retiro";
+            if (raw === "en_proceso") return "procesando";
+            return raw || "pendiente";
+        }
+
+        function estadoLabel(estado) {
+            const key = normalizarEstado(estado);
+            if (key === "pendiente") return "PENDIENTE";
+            if (key === "procesando") return "PROCESANDO";
+            if (key === "listo_retiro") return "LISTO PARA RETIRAR";
+            if (key === "entregado") return "ENTREGADO";
+            if (key === "cancelado") return "CANCELADO";
+            return "PENDIENTE";
+        }
+
         function estadoClass(estado) {
-            return `estado-${estado || "pendiente"}`;
+            return `estado-${normalizarEstado(estado)}`;
         }
 
         function escapeHtml(valor) {
@@ -403,7 +422,7 @@
             const pendingChip = document.getElementById("pendingChip");
             if (resultsChip) resultsChip.textContent = `Resultados: ${pedidosFiltrados.length}`;
             const pendientes = pedidosAll.filter(function(p) {
-                return (p.estado || "pendiente").toLowerCase() === "pendiente";
+                return normalizarEstado(p.estado) === "pendiente";
             }).length;
             if (pendingChip) pendingChip.textContent = `Pendientes: ${pendientes}`;
         }
@@ -461,7 +480,7 @@
             pedidosFiltrados = pedidosAll.filter(function(p) {
                 const nombre = `${p.nombre || ""} ${p.apellido || ""}`.toLowerCase();
                 const correo = String(p.correo || "").toLowerCase();
-                const estadoPedido = String(p.estado || "pendiente").toLowerCase();
+                const estadoPedido = normalizarEstado(p.estado);
                 const pagoPedido = p.pagado ? "pagado" : "pendiente";
 
                 const okBusqueda = !q || nombre.includes(q) || correo.includes(q);
@@ -500,7 +519,7 @@
                 tr.innerHTML = `
                     <td>${escapeHtml(p.nombre)} ${escapeHtml(p.apellido)}</td>
                     <td>${escapeHtml(p.correo)}<br><span class="muted">${escapeHtml(p.telefono || "-")}</span></td>
-                    <td><span class="tag ${estadoClass(p.estado)}">${escapeHtml((p.estado || "pendiente").toUpperCase())}</span></td>
+                    <td><span class="tag ${estadoClass(p.estado)}">${escapeHtml(estadoLabel(p.estado))}</span></td>
                     <td>${estadoPago}</td>
                     <td style="white-space:nowrap">${lineaFotosPedido(p)}</td>
                     <td>
@@ -553,8 +572,9 @@
         }
 
         async function cambiarEstado(id, estadoActual, btn) {
-            const idx = estados.indexOf((estadoActual || "pendiente").toLowerCase());
-            const siguiente = estados[(idx + 1) % estados.length];
+            const estadoNormalizado = normalizarEstado(estadoActual);
+            const idx = estados.indexOf(estadoNormalizado);
+            const siguiente = estados[((idx >= 0 ? idx : 0) + 1) % estados.length];
             const original = btn ? btn.textContent : "Cambiar estado";
             try {
                 if (btn) {
@@ -567,7 +587,7 @@
                     body: JSON.stringify({ estado: siguiente })
                 });
                 if (res.ok) {
-                    anunciar(`Pedido ${id} actualizado a ${siguiente}.`, "ok");
+                    anunciar(`Pedido ${id} actualizado a ${estadoLabel(siguiente).toLowerCase()}.`, "ok");
                     await cargarPedidos();
                     return;
                 }

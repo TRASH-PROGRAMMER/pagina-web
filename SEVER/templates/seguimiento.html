@@ -257,6 +257,11 @@
         color: #8a5311;
     }
 
+    .estado-chip.listo_retiro {
+        background: #e8f5ee;
+        color: #1e6f47;
+    }
+
     .estado-chip.entregado {
         background: #eafbf1;
         color: #0f7a4d;
@@ -676,8 +681,25 @@
         };
     }
 
+    function normalizarEstado(estado) {
+        const raw = String(estado || 'pendiente').trim().toLowerCase().replace(/[\s-]+/g, '_');
+        if (raw === 'enviado' || raw === 'listo_para_retirar') return 'listo_retiro';
+        if (raw === 'en_proceso') return 'procesando';
+        return raw || 'pendiente';
+    }
+
+    function etiquetaEstado(estado) {
+        const key = normalizarEstado(estado);
+        if (key === 'pendiente') return 'Pendiente';
+        if (key === 'procesando') return 'Procesando';
+        if (key === 'listo_retiro') return 'Listo para retirar';
+        if (key === 'entregado') return 'Entregado';
+        if (key === 'cancelado') return 'Cancelado';
+        return 'Pendiente';
+    }
+
     function aplicarColorEstado(estado) {
-        const clase = String(estado || '').toLowerCase();
+        const clase = normalizarEstado(estado);
         rEstado.className = 'estado-chip';
         if (clase) {
             rEstado.classList.add(clase);
@@ -697,11 +719,11 @@
         const estadosOrden = [
             { key: 'pendiente', label: 'Pendiente', desc: 'Tu pedido está registrado y espera confirmación de pago', icono: '📋' },
             { key: 'procesando', label: 'En Proceso', desc: 'Estamos imprimiendo tus fotos', icono: '🖨️' },
-            { key: 'enviado', label: 'Enviado', desc: 'Tu pedido está en camino', icono: '🚚' },
+            { key: 'listo_retiro', label: 'Listo para retirar', desc: 'Tu pedido está listo para retirar en el local', icono: '🏪' },
             { key: 'entregado', label: 'Entregado', desc: 'Pedido completado exitosamente', icono: '✅' }
         ];
         
-        const estadoNormalizado = String(estado || '').toLowerCase();
+        const estadoNormalizado = normalizarEstado(estado);
         
         if (estadoNormalizado === 'cancelado') {
             return `
@@ -743,7 +765,7 @@
             const pedidoData = {
                 id: pedido.id,
                 correo: correo,
-                estado: pedido.estado,
+                estado: normalizarEstado(pedido.estado),
                 numFotos: pedido.numFotos || 0,
                 totalCopias: pedido.totalCopias || pedido.numFotos || 0,
                 total: pedido.total || 0,
@@ -771,14 +793,15 @@
         const numFotos = Number(pedido.numFotos || 0);
         const totalCopias = Number(pedido.totalCopias != null ? pedido.totalCopias : numFotos);
         const muestraCopiasSeg = numFotos > 0 && totalCopias > numFotos;
+        const estadoNormalizado = normalizarEstado(pedido.estado);
         rPedido.textContent = pedido.id;
-        rEstado.textContent = pedido.estado;
-        aplicarColorEstado(pedido.estado);
+        rEstado.textContent = etiquetaEstado(estadoNormalizado);
+        aplicarColorEstado(estadoNormalizado);
 
         // Generar timeline
         const timelineContainer = document.getElementById('pedidoTimeline');
         if (timelineContainer) {
-            timelineContainer.innerHTML = generarTimelineHTML(pedido.estado);
+            timelineContainer.innerHTML = generarTimelineHTML(estadoNormalizado);
         }
 
         const fecha = formatearFecha(pedido.fechaRegistro);

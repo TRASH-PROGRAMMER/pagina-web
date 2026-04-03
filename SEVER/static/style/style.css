@@ -2473,6 +2473,31 @@ footer {
     animation: slideDown 0.4s ease-out;
 }
 
+.seguimiento-pedido-banner--pending {
+    background: linear-gradient(135deg, #5d8ae0 0%, #3c67b5 100%);
+    box-shadow: 0 10px 30px rgba(60, 103, 181, 0.3);
+}
+
+.seguimiento-pedido-banner--processing {
+    background: linear-gradient(135deg, #e89d41 0%, #c56a1a 100%);
+    box-shadow: 0 10px 30px rgba(197, 106, 26, 0.3);
+}
+
+.seguimiento-pedido-banner--shipped {
+    background: linear-gradient(135deg, #2d9a72 0%, #22785a 100%);
+    box-shadow: 0 10px 30px rgba(34, 120, 90, 0.28);
+}
+
+.seguimiento-pedido-banner--delivered {
+    background: linear-gradient(135deg, #1ea562 0%, #0f7a4d 100%);
+    box-shadow: 0 10px 30px rgba(15, 122, 77, 0.3);
+}
+
+.seguimiento-pedido-banner--problem {
+    background: linear-gradient(135deg, #d6455f 0%, #a11f3a 100%);
+    box-shadow: 0 10px 30px rgba(161, 31, 58, 0.3);
+}
+
 @keyframes slideDown {
     from {
         opacity: 0;
@@ -2511,22 +2536,41 @@ footer {
     font-size: 16px;
 }
 
-.seguimiento-pedido-badge-en-curso {
-    display: inline-block;
+.seguimiento-pedido-subtitulo {
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.seguimiento-pedido-resumen {
     margin-top: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    opacity: 0.95;
+}
+
+.seguimiento-pedido-texto-estado {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.seguimiento-pedido-badge-estado {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.02em;
     text-transform: uppercase;
     padding: 3px 8px;
     border-radius: 999px;
-    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    background: rgba(255, 255, 255, 0.2);
     color: #fff;
-}
-
-.seguimiento-pedido-subtitulo {
-    font-size: 14px;
-    opacity: 0.9;
+    border: 1px solid rgba(255, 255, 255, 0.35);
 }
 
 .btn-ver-estado {
@@ -2808,16 +2852,83 @@ footer {
     font-size: 14px;
 }
 
-.modal-pedidos-aviso--con-activos {
-    background: #eef2ff;
-    border: 1px solid #c7d2fe;
-    color: #312e81;
+.modal-pedidos-aviso-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 4px 0 6px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid transparent;
 }
 
-.modal-pedidos-aviso--sin-activos {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    color: #475569;
+.modal-pedidos-aviso-resumen {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.modal-pedidos-aviso--pending {
+    background: #eef4ff;
+    border: 1px solid #c6dafd;
+    color: #183d73;
+}
+
+.modal-pedidos-aviso--pending .modal-pedidos-aviso-badge {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    color: #1e3a8a;
+}
+
+.modal-pedidos-aviso--processing {
+    background: #fff7ea;
+    border: 1px solid #fed7aa;
+    color: #7c3f00;
+}
+
+.modal-pedidos-aviso--processing .modal-pedidos-aviso-badge {
+    background: #ffedd5;
+    border-color: #fdba74;
+    color: #9a3412;
+}
+
+.modal-pedidos-aviso--shipped {
+    background: #edfdf6;
+    border: 1px solid #9ee7c7;
+    color: #0f5134;
+}
+
+.modal-pedidos-aviso--shipped .modal-pedidos-aviso-badge {
+    background: #d1fae5;
+    border-color: #86efac;
+    color: #065f46;
+}
+
+.modal-pedidos-aviso--delivered {
+    background: #ecfdf3;
+    border: 1px solid #86efac;
+    color: #14532d;
+}
+
+.modal-pedidos-aviso--delivered .modal-pedidos-aviso-badge {
+    background: #dcfce7;
+    border-color: #86efac;
+    color: #166534;
+}
+
+.modal-pedidos-aviso--problem {
+    background: #fff1f2;
+    border: 1px solid #fecdd3;
+    color: #881337;
+}
+
+.modal-pedidos-aviso--problem .modal-pedidos-aviso-badge {
+    background: #ffe4e6;
+    border-color: #fda4af;
+    color: #9f1239;
 }
 
 .pedido-card-estado {
@@ -2838,6 +2949,11 @@ footer {
 }
 
 .pedido-card-estado.estado-enviado {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.pedido-card-estado.estado-listo_retiro {
     background: #d1fae5;
     color: #065f46;
 }

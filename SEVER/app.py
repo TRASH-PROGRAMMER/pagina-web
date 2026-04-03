@@ -33,6 +33,7 @@ from werkzeug.security import generate_password_hash
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 from sqlalchemy.engine.url import make_url
+from sqlalchemy.exc import IntegrityError
 from db import AuthSession, Cliente, ClienteDraft, Foto, FotoTamano, MarcoDiseno, User, db
 from auth import auth_bp, login_required, role_required
 import cloudinary
@@ -138,6 +139,26 @@ FILE_SCAN_STRICT = _env_bool("FILE_SCAN_STRICT", False)
 FILE_SCAN_COMMAND = str(os.environ.get("FILE_SCAN_COMMAND", "")).strip()
 FILE_SCAN_TIMEOUT_SECONDS = int(os.environ.get("FILE_SCAN_TIMEOUT_SECONDS", "20"))
 FILE_SCAN_BYTES_LIMIT = int(os.environ.get("FILE_SCAN_BYTES_LIMIT", str(1024 * 1024)))
+IMAGE_VALIDATION_REQUIRE_PIL = _env_bool("IMAGE_VALIDATION_REQUIRE_PIL", False)
+
+
+ESTADOS_PEDIDO_VALIDOS = {'pendiente', 'procesando', 'listo_retiro', 'entregado', 'cancelado'}
+ESTADOS_PEDIDO_ALIAS = {
+    'enviado': 'listo_retiro',
+    'listo_para_retirar': 'listo_retiro',
+    'en_proceso': 'procesando',
+}
+
+
+def _normalizar_estado_pedido(estado, default='pendiente'):
+    raw = str(estado or '').strip().lower()
+    if not raw:
+        return default
+    normalized = raw.replace('-', '_').replace(' ', '_')
+    canonical = ESTADOS_PEDIDO_ALIAS.get(normalized, normalized)
+    if canonical in ESTADOS_PEDIDO_VALIDOS:
+        return canonical
+    return default
 
 
 DRAFT_KEY_REGEX = re.compile(r'^[A-Za-z0-9_-]{8,80}$')
@@ -169,6 +190,22 @@ try:
 except Exception:
     PILImageModule = None
     PILUnidentifiedImageError = Exception
+
+
+def _asegurar_validador_pillow():
+    global PILImageModule, PILUnidentifiedImageError
+    if PILImageModule is not None:
+        return True
+
+    try:
+        PILImageModule = importlib.import_module('PIL.Image')
+        PILModule = importlib.import_module('PIL')
+        PILUnidentifiedImageError = getattr(PILModule, 'UnidentifiedImageError', Exception)
+        return True
+    except Exception:
+        PILImageModule = None
+        PILUnidentifiedImageError = Exception
+        return False
 
 
 def allowed_file(filename):
@@ -329,9 +366,6 @@ def _ejecutar_scan_externo(file_obj):
 
 
 def _validar_contenido_imagen_seguro(file_obj):
-    if PILImageModule is None:
-        return False, 'Validador de imagen no disponible en el servidor.'
-
     stream = getattr(file_obj, 'stream', None)
     if stream is None:
         return False, 'No se pudo leer el archivo.'
@@ -339,6 +373,13 @@ def _validar_contenido_imagen_seguro(file_obj):
     mime_firma = _detectar_mime_por_firma(file_obj)
     if mime_firma not in ALLOWED_IMAGE_MIME_NORMALIZED:
         return False, 'Contenido de imagen invalido o no permitido.'
+
+    if not _asegurar_validador_pillow():
+        if IMAGE_VALIDATION_REQUIRE_PIL:
+            return False, 'Validador de imagen no disponible en el servidor.'
+        # Fallback seguro: ya se valido firma/mime, el resto de controles de
+        # extension, inspeccion sospechosa y escaneo externo siguen activos.
+        return True, ''
 
     current_pos = None
     try:
@@ -858,6 +899,9 @@ with app.app_context():
         conn.execute(db.text(
             "UPDATE clientes SET estado='pendiente' WHERE estado IS NULL"))
         conn.execute(db.text(
+            "UPDATE clientes SET estado='listo_retiro' "
+            "WHERE lower(replace(trim(estado), ' ', '_')) IN ('enviado', 'listo_para_retirar')"))
+        conn.execute(db.text(
             "UPDATE clientes SET pagado=FALSE WHERE pagado IS NULL"))
         conn.execute(db.text(
             "UPDATE clientes SET cancelled_at=NOW() WHERE estado='cancelado' AND cancelled_at IS NULL"))
@@ -1247,19 +1291,29 @@ def crear_clientes():
     while len(cantidades_lista) < len(archivos):
         cantidades_lista.append(1)
 
-    # Endurecimiento de seguridad:
-    # No unir automaticamente por correo en endpoint publico para evitar que terceros
-    # adjunten fotos al pedido de otra persona. Solo personal autenticado y con
-    # bandera explicita puede anexar a un pedido existente.
+    # El flujo se decide por accion explicita + pedido_id.
+    # No se agrupa por correo para evitar ambiguedades entre pedidos.
     correo_normalizado = str(data.get("correo") or "").strip().lower()
     append_existing_raw = str(data.get("append_existing") or "").strip().lower()
     append_existing = append_existing_raw in {"1", "true", "yes", "si", "sí", "on"}
-    role_actual = str(session.get("role") or "").strip().lower()
-    puede_anexar_existente = append_existing and role_actual in {"admin", "operador", "cajero"}
+    pedido_id_raw = str(data.get("pedido_id") or data.get("cliente_id") or "").strip()
+
+    pedido_objetivo_id = None
+    if append_existing:
+        try:
+            pedido_objetivo_id = int(pedido_id_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Para anexar fotos debes indicar un pedido_id valido."}), 400
 
     existe = None
-    if puede_anexar_existente:
-        existe = Cliente.query.filter(db.func.lower(Cliente.correo) == correo_normalizado).first()
+    if append_existing and pedido_objetivo_id:
+        existe = db.session.get(Cliente, pedido_objetivo_id)
+        if not existe:
+            return jsonify({"error": "El pedido seleccionado no existe o ya no esta disponible."}), 404
+
+        # Validacion defensiva: el pedido objetivo debe pertenecer al mismo correo.
+        if correo_normalizado and (str(existe.correo or "").strip().lower() != correo_normalizado):
+            return jsonify({"error": "El pedido seleccionado no coincide con el correo indicado."}), 409
 
     if existe:
         # Actualizar datos del pedido (tamaÃ±o, papel, fecha)
@@ -1278,6 +1332,7 @@ def crear_clientes():
         # Subir nuevas fotos a Cloudinary (en paralelo para acelerar el submit)
         fotos_guardadas = []
         thumbnails_guardadas = []
+        cantidades_guardadas = []
         folder = f"image_manager/cliente_{existe.id}"
 
         indices_validos = [
@@ -1351,6 +1406,27 @@ def crear_clientes():
             thumbnails_guardadas.append(
                 _thumbnail_url(resultado.get("public_id"), resultado.get("secure_url", ""))  # fallback seguro
             )
+            cantidades_guardadas.append(cantidades_lista[idx] if idx < len(cantidades_lista) else 1)
+
+        # Añadir fotos que ya fueron subidas en segundo plano
+        if isinstance(fotos_precargadas, list):
+            for pre in fotos_precargadas:
+                if not isinstance(pre, dict) or 'secure_url' not in pre or 'public_id' not in pre:
+                    continue
+                try:
+                    cant_foto = max(1, int(pre.get('cantidad', 1) or 1))
+                except (TypeError, ValueError):
+                    cant_foto = 1
+                foto = Foto(
+                    filename=pre['secure_url'],
+                    public_id=pre['public_id'],
+                    cantidad=cant_foto,
+                    cliente_id=existe.id,
+                )
+                db.session.add(foto)
+                fotos_guardadas.append(pre['secure_url'])
+                thumbnails_guardadas.append(_thumbnail_url(pre['public_id'], pre['secure_url']))
+                cantidades_guardadas.append(cant_foto)
 
         if not fotos_guardadas:
             db.session.rollback()
@@ -1364,6 +1440,7 @@ def crear_clientes():
         total_copias = sum(f.cantidad or 1 for f in existe.fotos)
         respuesta = {
             "mensaje": "Fotos agregadas al pedido existente" if not fallos_upload else "Algunas imágenes no se pudieron agregar.",
+            "operacion": "append_existing",
             "cliente": {
                 "id": existe.id,
                 "nombre": existe.nombre,
@@ -1373,7 +1450,7 @@ def crear_clientes():
                 "fechaRegistro": existe.fecha_registro,
                 "tamano": existe.tamano,
                 "papel": existe.papel,
-                "estado": existe.estado,
+                "estado": _normalizar_estado_pedido(existe.estado),
                 "cancelledAt": existe.cancelled_at.isoformat() if existe.cancelled_at else None,
                 "pagado": bool(existe.pagado),
                 "numFotos": len(fotos_guardadas),
@@ -1381,6 +1458,10 @@ def crear_clientes():
                 "thumbnails": thumbnails_guardadas,
                 "precioTotal": calcular_precio_total(
                     existe.tamano_keys, total_copias, existe.tamano)
+            },
+            "pedidoActivo": {
+                "id": existe.id,
+                "modo": "append_existing",
             },
             "fallos": fallos_upload if fallos_upload else None
         }
@@ -1400,7 +1481,14 @@ def crear_clientes():
     )
 
     db.session.add(nuevo_cliente)
-    db.session.flush()  # Obtener el ID antes de guardar fotos
+    try:
+        db.session.flush()  # Obtener el ID antes de guardar fotos
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            "error": "No se pudo crear un nuevo pedido con ese correo porque la base de datos mantiene una restriccion unica. Ejecuta la migracion para permitir multiples pedidos por correo.",
+            "codigo": "correo_unique_constraint",
+        }), 409
 
     # Subir fotos a Cloudinary
     fotos_guardadas = []
@@ -1515,6 +1603,7 @@ def crear_clientes():
 
     respuesta = {
         "mensaje": "Pedido guardado correctamente" if not fallos_upload else "Pedido guardado parcialmente. Algunas imágenes fallaron.",
+        "operacion": "create_new",
         "cliente": {
             "id": nuevo_cliente.id,
             "nombre": nuevo_cliente.nombre,
@@ -1524,7 +1613,7 @@ def crear_clientes():
             "fechaRegistro": nuevo_cliente.fecha_registro,
             "tamano": nuevo_cliente.tamano,
             "papel": nuevo_cliente.papel,
-            "estado": nuevo_cliente.estado,
+            "estado": _normalizar_estado_pedido(nuevo_cliente.estado),
             "cancelledAt": nuevo_cliente.cancelled_at.isoformat() if nuevo_cliente.cancelled_at else None,
             "pagado": bool(nuevo_cliente.pagado),
             "numFotos": len(fotos_guardadas),
@@ -1533,6 +1622,10 @@ def crear_clientes():
             "precioTotal": calcular_precio_total(
                 nuevo_cliente.tamano_keys, total_copias,
                 nuevo_cliente.tamano)
+        },
+        "pedidoActivo": {
+            "id": nuevo_cliente.id,
+            "modo": "create_new",
         },
         "fallos": fallos_upload if fallos_upload else None
     }
@@ -1552,7 +1645,7 @@ def obtener_clientes():
         "fechaRegistro":  c.fecha_registro,
         "tamano":         c.tamano or "",
         "papel":          c.papel or "",
-        "estado":         c.estado or "pendiente",
+        "estado":         _normalizar_estado_pedido(c.estado),
         "cancelledAt":    c.cancelled_at.isoformat() if c.cancelled_at else None,
         "pagado":         bool(c.pagado),
         "numFotos":       len(c.fotos),
@@ -1592,13 +1685,12 @@ def actualizar_estado_cliente(id):
         return jsonify({"error": "Cliente no encontrado"}), 404
 
     data = request.get_json() or {}
-    estado = (data.get('estado') or '').strip().lower()
-    estados_validos = {'pendiente', 'procesando', 'entregado', 'cancelado'}
+    estado = _normalizar_estado_pedido(data.get('estado'))
 
-    if estado not in estados_validos:
+    if estado not in ESTADOS_PEDIDO_VALIDOS:
         return jsonify({"error": "Estado invalido"}), 400
 
-    estado_anterior = (cliente.estado or '').strip().lower()
+    estado_anterior = _normalizar_estado_pedido(cliente.estado, default='')
     if estado == 'cancelado':
         if estado_anterior != 'cancelado' or cliente.cancelled_at is None:
             cliente.cancelled_at = datetime.now(timezone.utc)
@@ -1609,7 +1701,7 @@ def actualizar_estado_cliente(id):
     db.session.commit()
     return jsonify({
         "mensaje": "Estado actualizado",
-        "estado": cliente.estado,
+        "estado": _normalizar_estado_pedido(cliente.estado),
         "cancelledAt": cliente.cancelled_at.isoformat() if cliente.cancelled_at else None,
     }), 200
 
@@ -1628,11 +1720,16 @@ def actualizar_pago_cliente(id):
         return jsonify({"error": "Campo pagado requerido"}), 400
 
     cliente.pagado = bool(pagado)
+    cliente.estado = _normalizar_estado_pedido(cliente.estado)
     # Si se marca como pagado, cambiar estado a "procesando"
     if cliente.pagado:
         cliente.estado = 'procesando'
     db.session.commit()
-    return jsonify({"mensaje": "Pago actualizado", "pagado": bool(cliente.pagado), "estado": cliente.estado}), 200
+    return jsonify({
+        "mensaje": "Pago actualizado",
+        "pagado": bool(cliente.pagado),
+        "estado": _normalizar_estado_pedido(cliente.estado),
+    }), 200
 
 PRECIOS = {item["clave"]: {"precio": item["precio_base"]} for item in DEFAULT_TAMANOS}
 
@@ -1875,7 +1972,7 @@ def api_seguimiento_cliente(cliente_id):
             "correo": cliente.correo,
             "telefono": cliente.telefono,
             "fechaRegistro": cliente.fecha_registro,
-            "estado": cliente.estado or "pendiente",
+            "estado": _normalizar_estado_pedido(cliente.estado),
             "cancelledAt": cliente.cancelled_at.isoformat() if cliente.cancelled_at else None,
             "pagado": bool(cliente.pagado),
             "papel": cliente.papel or "No especificado",
@@ -1926,7 +2023,7 @@ def api_mis_pedidos():
             "correo": pedido.correo,
             "telefono": pedido.telefono,
             "fechaRegistro": pedido.fecha_registro,
-            "estado": pedido.estado or "pendiente",
+            "estado": _normalizar_estado_pedido(pedido.estado),
             "cancelledAt": pedido.cancelled_at.isoformat() if pedido.cancelled_at else None,
             "pagado": bool(pedido.pagado),
             "papel": pedido.papel or "No especificado",

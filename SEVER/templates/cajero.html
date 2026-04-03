@@ -274,6 +274,7 @@
 						<option value="">Todos</option>
 						<option value="pendiente">Pendiente</option>
 						<option value="procesando">Procesando</option>
+						<option value="listo_retiro">Listo para retirar</option>
 						<option value="entregado">Entregado</option>
 						<option value="cancelado">Cancelado</option>
 					</select>
@@ -322,6 +323,23 @@
 		let pedidosAll = [];
 		let pedidosFiltrados = [];
 		let paginaActual = 1;
+
+		function normalizarEstado(estado) {
+			const raw = String(estado || "pendiente").trim().toLowerCase().replace(/[\s-]+/g, "_");
+			if (raw === "enviado" || raw === "listo_para_retirar") return "listo_retiro";
+			if (raw === "en_proceso") return "procesando";
+			return raw || "pendiente";
+		}
+
+		function estadoLabel(estado) {
+			const key = normalizarEstado(estado);
+			if (key === "pendiente") return "PENDIENTE";
+			if (key === "procesando") return "PROCESANDO";
+			if (key === "listo_retiro") return "LISTO PARA RETIRAR";
+			if (key === "entregado") return "ENTREGADO";
+			if (key === "cancelado") return "CANCELADO";
+			return "PENDIENTE";
+		}
 
 		let clienteChannel = null;
 		try {
@@ -416,7 +434,7 @@
 				const nombre = `${p.nombre || ""} ${p.apellido || ""}`.toLowerCase();
 				const correo = String(p.correo || "").toLowerCase();
 				const pago = p.pagado ? "pagado" : "pendiente";
-				const estado = String(p.estado || "pendiente").toLowerCase();
+				const estado = normalizarEstado(p.estado);
 
 				const okQ = !q || nombre.includes(q) || correo.includes(q);
 				const okPago = !pagoFiltro || pago === pagoFiltro;
@@ -454,7 +472,7 @@
 					<td>#${String(p.id).padStart(4, "0")}</td>
 					<td>${p.nombre} ${p.apellido}<br><span style="color:var(--muted)">${p.correo}</span></td>
 					<td>$${Number(p.precioTotal || 0).toFixed(2)}<br><span style="color:var(--muted);font-size:11px;white-space:nowrap">${lineaFotosPedido(p)}</span></td>
-					<td><span id="estado-${p.id}">${(p.estado || "pendiente").toUpperCase()}</span></td>
+					<td><span id="estado-${p.id}">${estadoLabel(p.estado)}</span></td>
 					<td><span class="tag ${pagado ? "paid" : "pending"}" id="pago-${p.id}">${pagado ? "PAGADO" : "PENDIENTE"}</span></td>
 					<td><button type="button" class="pay-btn" id="btn-${p.id}" data-action="pay" data-id="${p.id}" ${pagado ? "disabled" : ""} aria-label="Marcar pagado pedido ${p.id}">Marcar pagado</button></td>
 				`;
@@ -529,7 +547,7 @@
 				const pedido = findPedido(id);
 				if (pedido) {
 					pedido.pagado = true;
-					pedido.estado = data.estado || "procesando";
+					pedido.estado = normalizarEstado(data.estado || "procesando");
 				}
 
 				const pagoTag = document.getElementById(`pago-${id}`);
@@ -539,7 +557,7 @@
 					pagoTag.className = "tag paid";
 				}
 				if (estadoSpan) {
-					estadoSpan.textContent = (data.estado || "procesando").toUpperCase();
+					estadoSpan.textContent = estadoLabel(data.estado || "procesando");
 				}
 				if (btn) {
 					btn.disabled = true;

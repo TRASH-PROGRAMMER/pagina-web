@@ -417,6 +417,12 @@
             color: var(--color-danger-600);
         }
 
+        .badge--problem {
+            background-color: var(--color-danger-100);
+            color: var(--color-danger-700);
+            border: 1px solid var(--color-danger-200);
+        }
+
         .badge--in-progress {
             background-color: var(--color-primary-100);
             color: var(--color-primary-700);
@@ -437,16 +443,97 @@
             margin-bottom: var(--space-1);
         }
 
-        .orders-status-banner--active {
-            background: var(--color-primary-50);
-            border: 1px solid var(--color-primary-100);
-            color: var(--color-gray-800);
+        .orders-status-banner__headline {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: var(--space-2);
+            margin: var(--space-1) 0;
+            font-weight: var(--font-weight-semibold);
         }
 
-        .orders-status-banner--idle {
-            background: var(--color-gray-50);
-            border: 1px solid var(--color-gray-200);
-            color: var(--color-gray-700);
+        .orders-status-banner__badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: var(--border-radius-full);
+            padding: 4px 10px;
+            font-size: var(--font-size-xs);
+            font-weight: var(--font-weight-bold);
+            border: 1px solid transparent;
+        }
+
+        .orders-status-banner__meta {
+            display: block;
+            margin-top: var(--space-2);
+            font-size: var(--font-size-xs);
+            opacity: 0.92;
+        }
+
+        .orders-status-banner__meta--summary {
+            margin-top: 6px;
+            font-weight: var(--font-weight-semibold);
+            opacity: 1;
+        }
+
+        .orders-status-banner--state-pending {
+            background: #eef4ff;
+            border: 1px solid #c6dafd;
+            color: #183d73;
+        }
+
+        .orders-status-banner--state-pending .orders-status-banner__badge {
+            background: #dbeafe;
+            border-color: #93c5fd;
+            color: #1e3a8a;
+        }
+
+        .orders-status-banner--state-processing {
+            background: #fff7ea;
+            border: 1px solid #fed7aa;
+            color: #7c3f00;
+        }
+
+        .orders-status-banner--state-processing .orders-status-banner__badge {
+            background: #ffedd5;
+            border-color: #fdba74;
+            color: #9a3412;
+        }
+
+        .orders-status-banner--state-shipped {
+            background: #edfdf6;
+            border: 1px solid #9ee7c7;
+            color: #0f5134;
+        }
+
+        .orders-status-banner--state-shipped .orders-status-banner__badge {
+            background: #d1fae5;
+            border-color: #86efac;
+            color: #065f46;
+        }
+
+        .orders-status-banner--state-delivered {
+            background: #ecfdf3;
+            border: 1px solid #86efac;
+            color: #14532d;
+        }
+
+        .orders-status-banner--state-delivered .orders-status-banner__badge {
+            background: #dcfce7;
+            border-color: #86efac;
+            color: #166534;
+        }
+
+        .orders-status-banner--state-problem {
+            background: #fff1f2;
+            border: 1px solid #fecdd3;
+            color: #881337;
+        }
+
+        .orders-status-banner--state-problem .orders-status-banner__badge {
+            background: #ffe4e6;
+            border-color: #fda4af;
+            color: #9f1239;
         }
 
         .order-card--activo {
@@ -1113,35 +1200,41 @@
 
         // Configuración de estados
         const ORDER_STATES = {
-            pendiente: { 
-                label: 'Pendiente', 
-                icon: '⏳', 
-                desc: 'Esperando confirmación de pago',
+            pendiente: {
+                label: 'En curso',
+                icon: '🔄',
+                desc: 'Tu pedido aún no ha sido entregado. Te avisaremos cuando esté listo.',
                 class: 'badge--pending'
             },
-            procesando: { 
-                label: 'En Proceso', 
-                icon: '🖨️', 
-                desc: 'Imprimiendo tus fotos',
+            procesando: {
+                label: 'Procesando',
+                icon: '⚙️',
+                desc: 'Estamos trabajando en tu pedido. Pronto estará listo.',
                 class: 'badge--processing'
             },
-            enviado: { 
-                label: 'Enviado', 
-                icon: '🚚', 
-                desc: 'En camino a tu dirección',
+            listo_retiro: {
+                label: 'Listo para retirar',
+                icon: '🏪',
+                desc: 'Tu pedido está listo para retirar en el local.',
                 class: 'badge--shipped'
             },
-            entregado: { 
-                label: 'Entregado', 
-                icon: '✅', 
-                desc: 'Entregado exitosamente',
+            entregado: {
+                label: 'Entregado',
+                icon: '✅',
+                desc: 'Tu pedido ha sido entregado correctamente.',
                 class: 'badge--delivered'
             },
-            cancelado: { 
-                label: 'Cancelado', 
-                icon: '❌', 
-                desc: 'Pedido cancelado',
-                class: 'badge--cancelled'
+            cancelado: {
+                label: 'Problema con el pedido',
+                icon: '❌',
+                desc: 'Hubo un inconveniente. Por favor, revisa o intenta nuevamente.',
+                class: 'badge--problem'
+            },
+            error: {
+                label: 'Problema con el pedido',
+                icon: '❌',
+                desc: 'Hubo un inconveniente. Por favor, revisa o intenta nuevamente.',
+                class: 'badge--problem'
             }
         };
 
@@ -1158,6 +1251,8 @@
         const changeEmailBtn = document.getElementById('changeEmailBtn');
 
         let currentEmail = '';
+        let refreshTimer = null;
+        const AUTO_REFRESH_MS = 45000;
 
         // Utilidades
         const formatDate = (dateString) => {
@@ -1174,12 +1269,84 @@
             return '$' + Number(amount || 0).toFixed(2);
         };
 
-        const normalizeEstado = (estado) => String(estado || 'pendiente').trim().toLowerCase();
+        const normalizeEstado = (estado) => {
+            const raw = String(estado || 'pendiente').trim().toLowerCase().replace(/[\s-]+/g, '_');
+            if (raw === 'enviado' || raw === 'listo_para_retirar') return 'listo_retiro';
+            if (raw === 'en_proceso') return 'procesando';
+            return raw;
+        };
 
-        /** Coherente con el backend: pendiente, procesando, enviado = activo; entregado y cancelado = no activo */
+        const getDynamicStatusMessage = (estado) => {
+            const key = normalizeEstado(estado);
+
+            if (key === 'procesando' || key === 'en proceso') {
+                return {
+                    variant: 'processing',
+                    badge: '⚙️ Procesando',
+                    text: 'Estamos trabajando en tu pedido. Pronto estará listo.'
+                };
+            }
+
+            if (key === 'listo_retiro') {
+                return {
+                    variant: 'shipped',
+                    badge: '🏪 Listo para retirar',
+                    text: 'Tu pedido está listo para retirar en el local.'
+                };
+            }
+
+            if (key === 'entregado') {
+                return {
+                    variant: 'delivered',
+                    badge: '✅ Entregado',
+                    text: 'Tu pedido ha sido entregado correctamente.'
+                };
+            }
+
+            if (key === 'cancelado' || key === 'error') {
+                return {
+                    variant: 'problem',
+                    badge: '❌ Problema con el pedido',
+                    text: 'Hubo un inconveniente. Por favor, revisa o intenta nuevamente.'
+                };
+            }
+
+            return {
+                variant: 'pending',
+                badge: '🔄 En curso',
+                text: 'Tu pedido aún no ha sido entregado. Te avisaremos cuando esté listo.'
+            };
+        };
+
+        /** Coherente con el backend: pendiente, procesando, listo_retiro = activo; entregado y cancelado = no activo */
         const isPedidoActivo = (estado) => {
             const e = normalizeEstado(estado);
-            return e === 'pendiente' || e === 'procesando' || e === 'enviado';
+            return e === 'pendiente' || e === 'procesando' || e === 'listo_retiro';
+        };
+
+        const getResumenEstadosActivos = (activos) => {
+            const lista = Array.isArray(activos) ? activos : [];
+            if (lista.length <= 1) return '';
+
+            const contador = {
+                pendiente: 0,
+                procesando: 0,
+                listo_retiro: 0
+            };
+
+            lista.forEach((pedido) => {
+                const estado = normalizeEstado(pedido.estado);
+                if (Object.prototype.hasOwnProperty.call(contador, estado)) {
+                    contador[estado] += 1;
+                }
+            });
+
+            const partes = [];
+            if (contador.pendiente > 0) partes.push(`${contador.pendiente} en curso`);
+            if (contador.procesando > 0) partes.push(`${contador.procesando} procesando`);
+            if (contador.listo_retiro > 0) partes.push(`${contador.listo_retiro} listos para retirar`);
+
+            return partes.length > 0 ? `Resumen por estado: ${partes.join(' · ')}.` : '';
         };
 
         const ordenarPedidosVista = (lista) => {
@@ -1190,6 +1357,22 @@
             const resto = pedidos.filter(o => !ids.has(String(o.id)))
                 .sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
             return activos.concat(resto);
+        };
+
+        const detenerAutoRefresh = () => {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+        };
+
+        const iniciarAutoRefresh = () => {
+            detenerAutoRefresh();
+            refreshTimer = setInterval(() => {
+                if (!currentEmail) return;
+                if (!ordersPage.classList.contains('orders-page--active')) return;
+                loadOrders(currentEmail);
+            }, AUTO_REFRESH_MS);
         };
 
         const showAlert = (type, message) => {
@@ -1226,8 +1409,8 @@
 
         // Generar timeline
         const generateTimeline = (state) => {
-            const stateOrder = ['pendiente', 'procesando', 'enviado', 'entregado'];
-            const normalizedState = String(state || '').toLowerCase();
+            const stateOrder = ['pendiente', 'procesando', 'listo_retiro', 'entregado'];
+            const normalizedState = normalizeEstado(state);
             const currentIndex = stateOrder.indexOf(normalizedState);
 
             if (normalizedState === 'cancelado') {
@@ -1467,23 +1650,33 @@
                     `;
                 } else {
                     const ordenados = ordenarPedidosVista(data.pedidos);
-                    const numActivos = ordenados.filter(o => isPedidoActivo(o.estado)).length;
-                    let bannerHtml = '';
-                    if (numActivos > 0) {
-                        bannerHtml = `
-                            <div class="orders-status-banner orders-status-banner--active" role="status">
-                                <strong>${numActivos === 1 ? 'Tienes 1 pedido en curso' : `Tienes ${numActivos} pedidos en curso`}</strong>
-                                <span>Los pedidos marcados con la etiqueta «En curso» están pendientes de pago, en proceso o en camino. Cuando el operador marque el pedido como entregado, dejarán de aparecer como activos.</span>
-                            </div>`;
-                    } else {
-                        bannerHtml = `
-                            <div class="orders-status-banner orders-status-banner--idle" role="status">
-                                <strong>No tienes pedidos activos</strong>
-                                <span>Todos tus pedidos están entregados o cancelados. Más abajo puedes revisar el historial y el detalle de cada uno.</span>
-                            </div>`;
-                    }
+                    const activos = ordenados.filter(o => isPedidoActivo(o.estado));
+                    const numActivos = activos.length;
+                    const pedidoReferencia = numActivos > 0 ? activos[0] : ordenados[0];
+                    const mensajeEstado = getDynamicStatusMessage(pedidoReferencia ? pedidoReferencia.estado : 'pendiente');
+                    const bannerTitulo = numActivos > 0
+                        ? (numActivos === 1 ? 'Tienes 1 pedido en curso' : `Tienes ${numActivos} pedidos en curso`)
+                        : 'No tienes pedidos activos';
+                    const bannerMeta = pedidoReferencia
+                        ? `Pedido de referencia: #${pedidoReferencia.id}${numActivos > 1 ? ' (mostrando el estado del más reciente)' : ''}`
+                        : 'Aún no hay pedidos para mostrar estado.';
+                    const resumenEstados = getResumenEstadosActivos(activos);
+
+                    const bannerHtml = `
+                        <div class="orders-status-banner orders-status-banner--state-${mensajeEstado.variant}" role="status" aria-live="polite" aria-atomic="true">
+                            <strong>${bannerTitulo}</strong>
+                            <p class="orders-status-banner__headline">
+                                <span class="orders-status-banner__badge">${mensajeEstado.badge}</span>
+                                <span>${mensajeEstado.text}</span>
+                            </p>
+                            <span class="orders-status-banner__meta">${bannerMeta}</span>
+                            ${resumenEstados ? `<span class="orders-status-banner__meta orders-status-banner__meta--summary">${resumenEstados}</span>` : ''}
+                        </div>`;
+
                     ordersList.innerHTML = bannerHtml + ordenados.map(createOrderCard).join('');
                 }
+
+                iniciarAutoRefresh();
 
             } catch (error) {
                 console.error('Error:', error);
@@ -1518,6 +1711,8 @@
         emailInput.addEventListener('input', clearFieldError);
 
         changeEmailBtn.addEventListener('click', () => {
+            detenerAutoRefresh();
+            currentEmail = '';
             ordersPage.classList.remove('orders-page--active');
             loginPage.style.display = 'flex';
             document.title = 'Mis Pedidos | Image Manager';
@@ -1531,9 +1726,10 @@
         const savedEmail = localStorage.getItem('misPedidos_email');
         if (savedEmail) {
             emailInput.value = savedEmail;
-            // Opcional: auto-cargar sin confirmación
-            // loadOrders(savedEmail);
+            loadOrders(savedEmail);
         }
+
+        window.addEventListener('beforeunload', detenerAutoRefresh);
     })();
     </script>
 </body>

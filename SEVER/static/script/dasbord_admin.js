@@ -8,7 +8,7 @@ clienteChannel.onmessage = function(event) {
             renderClientesCards(clientesCache);
         }
         // Solo incrementar badge si el estado es 'pendiente'
-        if (event.data.cliente.estado === 'pendiente') {
+        if (normalizarEstadoPedido(event.data.cliente?.estado) === 'pendiente') {
             actualizarBadge(+1);
         }
     }
@@ -954,26 +954,58 @@ async function deleteRow(btn) {
 }
 
 // â”€â”€â”€ Cambiar estado â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const estados = ["Pendiente", "Procesando", "Entregado", "Cancelado"];
-const clases  = ["status-pendiente", "status-procesando", "status-entregado", "status-cancelado"];
+const ESTADOS_ORDEN = ["pendiente", "procesando", "listo_retiro", "entregado", "cancelado"];
+const ESTADO_LABELS = {
+    pendiente: "Pendiente",
+    procesando: "Procesando",
+    listo_retiro: "Listo para retirar",
+    entregado: "Entregado",
+    cancelado: "Cancelado",
+};
+const ESTADO_CLASSES = {
+    pendiente: "status-pendiente",
+    procesando: "status-procesando",
+    listo_retiro: "status-listo_retiro",
+    entregado: "status-entregado",
+    cancelado: "status-cancelado",
+};
+
+function normalizarEstadoPedido(estado) {
+    const raw = String(estado || "pendiente").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    if (raw === "enviado" || raw === "listo_para_retirar") return "listo_retiro";
+    if (raw === "en_proceso") return "procesando";
+    return raw || "pendiente";
+}
+
+function etiquetaEstadoPedido(estado) {
+    const key = normalizarEstadoPedido(estado);
+    return ESTADO_LABELS[key] || ESTADO_LABELS.pendiente;
+}
+
+function claseEstadoPedido(estado) {
+    const key = normalizarEstadoPedido(estado);
+    return ESTADO_CLASSES[key] || ESTADO_CLASSES.pendiente;
+}
 
 async function changeStatus(btn) {
     const row = btn.closest("tr");
+    if (!row) return;
     const badge = row.querySelector(".status");
     if (!badge) return;
 
-    let currentIndex = clases.findIndex(function(c) { return badge.classList.contains(c); });
+    const estadoActual = normalizarEstadoPedido(row.dataset.estado);
+    let currentIndex = ESTADOS_ORDEN.indexOf(estadoActual);
     if (currentIndex < 0) currentIndex = 0;
-    const estadoActual = estados[currentIndex].toLowerCase();
-    const nuevoIndex = (currentIndex + 1) % estados.length;
-    const nuevoEstado = estados[nuevoIndex];
+    const nuevoIndex = (currentIndex + 1) % ESTADOS_ORDEN.length;
+    const nuevoEstado = ESTADOS_ORDEN[nuevoIndex];
+    const nuevoEstadoLabel = etiquetaEstadoPedido(nuevoEstado);
 
     try {
         const id = Number(row.dataset.id);
         const res = await fetch(`/api/clientes/${id}/estado`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ estado: nuevoEstado.toLowerCase() })
+            body: JSON.stringify({ estado: nuevoEstado })
         });
 
         if (res.status === 401 || res.status === 403) {
@@ -984,19 +1016,18 @@ async function changeStatus(btn) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "No se pudo cambiar el estado");
 
-        badge.classList.remove(...clases);
-        badge.classList.add(clases[nuevoIndex]);
-        badge.textContent = nuevoEstado;
-        row.dataset.estado = nuevoEstado.toLowerCase();
-        announceAdminStatus(`Estado cambiado a ${nuevoEstado.toLowerCase()}`);
+        badge.className = `status ${claseEstadoPedido(nuevoEstado)}`;
+        badge.textContent = nuevoEstadoLabel;
+        row.dataset.estado = nuevoEstado;
+        announceAdminStatus(`Estado cambiado a ${nuevoEstadoLabel.toLowerCase()}`);
         
         // Actualizar badge de pedidos pendientes
         // Si el estado anterior era 'pendiente' y el nuevo no lo es â†’ decrementar
-        if (estadoActual === 'pendiente' && nuevoEstado.toLowerCase() !== 'pendiente') {
+        if (estadoActual === 'pendiente' && nuevoEstado !== 'pendiente') {
             actualizarBadge(-1);
         }
         // Si el estado anterior no era 'pendiente' y el nuevo sÃ­ lo es â†’ incrementar
-        else if (estadoActual !== 'pendiente' && nuevoEstado.toLowerCase() === 'pendiente') {
+        else if (estadoActual !== 'pendiente' && nuevoEstado === 'pendiente') {
             actualizarBadge(+1);
         }
         
@@ -1409,10 +1440,9 @@ function renderClienteRow(cliente, applyFilters = true) {
     const precioNum = cliente.precioTotal != null ? Number(cliente.precioTotal) : null;
     const precio = precioNum != null ? `$${precioNum.toFixed(2)}` : "\u2014";
 
-    const estadoRaw = (cliente.estado || "pendiente").toLowerCase();
-    const estadoIndex = estados.findIndex(function(e) { return e.toLowerCase() === estadoRaw; });
-    const estadoLabel = estadoIndex >= 0 ? estados[estadoIndex] : "Pendiente";
-    const estadoClass = estadoIndex >= 0 ? clases[estadoIndex] : "status-pendiente";
+    const estadoRaw = normalizarEstadoPedido(cliente.estado || "pendiente");
+    const estadoLabel = etiquetaEstadoPedido(estadoRaw);
+    const estadoClass = claseEstadoPedido(estadoRaw);
 
     tr.dataset.estado = estadoRaw;
     tr.dataset.fecha = toISODate(cliente.fechaRegistro);
@@ -1472,7 +1502,7 @@ document.addEventListener("DOMContentLoaded", async function() {
         
         // Contar solo pedidos en estado 'pendiente' para el badge
         const pedidosPendientes = clientesCache.filter(function(c) {
-            return (c.estado || 'pendiente').toLowerCase() === 'pendiente';
+            return normalizarEstadoPedido(c.estado) === 'pendiente';
         }).length;
         const badge = getBadge();
         if (badge) badge.textContent = pedidosPendientes;
@@ -2038,16 +2068,17 @@ clienteChannel.addEventListener('message', function(event) {
     else if (event.data?.tipo === 'estado_actualizado') {
         // Actualizar cuando cajero marca como pagado y cambia estado a 'procesando'
         const clienteId = event.data.clienteId;
-        const nuevoEstado = event.data.nuevoEstado;
+        const nuevoEstado = normalizarEstadoPedido(event.data.nuevoEstado);
         const row = document.querySelector(`tr[data-id="${clienteId}"]`);
         if (row) {
-            const estadoActual = (row.dataset.estado || 'pendiente').toLowerCase();
+            const estadoActual = normalizarEstadoPedido(row.dataset.estado);
             const statusBadge = row.querySelector('.status');
             if (statusBadge && nuevoEstado !== estadoActual) {
-                statusBadge.textContent = nuevoEstado.charAt(0).toUpperCase() + nuevoEstado.slice(1);
-                statusBadge.className = `status status-${nuevoEstado}`;
-                row.dataset.estado = nuevoEstado.toLowerCase();
-                announceAdminStatus(`Estado actualizado a ${nuevoEstado}`);
+                const nuevoEstadoLabel = etiquetaEstadoPedido(nuevoEstado);
+                statusBadge.textContent = nuevoEstadoLabel;
+                statusBadge.className = `status ${claseEstadoPedido(nuevoEstado)}`;
+                row.dataset.estado = nuevoEstado;
+                announceAdminStatus(`Estado actualizado a ${nuevoEstadoLabel.toLowerCase()}`);
                 
                 // Actualizar badge si cambiÃ³ de pendiente a otro estado
                 if (estadoActual === 'pendiente' && nuevoEstado !== 'pendiente') {

@@ -12,36 +12,43 @@
     // Estados del pedido con sus metadatos
     const ESTADOS_PEDIDO = {
         'pendiente': {
-            label: 'Pendiente',
-            descripcion: 'Tu pedido está registrado y espera confirmación de pago',
-            icono: '📋',
+            label: 'En curso',
+            descripcion: 'Tu pedido aún no ha sido entregado. Te avisaremos cuando esté listo.',
+            icono: '🔄',
             color: '#16477f',
             bgColor: '#edf4ff'
         },
         'procesando': {
-            label: 'En Proceso',
-            descripcion: 'Estamos imprimiendo tus fotos',
-            icono: '🖨️',
+            label: 'Procesando',
+            descripcion: 'Estamos trabajando en tu pedido. Pronto estará listo.',
+            icono: '⚙️',
             color: '#8a5311',
             bgColor: '#fff5e8'
         },
-        'enviado': {
-            label: 'Enviado',
-            descripcion: 'Tu pedido está en camino',
-            icono: '🚚',
+        'listo_retiro': {
+            label: 'Listo para retirar',
+            descripcion: 'Tu pedido está listo para retirar en el local.',
+            icono: '🏪',
             color: '#1e6f47',
             bgColor: '#e8f5ee'
         },
         'entregado': {
             label: 'Entregado',
-            descripcion: 'Pedido completado exitosamente',
+            descripcion: 'Tu pedido ha sido entregado correctamente.',
             icono: '✅',
             color: '#0f7a4d',
             bgColor: '#eafbf1'
         },
         'cancelado': {
-            label: 'Cancelado',
-            descripcion: 'El pedido fue cancelado',
+            label: 'Problema con el pedido',
+            descripcion: 'Hubo un inconveniente. Por favor, revisa o intenta nuevamente.',
+            icono: '❌',
+            color: '#9b1c2e',
+            bgColor: '#ffeeee'
+        },
+        'error': {
+            label: 'Problema con el pedido',
+            descripcion: 'Hubo un inconveniente. Por favor, revisa o intenta nuevamente.',
             icono: '❌',
             color: '#9b1c2e',
             bgColor: '#ffeeee'
@@ -98,20 +105,90 @@
     }
 
     /**
-     * Estados que cuentan como "pedido en curso" (sincronizado con backend: pendiente, procesando).
-     * Incluye enviado por si en el futuro el API lo usa.
+     * Estados que cuentan como "pedido en curso" (sincronizado con backend).
+     * listo_retiro representa la etapa de "Listo para retirar" previa a entregado.
      */
     function normalizarEstado(estado) {
-        return String(estado || 'pendiente').trim().toLowerCase();
+        const raw = String(estado || 'pendiente').trim().toLowerCase().replace(/[\s-]+/g, '_');
+        if (raw === 'enviado' || raw === 'listo_para_retirar') return 'listo_retiro';
+        if (raw === 'en_proceso') return 'procesando';
+        return raw;
     }
 
     function estadoPedidoActivo(estado) {
         const e = normalizarEstado(estado);
-        return e === 'pendiente' || e === 'procesando' || e === 'enviado';
+        return e === 'pendiente' || e === 'procesando' || e === 'listo_retiro';
+    }
+
+    function obtenerMensajeDinamicoEstado(estado) {
+        const e = normalizarEstado(estado);
+
+        if (e === 'procesando' || e === 'en proceso') {
+            return {
+                variant: 'processing',
+                badge: '⚙️ Procesando',
+                text: 'Estamos trabajando en tu pedido. Pronto estará listo.'
+            };
+        }
+
+        if (e === 'listo_retiro') {
+            return {
+                variant: 'shipped',
+                badge: '🏪 Listo para retirar',
+                text: 'Tu pedido está listo para retirar en el local.'
+            };
+        }
+
+        if (e === 'entregado') {
+            return {
+                variant: 'delivered',
+                badge: '✅ Entregado',
+                text: 'Tu pedido ha sido entregado correctamente.'
+            };
+        }
+
+        if (e === 'cancelado' || e === 'error') {
+            return {
+                variant: 'problem',
+                badge: '❌ Problema con el pedido',
+                text: 'Hubo un inconveniente. Por favor, revisa o intenta nuevamente.'
+            };
+        }
+
+        return {
+            variant: 'pending',
+            badge: '🔄 En curso',
+            text: 'Tu pedido aún no ha sido entregado. Te avisaremos cuando esté listo.'
+        };
     }
 
     function obtenerPedidosActivos(pedidos) {
         return (pedidos || []).filter(p => estadoPedidoActivo(p.estado));
+    }
+
+    function obtenerResumenEstadosActivos(activos) {
+        const lista = Array.isArray(activos) ? activos : [];
+        if (lista.length <= 1) return '';
+
+        const contador = {
+            pendiente: 0,
+            procesando: 0,
+            listo_retiro: 0,
+        };
+
+        lista.forEach((pedido) => {
+            const estado = normalizarEstado(pedido.estado);
+            if (Object.prototype.hasOwnProperty.call(contador, estado)) {
+                contador[estado] += 1;
+            }
+        });
+
+        const partes = [];
+        if (contador.pendiente > 0) partes.push(`${contador.pendiente} en curso`);
+        if (contador.procesando > 0) partes.push(`${contador.procesando} procesando`);
+        if (contador.listo_retiro > 0) partes.push(`${contador.listo_retiro} listos para retirar`);
+
+        return partes.length > 0 ? `Resumen por estado: ${partes.join(' · ')}.` : '';
     }
 
     /**
@@ -286,8 +363,8 @@
      * @returns {string} HTML del timeline
      */
     function generarTimelineHTML(estadoActual) {
-        const estadosOrden = ['pendiente', 'procesando', 'enviado', 'entregado'];
-        const estadoNormalizado = String(estadoActual || '').toLowerCase();
+        const estadosOrden = ['pendiente', 'procesando', 'listo_retiro', 'entregado'];
+        const estadoNormalizado = normalizarEstado(estadoActual);
         
         // Si está cancelado, mostrar estado especial
         if (estadoNormalizado === 'cancelado') {
@@ -350,23 +427,29 @@
         const titulo = n === 1
             ? 'Tienes un pedido en curso'
             : `Tienes ${n} pedidos en curso`;
-        const estadoKey = normalizarEstado(pedidoVista.estado);
-        const estadoMeta = ESTADOS_PEDIDO[estadoKey] || { label: pedidoVista.estado };
+        const mensajeEstado = obtenerMensajeDinamicoEstado(pedidoVista.estado);
         const subtitulo = n === 1
-            ? `Pedido #${pedidoVista.id} · ${estadoMeta.label}`
-            : `El más reciente: #${pedidoVista.id} · ${estadoMeta.label}`;
+            ? `Pedido #${pedidoVista.id}`
+            : `Pedido de referencia: #${pedidoVista.id} (más reciente)`;
+        const resumenEstados = obtenerResumenEstadosActivos(activos);
 
         const contenedor = document.createElement('div');
         contenedor.id = 'contenedorSeguimientoPedido';
-        contenedor.className = 'seguimiento-pedido-banner';
+        contenedor.className = `seguimiento-pedido-banner seguimiento-pedido-banner--${mensajeEstado.variant}`;
         contenedor.setAttribute('role', 'status');
+        contenedor.setAttribute('aria-live', 'polite');
+        contenedor.setAttribute('aria-atomic', 'true');
         contenedor.innerHTML = `
             <div class="seguimiento-pedido-info">
                 <span class="seguimiento-pedido-icono">📦</span>
                 <div class="seguimiento-pedido-detalles">
                     <div class="seguimiento-pedido-titulo">${titulo}</div>
                     <div class="seguimiento-pedido-subtitulo">${subtitulo}</div>
-                    <span class="seguimiento-pedido-badge-en-curso">En curso</span>
+                    ${resumenEstados ? `<div class="seguimiento-pedido-resumen">${resumenEstados}</div>` : ''}
+                    <div class="seguimiento-pedido-texto-estado">
+                        <span class="seguimiento-pedido-badge-estado">${mensajeEstado.badge}</span>
+                        <span>${mensajeEstado.text}</span>
+                    </div>
                 </div>
             </div>
             <a href="/seguimiento?pedido=${pedidoVista.id}&correo=${encodeURIComponent(pedidoVista.correo || '')}" 
@@ -459,16 +542,24 @@
         const activos = obtenerPedidosActivos(pedidos);
         let avisoHtml = '';
         if (activos.length === 0) {
+            const pedidoRef = pedidos[0] || null;
+            const mensajeEstado = obtenerMensajeDinamicoEstado(pedidoRef ? pedidoRef.estado : 'entregado');
             avisoHtml = `
-                <div class="modal-pedidos-aviso modal-pedidos-aviso--sin-activos" role="status">
+                <div class="modal-pedidos-aviso modal-pedidos-aviso--${mensajeEstado.variant}" role="status" aria-live="polite" aria-atomic="true">
                     <strong>No tienes pedidos activos</strong>
-                    <span>Los pedidos listados abajo ya fueron entregados o cancelados. Los estados se actualizan al sincronizar con el servidor.</span>
+                    <span class="modal-pedidos-aviso-badge">${mensajeEstado.badge}</span>
+                    <span>${mensajeEstado.text}</span>
                 </div>`;
         } else {
+            const pedidoRef = activos[0];
+            const mensajeEstado = obtenerMensajeDinamicoEstado(pedidoRef.estado);
+            const resumenEstados = obtenerResumenEstadosActivos(activos);
             avisoHtml = `
-                <div class="modal-pedidos-aviso modal-pedidos-aviso--con-activos" role="status">
+                <div class="modal-pedidos-aviso modal-pedidos-aviso--${mensajeEstado.variant}" role="status" aria-live="polite" aria-atomic="true">
                     <strong>${activos.length === 1 ? 'Tienes 1 pedido en curso' : `Tienes ${activos.length} pedidos en curso`}</strong>
-                    <span>Pendiente o en proceso hasta que el operador marque el pedido como entregado.</span>
+                    <span class="modal-pedidos-aviso-badge">${mensajeEstado.badge}</span>
+                    <span>${mensajeEstado.text}</span>
+                    ${resumenEstados ? `<span class="modal-pedidos-aviso-resumen">${resumenEstados}</span>` : ''}
                 </div>`;
         }
 
