@@ -24,6 +24,11 @@ clienteChannel.onmessage = function(event) {
 
 let tamanosAdmin = [];
 let marcosAdmin = [];
+let storageConfigAdmin = null;
+let storageImagesAdmin = [];
+let storageImagesCurrentPage = 1;
+let storageImagesTotalPages = 1;
+const STORAGE_IMAGES_PAGE_SIZE = 10;
 let tamanoEditandoId = null;
 let clientesCache = [];
 let fotosModalActuales = [];
@@ -39,6 +44,7 @@ let lastFocusedElementBeforeModal = null;
 let lastFocusedElementBeforeConfirm = null;
 let confirmDialogResolver = null;
 let adminToastTimer = null;
+let storageSearchDebounceTimer = null;
 const liveMessageState = { status: "", alert: "" };
 
 function compactAdminMessage(text, isError = false) {
@@ -738,6 +744,419 @@ async function cambiarEstadoMarco(id, activo) {
     } catch (error) {
         console.error("Error actualizando estado del marco:", error);
         mostrarMensajeMarco(error.message, false);
+    }
+}
+
+function mostrarMensajeStorage(texto, ok = true) {
+    const msg = document.getElementById("storageMensaje");
+    if (!msg) return;
+    msg.textContent = texto;
+    msg.style.color = ok ? "#22c55e" : "#ff7a7a";
+    if (ok) {
+        announceAdminStatus(texto);
+    } else {
+        announceAdminAlert(texto);
+    }
+}
+
+function toggleStorageCustomDaysField() {
+    const modeEl = document.getElementById("storageRetentionMode");
+    const daysEl = document.getElementById("storageRetentionDays");
+    if (!modeEl || !daysEl) return;
+    const isCustom = String(modeEl.value || "").toLowerCase() === "custom";
+    daysEl.disabled = !isCustom;
+    daysEl.setAttribute("aria-disabled", isCustom ? "false" : "true");
+}
+
+function formatStorageDate(isoDate) {
+    if (!isoDate) return "-";
+    const dt = new Date(isoDate);
+    if (Number.isNaN(dt.getTime())) return "-";
+    return dt.toLocaleString("es-MX", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
+function formatRemainingTime(seconds, status) {
+    if (status === "excluded") return "Excluida";
+    if (status === "without_expiration") return "Sin expiracion";
+    const n = Number(seconds);
+    if (!Number.isFinite(n)) return "-";
+    if (n <= 0) return "Vencida";
+
+    const dias = Math.floor(n / 86400);
+    const horas = Math.floor((n % 86400) / 3600);
+    const mins = Math.floor((n % 3600) / 60);
+    if (dias > 0) return `${dias}d ${horas}h`;
+    if (horas > 0) return `${horas}h ${mins}m`;
+    return `${Math.max(1, mins)}m`;
+}
+
+function storageStatusLabel(status) {
+    if (status === "excluded") return "Excluida";
+    if (status === "expired") return "Vencida";
+    if (status === "without_expiration") return "Sin expiracion";
+    return "Activa";
+}
+
+function storageStatusClass(status) {
+    if (status === "excluded") return "excluded";
+    if (status === "expired") return "expired";
+    if (status === "without_expiration") return "without-expiration";
+    return "active";
+}
+
+function renderStorageSummary(resumen) {
+    const r = resumen || {};
+    const map = [
+        ["storageSummaryTotal", r.totalImagenes],
+        ["storageSummaryExpired", r.vencidas],
+        ["storageSummaryExcluded", r.excluidas],
+        ["storageSummaryNoExpire", r.sinExpiracion],
+    ];
+
+    map.forEach(function(entry) {
+        const el = document.getElementById(entry[0]);
+        if (!el) return;
+        const val = Number(entry[1]);
+        el.textContent = Number.isFinite(val) ? String(Math.max(0, Math.trunc(val))) : "-";
+    });
+}
+
+function applyStorageConfigToForm(config) {
+    const cfg = config || {};
+    const modeEl = document.getElementById("storageRetentionMode");
+    const daysEl = document.getElementById("storageRetentionDays");
+    const cleanupEl = document.getElementById("storageCleanupMinutes");
+
+    if (modeEl && cfg.retentionMode) {
+        modeEl.value = cfg.retentionMode;
+    }
+    if (daysEl) {
+        const days = Number(cfg.retentionDays);
+        daysEl.value = Number.isFinite(days) && days > 0 ? String(Math.trunc(days)) : "30";
+    }
+    if (cleanupEl) {
+        const cleanup = Number(cfg.cleanupIntervalMinutes);
+        if (Number.isFinite(cleanup) && cleanup > 0) {
+            const currentOption = Array.from(cleanupEl.options).find(function(opt) {
+                return Number(opt.value) === Math.trunc(cleanup);
+            });
+            if (!currentOption) {
+                const opt = document.createElement("option");
+                opt.value = String(Math.trunc(cleanup));
+                opt.textContent = `Cada ${Math.trunc(cleanup)} minutos`;
+                cleanupEl.appendChild(opt);
+            }
+            cleanupEl.value = String(Math.trunc(cleanup));
+        }
+    }
+
+    toggleStorageCustomDaysField();
+}
+
+async function cargarStorageSettingsAdmin() {
+    const form = document.getElementById("formStorageSettings");
+    if (!form) return;
+
+    try {
+        const res = await fetch("/api/admin/storage-settings", { cache: "no-store" });
+        if (res.status === 401 || res.status === 403) {
+            window.location.href = "/login";
+            return;
+        }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudo cargar la configuracion de almacenamiento");
+
+        storageConfigAdmin = data.config || null;
+        applyStorageConfigToForm(storageConfigAdmin || {});
+        renderStorageSummary(data.resumen || {});
+    } catch (error) {
+        console.error("Error cargando configuracion de almacenamiento:", error);
+        mostrarMensajeStorage(error.message || "No se pudo cargar la configuracion", false);
+    }
+}
+
+function renderStorageImagesAdmin() {
+    const tbody = document.getElementById("storageImagesBody");
+    if (!tbody) return;
+
+    tbody.innerHTML = "";
+    if (!Array.isArray(storageImagesAdmin) || storageImagesAdmin.length === 0) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = '<td colspan="6" class="orders-table-empty">No hay imagenes para el filtro actual</td>';
+        tbody.appendChild(tr);
+        return;
+    }
+
+    storageImagesAdmin.forEach(function(item) {
+        const tr = document.createElement("tr");
+        const clienteNombre = String(item.clienteNombre || "-").trim() || "-";
+        const clienteCorreo = String(item.clienteCorreo || "").trim();
+        const status = String(item.status || "active");
+        const statusLabel = storageStatusLabel(status);
+        const statusClass = storageStatusClass(status);
+        const exclusionButtonText = item.excludeAutoDelete ? "Permitir auto-eliminar" : "Excluir";
+
+        tr.innerHTML = `
+            <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#${String(item.id || "-")}</code></td>
+            <td>
+                <div class="client-name">${clienteNombre}</div>
+                <div class="client-email">${clienteCorreo || "-"}</div>
+            </td>
+            <td>${formatRemainingTime(item.remainingSeconds, status)}</td>
+            <td>${formatStorageDate(item.expiresAt)}</td>
+            <td><span class="storage-status-badge ${statusClass}">${statusLabel}</span></td>
+            <td><button type="button" class="tamano-btn">${exclusionButtonText}</button></td>
+        `;
+
+        const btn = tr.querySelector("button.tamano-btn");
+        if (btn) {
+            btn.addEventListener("click", function() {
+                cambiarExclusionImagen(item.id, !item.excludeAutoDelete);
+            });
+        }
+
+        tbody.appendChild(tr);
+    });
+}
+
+function renderStorageImagesPagination(total, page, totalPages) {
+    const nav = document.getElementById("storageImagesPagination");
+    if (!nav) return;
+
+    const safeTotal = Number(total);
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeTotalPages = Math.max(1, Number(totalPages) || 1);
+
+    nav.innerHTML = "";
+    if (!Number.isFinite(safeTotal) || safeTotal <= 0) {
+        nav.hidden = true;
+        return;
+    }
+
+    nav.hidden = false;
+
+    const info = document.createElement("span");
+    info.className = "orders-page-info";
+    info.textContent = `${safeTotal} resultado${safeTotal === 1 ? "" : "s"} - Pagina ${safePage} de ${safeTotalPages}`;
+    nav.appendChild(info);
+
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "orders-page-btn";
+    prevBtn.textContent = "Anterior";
+    prevBtn.disabled = safePage <= 1;
+    prevBtn.addEventListener("click", function() {
+        if (safePage > 1) {
+            cargarStorageImagesAdmin(safePage - 1);
+        }
+    });
+    nav.appendChild(prevBtn);
+
+    const maxButtons = 7;
+    let start = Math.max(1, safePage - Math.floor(maxButtons / 2));
+    let end = Math.min(safeTotalPages, start + maxButtons - 1);
+    start = Math.max(1, end - maxButtons + 1);
+
+    for (let p = start; p <= end; p += 1) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "orders-page-btn";
+        btn.textContent = String(p);
+        if (p === safePage) {
+            btn.classList.add("active");
+            btn.setAttribute("aria-current", "page");
+        }
+        btn.addEventListener("click", function() {
+            if (p !== safePage) {
+                cargarStorageImagesAdmin(p);
+            }
+        });
+        nav.appendChild(btn);
+    }
+
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "orders-page-btn";
+    nextBtn.textContent = "Siguiente";
+    nextBtn.disabled = safePage >= safeTotalPages;
+    nextBtn.addEventListener("click", function() {
+        if (safePage < safeTotalPages) {
+            cargarStorageImagesAdmin(safePage + 1);
+        }
+    });
+    nav.appendChild(nextBtn);
+}
+
+async function cargarStorageImagesAdmin(page = storageImagesCurrentPage) {
+    const tbody = document.getElementById("storageImagesBody");
+    if (!tbody) return;
+
+    const q = (document.getElementById("storageImagesSearch")?.value || "").trim();
+    const onlyExcluded = !!document.getElementById("storageOnlyExcluded")?.checked;
+    const params = new URLSearchParams();
+    const pageNumber = Math.max(1, Number(page) || 1);
+    params.set("page", String(pageNumber));
+    params.set("page_size", String(STORAGE_IMAGES_PAGE_SIZE));
+    if (q) params.set("q", q);
+    if (onlyExcluded) params.set("onlyExcluded", "true");
+
+    try {
+        const res = await fetch(`/api/admin/storage-images?${params.toString()}`, { cache: "no-store" });
+        if (res.status === 401 || res.status === 403) {
+            window.location.href = "/login";
+            return;
+        }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudo cargar el listado de imagenes");
+
+        storageImagesAdmin = Array.isArray(data.imagenes) ? data.imagenes : [];
+        storageImagesCurrentPage = Math.max(1, Number(data.page) || 1);
+        storageImagesTotalPages = Math.max(1, Number(data.totalPages) || 1);
+        renderStorageImagesAdmin();
+        renderStorageImagesPagination(Number(data.total || 0), storageImagesCurrentPage, storageImagesTotalPages);
+        renderStorageSummary(data.resumen || {});
+    } catch (error) {
+        console.error("Error cargando imagenes de almacenamiento:", error);
+        storageImagesAdmin = [];
+        storageImagesCurrentPage = 1;
+        storageImagesTotalPages = 1;
+        renderStorageImagesAdmin();
+        renderStorageImagesPagination(0, 1, 1);
+        mostrarMensajeStorage(error.message || "No se pudo cargar el listado de imagenes", false);
+    }
+}
+
+async function guardarStorageSettingsAdmin(event) {
+    event.preventDefault();
+
+    const modeEl = document.getElementById("storageRetentionMode");
+    const daysEl = document.getElementById("storageRetentionDays");
+    const cleanupEl = document.getElementById("storageCleanupMinutes");
+    const applyExistingEl = document.getElementById("storageApplyExisting");
+
+    if (!modeEl || !daysEl || !cleanupEl) return;
+
+    const mode = String(modeEl.value || "").toLowerCase();
+    let retentionDays = Number(daysEl.value || "0");
+    if (mode !== "custom") {
+        const presets = { "1d": 1, "7d": 7, "30d": 30 };
+        retentionDays = Number(presets[mode] || 30);
+    }
+
+    const cleanupMinutes = Number(cleanupEl.value || "60");
+    const applyExisting = !!applyExistingEl?.checked;
+
+    if (!Number.isFinite(retentionDays) || retentionDays < 1 || retentionDays > 3650) {
+        mostrarMensajeStorage("Dias de retencion invalidos", false);
+        return;
+    }
+    if (!Number.isFinite(cleanupMinutes) || cleanupMinutes < 5) {
+        mostrarMensajeStorage("Frecuencia de limpieza invalida", false);
+        return;
+    }
+
+    if (applyExisting) {
+        const confirmed = await showAdminConfirmDialog({
+            title: "Aplicar a imagenes existentes",
+            message: "Se recalculara la expiracion de imagenes existentes no excluidas. Esta accion puede provocar eliminaciones automaticas antes de lo esperado.",
+            cancelText: "Cancelar",
+            acceptText: "Aplicar cambios",
+            tone: "danger",
+            focusConfirm: false
+        });
+        if (!confirmed) return;
+    }
+
+    try {
+        const res = await fetch("/api/admin/storage-settings", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                retention_mode: mode,
+                retention_days: Math.trunc(retentionDays),
+                cleanup_interval_minutes: Math.trunc(cleanupMinutes),
+                apply_existing: applyExisting,
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudo guardar la configuracion");
+
+        if (applyExistingEl) applyExistingEl.checked = false;
+        mostrarMensajeStorage(data.message || "Configuracion guardada correctamente", true);
+        await cargarStorageSettingsAdmin();
+        storageImagesCurrentPage = 1;
+        await cargarStorageImagesAdmin(1);
+    } catch (error) {
+        console.error("Error guardando configuracion de almacenamiento:", error);
+        mostrarMensajeStorage(error.message || "No se pudo guardar la configuracion", false);
+    }
+}
+
+async function cambiarExclusionImagen(fotoId, excludeAutoDelete) {
+    const id = Number(fotoId);
+    if (!Number.isFinite(id) || id <= 0) return;
+
+    const accion = excludeAutoDelete ? "excluir" : "volver a incluir";
+    const confirmed = await showAdminConfirmDialog({
+        title: "Actualizar exclusion",
+        message: `Vas a ${accion} esta imagen del borrado automatico.`,
+        cancelText: "Cancelar",
+        acceptText: "Confirmar",
+        tone: "danger",
+        focusConfirm: false
+    });
+    if (!confirmed) return;
+
+    try {
+        const res = await fetch(`/api/admin/storage-images/${id}/exclude`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ exclude_auto_delete: !!excludeAutoDelete })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudo actualizar la exclusion");
+
+        mostrarMensajeStorage(excludeAutoDelete
+            ? "Imagen marcada como excluida"
+            : "Imagen marcada para eliminacion automatica", true);
+        await cargarStorageImagesAdmin(storageImagesCurrentPage);
+        await cargarStorageSettingsAdmin();
+    } catch (error) {
+        console.error("Error actualizando exclusion:", error);
+        mostrarMensajeStorage(error.message || "No se pudo actualizar la exclusion", false);
+    }
+}
+
+async function ejecutarLimpiezaStorageManual() {
+    const confirmed = await showAdminConfirmDialog({
+        title: "Ejecutar limpieza ahora",
+        message: "Se eliminaran de Cloudinary las imagenes vencidas no excluidas. Esta accion no se puede deshacer.",
+        cancelText: "Cancelar",
+        acceptText: "Ejecutar limpieza",
+        tone: "danger",
+        focusConfirm: false
+    });
+    if (!confirmed) return;
+
+    try {
+        const res = await fetch("/api/admin/storage-images/cleanup", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudo ejecutar la limpieza");
+
+        const eliminadas = Number(data.eliminadas || 0);
+        const fallos = Number(data.fallos || 0);
+        mostrarMensajeStorage(`Limpieza completada: ${eliminadas} eliminada(s), ${fallos} fallo(s).`, true);
+        await cargarStorageImagesAdmin(storageImagesCurrentPage);
+        await cargarStorageSettingsAdmin();
+    } catch (error) {
+        console.error("Error ejecutando limpieza manual:", error);
+        mostrarMensajeStorage(error.message || "No se pudo ejecutar la limpieza", false);
     }
 }
 
@@ -1986,10 +2405,59 @@ document.addEventListener("DOMContentLoaded", async function() {
     }
 
     if (navOpciones) {
-        navOpciones.addEventListener("click", function(e) {
+        navOpciones.addEventListener("click", async function(e) {
             e.preventDefault();
             setAdminMainView("opciones");
+            await cargarStorageSettingsAdmin();
+            storageImagesCurrentPage = 1;
+            await cargarStorageImagesAdmin(1);
         });
+    }
+
+    const storageRetentionMode = document.getElementById("storageRetentionMode");
+    if (storageRetentionMode) {
+        storageRetentionMode.addEventListener("change", toggleStorageCustomDaysField);
+    }
+
+    const storageImagesSearch = document.getElementById("storageImagesSearch");
+    if (storageImagesSearch) {
+        storageImagesSearch.addEventListener("input", function() {
+            if (storageSearchDebounceTimer) {
+                clearTimeout(storageSearchDebounceTimer);
+                storageSearchDebounceTimer = null;
+            }
+            storageSearchDebounceTimer = window.setTimeout(function() {
+                storageImagesCurrentPage = 1;
+                cargarStorageImagesAdmin(1);
+            }, 260);
+        });
+    }
+
+    const storageOnlyExcluded = document.getElementById("storageOnlyExcluded");
+    if (storageOnlyExcluded) {
+        storageOnlyExcluded.addEventListener("change", function() {
+            storageImagesCurrentPage = 1;
+            cargarStorageImagesAdmin(1);
+        });
+    }
+
+    const btnRefreshStorageImages = document.getElementById("btnRefreshStorageImages");
+    if (btnRefreshStorageImages) {
+        btnRefreshStorageImages.addEventListener("click", function() {
+            cargarStorageImagesAdmin(storageImagesCurrentPage);
+        });
+    }
+
+    const btnRunStorageCleanup = document.getElementById("btnRunStorageCleanup");
+    if (btnRunStorageCleanup) {
+        btnRunStorageCleanup.addEventListener("click", function() {
+            ejecutarLimpiezaStorageManual();
+        });
+    }
+
+    const formStorageSettings = document.getElementById("formStorageSettings");
+    if (formStorageSettings) {
+        formStorageSettings.addEventListener("submit", guardarStorageSettingsAdmin);
     }
 
     const filterImagenesCards = document.getElementById("filterImagenesCards");
@@ -2170,6 +2638,9 @@ document.addEventListener("DOMContentLoaded", async function() {
 
     await cargarTamanosAdmin();
     await cargarMarcosAdmin();
+    await cargarStorageSettingsAdmin();
+    storageImagesCurrentPage = 1;
+    await cargarStorageImagesAdmin(1);
     setFormMarcoVisible(false);
     initOpcionesAccordion();
     setAdminMainView("dashboard");

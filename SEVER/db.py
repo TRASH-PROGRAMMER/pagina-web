@@ -29,6 +29,10 @@ class Foto(db.Model):
     filename   = db.Column(db.String(500), nullable=False)   # URL de Cloudinary
     public_id  = db.Column(db.String(255), nullable=True)    # public_id para eliminar
     cantidad   = db.Column(db.Integer, nullable=False, default=1)  # Copias pedidas por el cliente
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    exclude_auto_delete = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False,
+                           server_default=func.now())
     cliente_id = db.Column(db.Integer,
                            db.ForeignKey('clientes.id'), nullable=False)
 
@@ -66,6 +70,16 @@ class MarcoDiseno(db.Model):
                               server_default=func.now())
     updated_at    = db.Column(db.DateTime(timezone=True), nullable=False,
                               server_default=func.now(), onupdate=func.now())
+
+
+class ImageStorageSetting(db.Model):
+    __tablename__ = 'image_storage_settings'
+    id                      = db.Column(db.Integer, primary_key=True)
+    retention_mode          = db.Column(db.String(20), nullable=False, default='30d')
+    retention_days          = db.Column(db.Integer, nullable=False, default=30)
+    cleanup_interval_minutes = db.Column(db.Integer, nullable=False, default=60)
+    updated_at              = db.Column(db.DateTime(timezone=True), nullable=False,
+                                        server_default=func.now(), onupdate=func.now())
 
 
 class User(db.Model):

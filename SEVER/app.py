@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import os
 import json
 import re
@@ -15,10 +15,10 @@ from pathlib import Path
 from threading import Condition, Lock, Thread
 import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 # Cargar variables de entorno desde .ENV
 from dotenv import load_dotenv
+from flask_sqlalchemy import extension
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 for env_candidate in [
     os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.ENV'),
     os.path.join(os.getcwd(), '.ENV'),
@@ -35,7 +35,8 @@ from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import IntegrityError
-from db import AuthSession, Cliente, ClienteDraft, Foto, FotoTamano, MarcoDiseno, User, db
+from sqlalchemy import or_
+from db import AuthSession, Cliente, ClienteDraft, Foto, FotoTamano, ImageStorageSetting, MarcoDiseno, User, db
 from auth import auth_bp, current_user_role, login_required, role_required
 import cloudinary
 import cloudinary.uploader
@@ -176,6 +177,17 @@ DB_BACKUP_DIR = os.environ.get(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "backups"),
 )
 DB_BACKUP_COMMAND = os.environ.get("DB_BACKUP_COMMAND", "pg_dump")
+IMAGE_STORAGE_DEFAULT_RETENTION_DAYS = int(os.environ.get("IMAGE_STORAGE_DEFAULT_RETENTION_DAYS", "30"))
+IMAGE_STORAGE_DEFAULT_CLEANUP_INTERVAL_MINUTES = int(
+    os.environ.get("IMAGE_STORAGE_DEFAULT_CLEANUP_INTERVAL_MINUTES", "60")
+)
+IMAGE_STORAGE_WORKER_POLL_SECONDS = int(os.environ.get("IMAGE_STORAGE_WORKER_POLL_SECONDS", "90"))
+IMAGE_STORAGE_RETENTION_PRESETS = {
+    "1d": 1,
+    "7d": 7,
+    "30d": 30,
+    "custom": None,
+}
 PUBLIC_ID_FROM_URL_REGEX = re.compile(r'^v\d+$')
 
 _last_cancelled_cleanup_run_ts = 0.0
@@ -183,6 +195,9 @@ _cancelled_cleanup_lock = Lock()
 _last_db_backup_run_ts = 0.0
 _db_backup_lock = Lock()
 _db_backup_thread_started = False
+_last_expired_images_cleanup_run_ts = 0.0
+_expired_images_cleanup_lock = Lock()
+_expired_images_cleanup_thread_started = False
 
 REALTIME_SSE_RETRY_MS = int(os.environ.get("REALTIME_SSE_RETRY_MS", "3000"))
 REALTIME_SSE_HEARTBEAT_SECONDS = int(os.environ.get("REALTIME_SSE_HEARTBEAT_SECONDS", "20"))
@@ -603,6 +618,9 @@ def _validar_archivos_cliente(archivos):
 
 
 def allowed_frame_file(file_obj):
+    """
+    Validate frame file by extension and mimetype.
+    """
     if not file_obj or not file_obj.filename:
         return False
 
@@ -621,7 +639,7 @@ def allowed_frame_file(file_obj):
 
 
 def _thumbnail_url(public_id=None, fallback_url=""):
-    """Genera una miniatura pequeÃ±a de Cloudinary y usa fallback si algo falla."""
+    """Genera una miniatura pequeña de Cloudinary y usa fallback si algo falla."""
     if public_id:
         try:
             thumb_url, _ = cloudinary.utils.cloudinary_url(
@@ -672,6 +690,138 @@ def _draft_to_dict(draft):
     }
 
 
+def _clamp_retention_days(value, default_value=30):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = int(default_value)
+    return max(1, min(parsed, 3650))
+
+
+def _clamp_cleanup_interval_minutes(value, default_value=60):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = int(default_value)
+    return max(5, min(parsed, 24 * 60))
+
+
+def _normalize_retention_mode(mode, retention_days):
+    raw_mode = str(mode or "").strip().lower()
+    if raw_mode in IMAGE_STORAGE_RETENTION_PRESETS:
+        return raw_mode
+    reverse = {1: "1d", 7: "7d", 30: "30d"}
+    return reverse.get(int(retention_days or 0), "custom")
+
+
+def _ensure_utc_datetime(value):
+    if not value:
+        return None
+    if getattr(value, "tzinfo", None) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _get_or_create_image_storage_settings():
+    settings = ImageStorageSetting.query.order_by(ImageStorageSetting.id.asc()).first()
+    if settings:
+        changed = False
+        settings.retention_days = _clamp_retention_days(
+            settings.retention_days,
+            IMAGE_STORAGE_DEFAULT_RETENTION_DAYS,
+        )
+        normalized_mode = _normalize_retention_mode(settings.retention_mode, settings.retention_days)
+        if settings.retention_mode != normalized_mode:
+            settings.retention_mode = normalized_mode
+            changed = True
+
+        normalized_interval = _clamp_cleanup_interval_minutes(
+            settings.cleanup_interval_minutes,
+            IMAGE_STORAGE_DEFAULT_CLEANUP_INTERVAL_MINUTES,
+        )
+        if settings.cleanup_interval_minutes != normalized_interval:
+            settings.cleanup_interval_minutes = normalized_interval
+            changed = True
+
+        if changed:
+            db.session.commit()
+        return settings
+
+    default_days = _clamp_retention_days(IMAGE_STORAGE_DEFAULT_RETENTION_DAYS, 30)
+    settings = ImageStorageSetting(
+        retention_mode=_normalize_retention_mode("", default_days),
+        retention_days=default_days,
+        cleanup_interval_minutes=_clamp_cleanup_interval_minutes(
+            IMAGE_STORAGE_DEFAULT_CLEANUP_INTERVAL_MINUTES,
+            60,
+        ),
+    )
+    db.session.add(settings)
+    db.session.commit()
+    return settings
+
+
+def _expiration_for_new_image(retention_days):
+    days = _clamp_retention_days(retention_days, IMAGE_STORAGE_DEFAULT_RETENTION_DAYS)
+    return datetime.now(timezone.utc) + timedelta(days=days)
+
+
+def _storage_settings_to_dict(settings):
+    mode = _normalize_retention_mode(settings.retention_mode, settings.retention_days)
+    presets = [
+        {"key": "1d", "label": "1 día", "days": 1},
+        {"key": "7d", "label": "7 días", "days": 7},
+        {"key": "30d", "label": "30 días", "days": 30},
+        {"key": "custom", "label": "Personalizado", "days": None},
+    ]
+    return {
+        "retentionMode": mode,
+        "retentionDays": int(settings.retention_days or 30),
+        "cleanupIntervalMinutes": int(settings.cleanup_interval_minutes or 60),
+        "updatedAt": settings.updated_at.isoformat() if settings.updated_at else None,
+        "presets": presets,
+        "policyText": f"Las imágenes nuevas vencen a los {int(settings.retention_days or 30)} día(s).",
+    }
+
+
+def _photo_storage_item_to_dict(foto, cliente):
+    now_utc = datetime.now(timezone.utc)
+    expires_at = _ensure_utc_datetime(foto.expires_at)
+    remaining_seconds = None
+    is_expired = False
+
+    if expires_at:
+        remaining_seconds = int((expires_at - now_utc).total_seconds())
+        is_expired = remaining_seconds <= 0
+
+    status = "active"
+    if bool(foto.exclude_auto_delete):
+        status = "excluded"
+    elif not expires_at:
+        status = "without_expiration"
+    elif is_expired:
+        status = "expired"
+
+    cliente_nombre = ""
+    if cliente:
+        cliente_nombre = f"{str(cliente.nombre or '').strip()} {str(cliente.apellido or '').strip()}".strip()
+
+    return {
+        "id": foto.id,
+        "clienteId": foto.cliente_id,
+        "clienteNombre": cliente_nombre,
+        "clienteCorreo": (cliente.correo if cliente else "") or "",
+        "url": foto.filename,
+        "publicId": foto.public_id,
+        "excludeAutoDelete": bool(foto.exclude_auto_delete),
+        "expiresAt": expires_at.isoformat() if expires_at else None,
+        "remainingSeconds": remaining_seconds,
+        "isExpired": is_expired,
+        "status": status,
+        "createdAt": foto.created_at.isoformat() if foto.created_at else None,
+    }
+
+
 def _infer_public_id_from_url(url):
     if not url:
         return None
@@ -718,6 +868,110 @@ def _destroy_cloudinary_image(public_id):
     except Exception as e:
         print(f"Error eliminando recurso Cloudinary {public_id}: {e}")
         return False
+
+
+def _cleanup_expired_cloudinary_images(limit=250):
+    now_utc = datetime.now(timezone.utc)
+    fotos = (
+        Foto.query
+        .filter(
+            Foto.exclude_auto_delete.is_(False),
+            Foto.expires_at.isnot(None),
+            Foto.expires_at <= now_utc,
+        )
+        .order_by(Foto.expires_at.asc(), Foto.id.asc())
+        .limit(max(1, int(limit)))
+        .all()
+    )
+
+    eliminadas = 0
+    fallos = 0
+
+    for foto in fotos:
+        public_id = (foto.public_id or "").strip() or _infer_public_id_from_url(foto.filename)
+        if not public_id:
+            fallos += 1
+            continue
+
+        if _destroy_cloudinary_image(public_id):
+            db.session.delete(foto)
+            eliminadas += 1
+        else:
+            fallos += 1
+
+    if eliminadas > 0:
+        db.session.commit()
+
+    return {
+        "evaluadas": len(fotos),
+        "eliminadas": eliminadas,
+        "fallos": fallos,
+    }
+
+
+def _run_expired_images_cleanup_if_due(force=False, trigger="request"):
+    global _last_expired_images_cleanup_run_ts
+
+    settings = _get_or_create_image_storage_settings()
+    interval_seconds = max(300, int(settings.cleanup_interval_minutes or 60) * 60)
+    now_ts = time.time()
+    if not force and (now_ts - _last_expired_images_cleanup_run_ts) < interval_seconds:
+        return {"ok": False, "skipped": "interval", "trigger": trigger}
+
+    acquired = _expired_images_cleanup_lock.acquire(blocking=False)
+    if not acquired:
+        return {"ok": False, "skipped": "busy", "trigger": trigger}
+
+    try:
+        settings = _get_or_create_image_storage_settings()
+        interval_seconds = max(300, int(settings.cleanup_interval_minutes or 60) * 60)
+        now_ts = time.time()
+        if not force and (now_ts - _last_expired_images_cleanup_run_ts) < interval_seconds:
+            return {"ok": False, "skipped": "interval", "trigger": trigger}
+
+        resumen = _cleanup_expired_cloudinary_images(limit=250)
+        _last_expired_images_cleanup_run_ts = time.time()
+
+        if resumen["eliminadas"] > 0 or resumen["fallos"] > 0:
+            print(
+                "[cleanup] expiracion imagenes: "
+                f"evaluadas={resumen['evaluadas']}, "
+                f"eliminadas={resumen['eliminadas']}, "
+                f"fallos={resumen['fallos']}, "
+                f"trigger={trigger}"
+            )
+
+        return {"ok": True, "trigger": trigger, **resumen}
+    finally:
+        _expired_images_cleanup_lock.release()
+
+
+def _expired_images_cleanup_worker():
+    poll_seconds = max(45, min(int(IMAGE_STORAGE_WORKER_POLL_SECONDS), 5 * 60))
+    while True:
+        try:
+            with app.app_context():
+                _run_expired_images_cleanup_if_due(force=False, trigger="worker")
+        except Exception as e:
+            print(f"[cleanup] error en worker de expiracion: {e}")
+        time.sleep(poll_seconds)
+
+
+def _start_expired_images_cleanup_worker():
+    global _expired_images_cleanup_thread_started
+    if _expired_images_cleanup_thread_started:
+        return
+
+    is_debug_reloader_parent = (
+        os.environ.get("WERKZEUG_RUN_MAIN") is None and _env_bool("FLASK_DEBUG", False)
+    )
+    if is_debug_reloader_parent:
+        return
+
+    worker = Thread(target=_expired_images_cleanup_worker, name="expired-images-cleanup", daemon=True)
+    worker.start()
+    _expired_images_cleanup_thread_started = True
+    print("[cleanup] worker de expiracion de imagenes iniciado")
 
 
 def _cleanup_cancelled_order_photos(retention_days=CLOUDINARY_CANCELLED_RETENTION_DAYS):
@@ -998,12 +1252,62 @@ with app.app_context():
             "UPDATE clientes SET pagado=FALSE WHERE pagado IS NULL"))
         conn.execute(db.text(
             "UPDATE clientes SET cancelled_at=NOW() WHERE estado='cancelado' AND cancelled_at IS NULL"))
+        # Permite multiples pedidos por correo: elimina cualquier UNIQUE legado en clientes.correo.
+        conn.execute(db.text(
+            "DO $$ "
+            "DECLARE item RECORD; "
+            "BEGIN "
+            "  FOR item IN "
+            "    SELECT c.conname AS object_name "
+            "    FROM pg_constraint c "
+            "    JOIN pg_class t ON t.oid = c.conrelid "
+            "    JOIN pg_namespace n ON n.oid = t.relnamespace "
+            "    WHERE c.contype = 'u' "
+            "      AND t.relname = 'clientes' "
+            "      AND n.nspname = current_schema() "
+            "      AND pg_get_constraintdef(c.oid) ILIKE '%(correo)%' "
+            "  LOOP "
+            "    EXECUTE format('ALTER TABLE %I.%I DROP CONSTRAINT IF EXISTS %I', current_schema(), 'clientes', item.object_name); "
+            "  END LOOP; "
+            " "
+            "  FOR item IN "
+            "    SELECT idx.relname AS object_name "
+            "    FROM pg_class t "
+            "    JOIN pg_namespace n ON n.oid = t.relnamespace "
+            "    JOIN pg_index i ON i.indrelid = t.oid "
+            "    JOIN pg_class idx ON idx.oid = i.indexrelid "
+            "    LEFT JOIN pg_constraint c ON c.conindid = i.indexrelid "
+            "    WHERE t.relname = 'clientes' "
+            "      AND n.nspname = current_schema() "
+            "      AND i.indisunique "
+            "      AND NOT i.indisprimary "
+            "      AND c.oid IS NULL "
+            "      AND i.indnatts = 1 "
+            "      AND ( "
+            "        SELECT a.attname "
+            "        FROM pg_attribute a "
+            "        WHERE a.attrelid = t.oid AND a.attnum = i.indkey[0] "
+            "      ) = 'correo' "
+            "  LOOP "
+            "    EXECUTE format('DROP INDEX IF EXISTS %I.%I', current_schema(), item.object_name); "
+            "  END LOOP; "
+            "END $$;"))
         conn.execute(db.text(
             "CREATE INDEX IF NOT EXISTS idx_clientes_estado_cancelled_at ON clientes (estado, cancelled_at)"))
         conn.execute(db.text(
             "ALTER TABLE fotos ADD COLUMN IF NOT EXISTS public_id VARCHAR(255)"))
         conn.execute(db.text(
             "ALTER TABLE fotos ADD COLUMN IF NOT EXISTS cantidad INTEGER NOT NULL DEFAULT 1"))
+        conn.execute(db.text(
+            "ALTER TABLE fotos ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ"))
+        conn.execute(db.text(
+            "ALTER TABLE fotos ADD COLUMN IF NOT EXISTS exclude_auto_delete BOOLEAN NOT NULL DEFAULT FALSE"))
+        conn.execute(db.text(
+            "ALTER TABLE fotos ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()"))
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS idx_fotos_expires_at ON fotos (expires_at)"))
+        conn.execute(db.text(
+            "CREATE INDEX IF NOT EXISTS idx_fotos_expires_active ON fotos (expires_at) WHERE exclude_auto_delete = FALSE"))
         conn.execute(db.text(
             "ALTER TABLE foto_tamanos ADD COLUMN IF NOT EXISTS nombre VARCHAR(100)"))
         conn.execute(db.text(
@@ -1041,6 +1345,26 @@ with app.app_context():
             "ALTER TABLE cliente_drafts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"))
         conn.execute(db.text(
             "CREATE INDEX IF NOT EXISTS idx_cliente_drafts_draft_key ON cliente_drafts (draft_key)"))
+        conn.execute(db.text(
+            "CREATE TABLE IF NOT EXISTS image_storage_settings ("
+            "id SERIAL PRIMARY KEY, "
+            "retention_mode VARCHAR(20) NOT NULL DEFAULT '30d', "
+            "retention_days INTEGER NOT NULL DEFAULT 30, "
+            "cleanup_interval_minutes INTEGER NOT NULL DEFAULT 60, "
+            "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()"
+            ")"))
+        conn.execute(db.text(
+            "ALTER TABLE image_storage_settings ADD COLUMN IF NOT EXISTS retention_mode VARCHAR(20) DEFAULT '30d'"))
+        conn.execute(db.text(
+            "ALTER TABLE image_storage_settings ADD COLUMN IF NOT EXISTS retention_days INTEGER DEFAULT 30"))
+        conn.execute(db.text(
+            "ALTER TABLE image_storage_settings ADD COLUMN IF NOT EXISTS cleanup_interval_minutes INTEGER DEFAULT 60"))
+        conn.execute(db.text(
+            "ALTER TABLE image_storage_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"))
+        conn.execute(db.text(
+            "INSERT INTO image_storage_settings (retention_mode, retention_days, cleanup_interval_minutes) "
+            "SELECT '30d', 30, 60 "
+            "WHERE NOT EXISTS (SELECT 1 FROM image_storage_settings)"))
         conn.commit()
 
     # Seed inicial de tamanos si la tabla estÃ¡ vacÃ­a
@@ -1110,7 +1434,13 @@ with app.app_context():
     except Exception as e:
         print(f"Error en backup inicial de base de datos: {e}")
 
+    try:
+        _run_expired_images_cleanup_if_due(force=False, trigger="startup")
+    except Exception as e:
+        print(f"Error en limpieza inicial de imagenes expiradas: {e}")
+
 _start_db_backup_worker()
+_start_expired_images_cleanup_worker()
 
 @app.route('/')
 def home():
@@ -1154,6 +1484,11 @@ def _background_cancelled_cleanup():
         _run_db_backup_if_due(force=False, trigger="request")
     except Exception as e:
         print(f"Error en backup programado de base de datos: {e}")
+
+    try:
+        _run_expired_images_cleanup_if_due(force=False, trigger="request")
+    except Exception as e:
+        print(f"Error en limpieza programada de imagenes expiradas: {e}")
 
 
 @app.route('/api/admin/db-backup', methods=['POST'])
@@ -1408,6 +1743,9 @@ def crear_clientes():
         if correo_normalizado and (str(existe.correo or "").strip().lower() != correo_normalizado):
             return jsonify({"error": "El pedido seleccionado no coincide con el correo indicado."}), 409
 
+    storage_settings = _get_or_create_image_storage_settings()
+    expires_at_for_new_images = _expiration_for_new_image(storage_settings.retention_days)
+
     if existe:
         # Actualizar datos del pedido (tamaÃ±o, papel, fecha)
         existe.tamano       = data.get("tamano", existe.tamano)
@@ -1492,6 +1830,8 @@ def crear_clientes():
                 filename=resultado["secure_url"],
                 public_id=resultado["public_id"],
                 cantidad=cantidades_lista[idx] if idx < len(cantidades_lista) else 1,
+                expires_at=expires_at_for_new_images,
+                exclude_auto_delete=False,
                 cliente_id=existe.id,
             )
             db.session.add(foto)
@@ -1514,6 +1854,8 @@ def crear_clientes():
                     filename=pre['secure_url'],
                     public_id=pre['public_id'],
                     cantidad=cant_foto,
+                    expires_at=expires_at_for_new_images,
+                    exclude_auto_delete=False,
                     cliente_id=existe.id,
                 )
                 db.session.add(foto)
@@ -1664,6 +2006,8 @@ def crear_clientes():
             filename=url_segura,
             public_id=public_id,
             cantidad=cant_foto,
+            expires_at=expires_at_for_new_images,
+            exclude_auto_delete=False,
             cliente_id=nuevo_cliente.id,
         )
         db.session.add(foto)
@@ -1683,6 +2027,8 @@ def crear_clientes():
                 filename=pre['secure_url'],
                 public_id=pre['public_id'],
                 cantidad=cant_foto,
+                expires_at=expires_at_for_new_images,
+                exclude_auto_delete=False,
                 cliente_id=nuevo_cliente.id,
             )
             db.session.add(foto)
@@ -2461,6 +2807,198 @@ def admin_actualizar_estado_marco(marco_id):
     }), 200
 
 
+@app.route('/api/admin/storage-settings', methods=['GET'])
+@login_required
+@role_required('admin')
+def admin_storage_settings_get():
+    settings = _get_or_create_image_storage_settings()
+    now_utc = datetime.now(timezone.utc)
+
+    total_imagenes = Foto.query.count()
+    excluidas = Foto.query.filter(Foto.exclude_auto_delete.is_(True)).count()
+    sin_expiracion = Foto.query.filter(Foto.expires_at.is_(None)).count()
+    vencidas = Foto.query.filter(
+        Foto.exclude_auto_delete.is_(False),
+        Foto.expires_at.isnot(None),
+        Foto.expires_at <= now_utc,
+    ).count()
+
+    return jsonify({
+        "config": _storage_settings_to_dict(settings),
+        "resumen": {
+            "totalImagenes": total_imagenes,
+            "excluidas": excluidas,
+            "sinExpiracion": sin_expiracion,
+            "vencidas": vencidas,
+        },
+        "reglas": {
+            "aplicaNuevasImagenes": True,
+            "aplicaExistentesSoloSiSeSolicita": True,
+        },
+    }), 200
+
+
+@app.route('/api/admin/storage-settings', methods=['PUT'])
+@login_required
+@role_required('admin')
+def admin_storage_settings_update():
+    settings = _get_or_create_image_storage_settings()
+    data = request.get_json(silent=True) or {}
+
+    mode_raw = str(data.get("retention_mode", data.get("retentionMode", settings.retention_mode)) or "").strip().lower()
+    if mode_raw not in IMAGE_STORAGE_RETENTION_PRESETS:
+        return jsonify({"error": "retention_mode invalido. Usa 1d, 7d, 30d o custom."}), 400
+
+    if mode_raw == "custom":
+        retention_days = _clamp_retention_days(
+            data.get("retention_days", data.get("retentionDays", settings.retention_days)),
+            settings.retention_days,
+        )
+    else:
+        retention_days = int(IMAGE_STORAGE_RETENTION_PRESETS[mode_raw])
+
+    cleanup_minutes = _clamp_cleanup_interval_minutes(
+        data.get("cleanup_interval_minutes", data.get("cleanupIntervalMinutes", settings.cleanup_interval_minutes)),
+        settings.cleanup_interval_minutes,
+    )
+
+    apply_existing_raw = data.get("apply_existing", data.get("applyExisting", False))
+    apply_existing = str(apply_existing_raw).strip().lower() in {"1", "true", "yes", "si", "sí", "on"}
+
+    settings.retention_mode = _normalize_retention_mode(mode_raw, retention_days)
+    settings.retention_days = retention_days
+    settings.cleanup_interval_minutes = cleanup_minutes
+
+    updated_existing = 0
+    if apply_existing:
+        nueva_expiracion = _expiration_for_new_image(retention_days)
+        updated_existing = (
+            Foto.query
+            .filter(Foto.exclude_auto_delete.is_(False))
+            .update({Foto.expires_at: nueva_expiracion}, synchronize_session=False)
+        )
+
+    db.session.commit()
+
+    return jsonify({
+        "ok": True,
+        "config": _storage_settings_to_dict(settings),
+        "updatedExisting": int(updated_existing or 0),
+        "message": (
+            f"Configuracion guardada. La expiracion para imagenes nuevas es de {retention_days} dia(s)."
+            if not apply_existing else
+            f"Configuracion guardada y aplicada a {int(updated_existing or 0)} imagen(es) existente(s)."
+        ),
+    }), 200
+
+
+@app.route('/api/admin/storage-images', methods=['GET'])
+@login_required
+@role_required('admin')
+def admin_storage_images_list():
+    try:
+        page = int(request.args.get("page", "1"))
+    except (TypeError, ValueError):
+        page = 1
+    page = max(1, page)
+
+    try:
+        page_size = int(request.args.get("page_size", request.args.get("pageSize", "10")))
+    except (TypeError, ValueError):
+        page_size = 10
+    page_size = max(1, min(page_size, 50))
+
+    search = str(request.args.get("q", "") or "").strip().lower()
+    only_excluded_raw = str(request.args.get("onlyExcluded", "") or "").strip().lower()
+    only_excluded = only_excluded_raw in {"1", "true", "yes", "si", "sí", "on"}
+
+    query = db.session.query(Foto, Cliente).join(Cliente, Cliente.id == Foto.cliente_id)
+    if search:
+        pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                db.func.lower(Cliente.nombre).like(pattern),
+                db.func.lower(Cliente.apellido).like(pattern),
+                db.func.lower(Cliente.correo).like(pattern),
+            )
+        )
+    if only_excluded:
+        query = query.filter(Foto.exclude_auto_delete.is_(True))
+
+    filtered_total = query.count()
+    total_pages = max(1, (filtered_total + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    offset = (page - 1) * page_size
+
+    rows = (
+        query
+        .order_by(Foto.expires_at.is_(None).asc(), Foto.expires_at.asc(), Foto.id.desc())
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+
+    now_utc = datetime.now(timezone.utc)
+    resumen = {
+        "totalImagenes": Foto.query.count(),
+        "excluidas": Foto.query.filter(Foto.exclude_auto_delete.is_(True)).count(),
+        "sinExpiracion": Foto.query.filter(Foto.expires_at.is_(None)).count(),
+        "vencidas": Foto.query.filter(
+            Foto.exclude_auto_delete.is_(False),
+            Foto.expires_at.isnot(None),
+            Foto.expires_at <= now_utc,
+        ).count(),
+    }
+
+    return jsonify({
+        "imagenes": [_photo_storage_item_to_dict(foto, cliente) for foto, cliente in rows],
+        "resumen": resumen,
+        "page": page,
+        "pageSize": page_size,
+        "total": int(filtered_total),
+        "totalPages": int(total_pages),
+        "hasNext": page < total_pages,
+        "hasPrev": page > 1,
+    }), 200
+
+
+@app.route('/api/admin/storage-images/<int:foto_id>/exclude', methods=['PATCH'])
+@login_required
+@role_required('admin')
+def admin_storage_image_toggle_exclude(foto_id):
+    foto = db.session.get(Foto, foto_id)
+    if not foto:
+        return jsonify({"error": "Imagen no encontrada"}), 404
+
+    data = request.get_json(silent=True) or {}
+    if "exclude_auto_delete" not in data and "excludeAutoDelete" not in data:
+        return jsonify({"error": "Debes indicar exclude_auto_delete"}), 400
+
+    raw = data.get("exclude_auto_delete", data.get("excludeAutoDelete"))
+    exclude = str(raw).strip().lower() in {"1", "true", "yes", "si", "sí", "on"}
+
+    foto.exclude_auto_delete = bool(exclude)
+    if not foto.exclude_auto_delete and not foto.expires_at:
+        settings = _get_or_create_image_storage_settings()
+        foto.expires_at = _expiration_for_new_image(settings.retention_days)
+
+    db.session.commit()
+    cliente = db.session.get(Cliente, foto.cliente_id)
+    return jsonify({
+        "ok": True,
+        "imagen": _photo_storage_item_to_dict(foto, cliente),
+    }), 200
+
+
+@app.route('/api/admin/storage-images/cleanup', methods=['POST'])
+@login_required
+@role_required('admin')
+def admin_storage_images_cleanup_now():
+    result = _run_expired_images_cleanup_if_due(force=True, trigger="manual_admin")
+    status_code = 200 if result.get("ok") else 409
+    return jsonify(result), status_code
+
+
 @app.route('/api/precios', methods=['POST'])
 def obtener_precios():
     data = request.get_json() or {}
@@ -2471,14 +3009,14 @@ def obtener_precios():
     try:
         cantidad = int(cantidad)
     except (TypeError, ValueError):
-        return jsonify({"error": "cantidad invÃ¡lida"}), 400
+        return jsonify({"error": "cantidad invalida"}), 400
 
     if not tamano or cantidad <= 0:
         return jsonify({"error": "Datos incompletos"}), 400
 
     precio_base = _precio_base_tamano(tamano)
     if precio_base is None:
-        return jsonify({"error": "TamaÃ±o no vÃ¡lido"}), 400
+        return jsonify({"error": "TamaÃ±o no valido"}), 400
 
     precio_unitario = _aplicar_descuentos(tamano, cantidad, precio_base)
     total = round(precio_unitario * cantidad, 2)

@@ -342,6 +342,108 @@
             </div>
           </div>
         </section>
+
+        <section class="opciones-accordion-item">
+          <button type="button" class="opciones-accordion-trigger" aria-expanded="false" aria-controls="opcionesPanelStorage">
+            <span>Configuración de almacenamiento de imágenes</span>
+            <span class="opciones-accordion-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div class="opciones-accordion-panel" id="opcionesPanelStorage" hidden>
+            <p class="storage-help-text">
+              Define cuánto tiempo se conservan las imágenes en Cloudinary. Por defecto, los cambios aplican solo a imágenes nuevas.
+            </p>
+
+            <form id="formStorageSettings" class="storage-config-form" autocomplete="off">
+              <label>
+                Tiempo de permanencia
+                <select id="storageRetentionMode" required>
+                  <option value="1d">1 día</option>
+                  <option value="7d">7 días</option>
+                  <option value="30d">30 días</option>
+                  <option value="custom">Personalizado</option>
+                </select>
+              </label>
+
+              <label>
+                Días personalizados
+                <input type="number" id="storageRetentionDays" min="1" max="3650" step="1" value="30" aria-describedby="storageCustomHelp">
+              </label>
+
+              <label>
+                Frecuencia de limpieza automática
+                <select id="storageCleanupMinutes" required>
+                  <option value="15">Cada 15 minutos</option>
+                  <option value="60">Cada 1 hora</option>
+                  <option value="180">Cada 3 horas</option>
+                  <option value="720">Cada 12 horas</option>
+                  <option value="1440">Cada 24 horas</option>
+                </select>
+              </label>
+
+              <label class="storage-apply-existing">
+                <input type="checkbox" id="storageApplyExisting">
+                <span>Aplicar esta expiración también a imágenes existentes (excepto excluidas manualmente)</span>
+              </label>
+
+              <small id="storageCustomHelp" class="storage-help-text">Si eliges "Personalizado", define entre 1 y 3650 días.</small>
+
+              <div class="storage-config-actions">
+                <button type="submit" class="btn btn-ghost">Guardar configuración</button>
+                <button type="button" class="tamano-btn" id="btnRunStorageCleanup">Ejecutar limpieza ahora</button>
+              </div>
+            </form>
+
+            <div id="storageMensaje" class="tamano-mensaje" aria-live="polite"></div>
+
+            <div class="storage-summary-grid" aria-live="polite">
+              <div class="storage-summary-card">
+                <span>Total imágenes</span>
+                <strong id="storageSummaryTotal">—</strong>
+              </div>
+              <div class="storage-summary-card">
+                <span>Vencidas</span>
+                <strong id="storageSummaryExpired">—</strong>
+              </div>
+              <div class="storage-summary-card">
+                <span>Excluidas</span>
+                <strong id="storageSummaryExcluded">—</strong>
+              </div>
+              <div class="storage-summary-card">
+                <span>Sin expiración</span>
+                <strong id="storageSummaryNoExpire">—</strong>
+              </div>
+            </div>
+
+            <div class="storage-images-toolbar">
+              <label>
+                Buscar por cliente o correo
+                <input type="text" id="storageImagesSearch" placeholder="Ej: ana o correo@dominio.com">
+              </label>
+              <label class="storage-only-excluded">
+                <input type="checkbox" id="storageOnlyExcluded">
+                <span>Mostrar solo excluidas</span>
+              </label>
+              <button type="button" class="tamano-btn" id="btnRefreshStorageImages">Actualizar lista</button>
+            </div>
+
+            <div class="tamano-table-wrap">
+              <table id="storageImagesTable" class="tamanos-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Cliente</th>
+                    <th>Expira en</th>
+                    <th>Expira el</th>
+                    <th>Estado</th>
+                    <th>Exclusión</th>
+                  </tr>
+                </thead>
+                <tbody id="storageImagesBody"></tbody>
+              </table>
+            </div>
+            <nav class="orders-table-pagination" id="storageImagesPagination" aria-label="Paginacion de imagenes" hidden></nav>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -870,6 +972,141 @@
     color: #ffb3b3;
   }
 
+  .storage-help-text {
+    margin: 0 0 8px;
+    color: #9ca3b0;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .storage-config-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
+    gap: 10px;
+    margin-top: 8px;
+    align-items: end;
+  }
+  .storage-config-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #9ca3b0;
+    font-size: 12px;
+  }
+  .storage-config-form input,
+  .storage-config-form select {
+    background: #12121c;
+    border: 1px solid #2a2a3a;
+    color: #e8e8f0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .storage-apply-existing {
+    grid-column: 1 / span 3;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 10px;
+    background: #12121c;
+  }
+  .storage-apply-existing input {
+    width: 16px;
+    height: 16px;
+    accent-color: #7c6cfc;
+    margin: 0;
+  }
+  .storage-config-actions {
+    grid-column: 1 / span 3;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .storage-summary-grid {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(110px, 1fr));
+    gap: 8px;
+  }
+  .storage-summary-card {
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    background: #12121c;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .storage-summary-card span {
+    font-size: 11px;
+    color: #9ca3b0;
+  }
+  .storage-summary-card strong {
+    font-family: 'Space Mono', monospace;
+    color: #e8e8f0;
+    font-size: 15px;
+  }
+  .storage-images-toolbar {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) auto auto;
+    gap: 8px;
+    align-items: end;
+    margin: 12px 0 8px;
+  }
+  .storage-images-toolbar label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #9ca3b0;
+    font-size: 12px;
+  }
+  .storage-images-toolbar input {
+    background: #12121c;
+    border: 1px solid #2a2a3a;
+    color: #e8e8f0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .storage-only-excluded {
+    display: inline-flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .storage-status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid transparent;
+  }
+  .storage-status-badge.active {
+    color: #b9f7ff;
+    background: rgba(34, 211, 238, 0.15);
+    border-color: rgba(34, 211, 238, 0.45);
+  }
+  .storage-status-badge.expired {
+    color: #ffd2d2;
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.45);
+  }
+  .storage-status-badge.excluded {
+    color: #fde68a;
+    background: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.45);
+  }
+  .storage-status-badge.without-expiration {
+    color: #d4d4d8;
+    background: rgba(161, 161, 170, 0.18);
+    border-color: rgba(161, 161, 170, 0.45);
+  }
+
   .edit-tamano-modal-content {
     max-width: 520px;
   }
@@ -970,6 +1207,15 @@
     .tamano-form {
       grid-template-columns: 1fr 1fr;
     }
+    .storage-config-form,
+    .storage-images-toolbar,
+    .storage-summary-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .storage-apply-existing,
+    .storage-config-actions {
+      grid-column: auto;
+    }
     .marco-form {
       grid-template-columns: 1fr;
     }
@@ -984,10 +1230,15 @@
     .tamano-form {
       grid-template-columns: 1fr;
     }
+    .storage-config-form,
+    .storage-images-toolbar,
+    .storage-summary-grid {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='script/session_auth_client.js') }}"></script>
-<script src="{{ url_for('static', filename='script/dasbord_admin.js', v='20260403j') }}"></script>
+<script src="{{ url_for('static', filename='script/dasbord_admin.js', v='20260404a') }}"></script>
 </body>
 </html>
