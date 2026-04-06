@@ -1255,6 +1255,34 @@ button:active {
     text-align: center;
 }
 
+.pedido-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.pedido-topbar-title {
+    margin: 0;
+}
+
+.btn-ver-mis-pedidos-top {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.btn-ver-mis-pedidos-top:hover:not(.btn-mis-pedidos-disabled) {
+    background: linear-gradient(135deg, #5a6fdd 0%, #6a3f96 100%);
+}
+
 .pasos {
     --pasos-gap: 12px;
     display: flex;
@@ -2184,6 +2212,101 @@ footer {
 .dark-mode .container-datos {
     background: #1a1a25;
     color: white;
+}
+
+.dark-mode .instrucciones-pedido {
+    background: linear-gradient(135deg, #1d273c, #202b41);
+    border-left-color: #4a8fff;
+    box-shadow: 0 10px 26px rgba(3, 8, 18, 0.45);
+}
+
+.dark-mode .instrucciones-pedido h3,
+.dark-mode .pedido-topbar-title {
+    color: #dbe8ff;
+}
+
+.dark-mode .btn-ver-mis-pedidos-top {
+    background: linear-gradient(135deg, #3f58c8 0%, #5a3a95 100%);
+    color: #f5f8ff;
+    box-shadow: 0 8px 18px rgba(15, 25, 50, 0.4);
+}
+
+.dark-mode .btn-ver-mis-pedidos-top:hover:not(.btn-mis-pedidos-disabled) {
+    background: linear-gradient(135deg, #4e67dc 0%, #6744a8 100%);
+}
+
+.dark-mode .paso {
+    background: #202b41;
+    color: #d9e5fb;
+    box-shadow: 0 6px 16px rgba(6, 12, 26, 0.45);
+}
+
+.dark-mode .paso-num {
+    background: linear-gradient(135deg, #3f8cff, #2bb7ff);
+    color: #f8fbff;
+}
+
+.dark-mode .pasos-nav {
+    background: linear-gradient(135deg, #2f86ff, #2aa8e8);
+    color: #f7fbff;
+}
+
+.dark-mode .pasos-dot {
+    background: #4d6d9e;
+}
+
+.dark-mode .pasos-dot[aria-selected="true"] {
+    background: linear-gradient(90deg, #3f8cff, #2bb7ff);
+}
+
+.dark-mode .pasos-carousel-hint {
+    color: #9ec6ff;
+    background: rgba(13, 24, 43, 0.92);
+    border-color: rgba(97, 152, 232, 0.4);
+}
+
+.dark-mode .dropzone-box {
+    border-color: #3f8cff;
+    background: linear-gradient(135deg, #202f49 60%, #1a2336 100%);
+    box-shadow: 0 8px 24px rgba(3, 10, 24, 0.45);
+}
+
+.dark-mode .dropzone-box:focus,
+.dark-mode .dropzone-box.active,
+.dark-mode .dropzone-box:hover {
+    border-color: #5da5ff;
+    background: linear-gradient(135deg, #233655 70%, #1d2a42 100%);
+    box-shadow: 0 12px 30px rgba(5, 14, 32, 0.5);
+}
+
+.dark-mode .dropzone-icon,
+.dark-mode .dropzone-text {
+    color: #66b0ff;
+}
+
+.dark-mode .dropzone-sub {
+    color: #bacdf0;
+}
+
+.dark-mode .dropzone-overlay {
+    background: rgba(11, 22, 44, 0.24);
+}
+
+.dark-mode .dropzone-overlay.active {
+    background: rgba(20, 42, 84, 0.45);
+}
+
+.dark-mode .dropzone-message {
+    background: #172338;
+    color: #9ec6ff;
+    border-color: #4a93f7;
+    box-shadow: 0 12px 34px rgba(6, 14, 31, 0.6);
+}
+
+.dark-mode .pedido-flow-guide {
+    border-color: #2f466f;
+    background: linear-gradient(135deg, #1f2e49 0%, #1b2840 100%);
+    color: #cbddff;
 }
 
 .dark-mode .titulo {

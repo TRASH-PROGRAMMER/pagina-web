@@ -16,12 +16,12 @@
   <header class="container" role="banner">
 <div>
     <h1 class="titulo"><b>Image Manager</b></h1>
-    <p class="text1">Carga de archivos fotográficos en segundos en PNG, JPG, GIF</p>
+    <p class="text1">Carga de archivos fotográficos en segundos.</p>
     <h2>Subir hasta 100 imágenes en segundos</h2>
     <nav class="instrucciones-pedido" aria-label="Pasos del pedido">
-  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
-    <h3 style="margin: 0;">📋 ¿Cómo hacer tu pedido?</h3>
-    <a href="/mis-pedidos" class="btn-ver-mis-pedidos" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: all 0.2s;">
+    <div class="pedido-topbar">
+        <h3 class="pedido-topbar-title">📋 ¿Cómo hacer tu pedido?</h3>
+        <a href="/mis-pedidos" class="btn-ver-mis-pedidos btn-ver-mis-pedidos-top">
       📦 Mis Pedidos
     </a>
   </div>
@@ -47,7 +47,7 @@
         <div id="dropzoneBox" class="dropzone-box" tabindex="0" role="button" aria-label="Arrastra tus fotos o haz clic aquí para seleccionar" aria-describedby="inputImagenesHelp">
             <span class="dropzone-icon">📁</span>
             <span class="dropzone-text">Arrastra tus fotos o haz clic aquí</span>
-            <span class="dropzone-sub">Formatos: PNG, JPG, GIF — Máximo 100 imágenes, 20 MB por archivo.</span>
+            <span class="dropzone-sub">Formatos: PNG, JPG y GIF. Maximo 100 fotos, 20 MB por archivo.</span>
         </div>
         <style>
         #inputImagenes { display: none !important; }
@@ -199,7 +199,7 @@
         }
     }
     </style>
-    <p id="inputImagenesHelp" class="campo-ayuda">Formatos: PNG, JPG, GIF — Máximo 100 imágenes, 20 MB por archivo.</p>
+    <p id="inputImagenesHelp" class="campo-ayuda"></p>
     <div id="pedidoFlowGuide" class="pedido-flow-guide" role="status" aria-live="polite" aria-atomic="true">
         <strong id="pedidoFlowGuideTitle">Paso 1 de 4</strong>
         <span id="pedidoFlowGuideText">Selecciona tus fotos para empezar.</span>

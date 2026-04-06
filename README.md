@@ -394,15 +394,4 @@ pagina-web/
 
 La aplicacion esta enfocada en la operacion real de pedidos:
 
-- formulario avanzado con UX/a11y
-- autosave resiliente
-- seguimiento de pedidos
-- dashboard admin con metricas
-- limpieza y backup automatizados
-
-Si quieres, se puede extender con:
-
-- tests automatizados (backend/frontend)
-- CI/CD
-- observabilidad (logs estructurados + alertas)
-- migraciones formales con Alembic
+-

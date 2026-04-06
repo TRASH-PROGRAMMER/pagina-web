@@ -315,7 +315,7 @@ const mensajesAyudaBase = Object.freeze({
     nombre: "Usa letras y separadores internos validos (espacio, apostrofe o guion). Ej: Maria Jose, O'Connor, Marie-Claire.",
     apellido: "Usa letras y separadores internos validos (espacio, apostrofe o guion). Ej: Lopez, Iñaki, D'Angelo.",
     correo: "Formato recomendado: usuario@dominio.com",
-    imagenes: "Formatos: PNG, JPG, GIF. Maximo 100 imagenes, 20 MB por archivo.",
+    imagenes: "",
     tamano: "Elige un solo tamano base. Toca el mismo chip otra vez para quitar la seleccion.",
     papel: "Selecciona el tipo de papel para tu impresion.",
 });

@@ -301,26 +301,22 @@ function adaptarCopyDropzonePorDispositivo() {
     const movil = esVistaMovilTactil();
     if (dropzoneText) {
         dropzoneText.textContent = movil
-            ? "Toca aquí para seleccionar tus fotos"
+            ? "Toca aqui para seleccionar tus fotos"
             : "Arrastra tus fotos o haz clic aquí";
     }
     if (dropzoneSub) {
-        dropzoneSub.textContent = movil
-            ? `Toca para elegir PNG, JPG o GIF. Máximo ${MAX_IMAGENES} imágenes, ${LIMITE_MB_POR_ARCHIVO} MB por archivo.`
-            : `Formatos: PNG, JPG, GIF — Máximo ${MAX_IMAGENES} imágenes, ${LIMITE_MB_POR_ARCHIVO} MB por archivo.`;
+        dropzoneSub.textContent = `Formatos: PNG, JPG y GIF. Maximo ${MAX_IMAGENES} fotos, ${LIMITE_MB_POR_ARCHIVO} MB por archivo.`;
     }
     if (dropzoneBox) {
         dropzoneBox.setAttribute(
             "aria-label",
             movil
-                ? "Toca aquí para seleccionar tus fotos"
+                ? "Toca aqui para seleccionar tus fotos"
                 : "Arrastra tus fotos o haz clic aquí para seleccionar"
         );
     }
     if (ayudaInput) {
-        ayudaInput.textContent = movil
-            ? `Toca para elegir tus fotos. Formatos: PNG, JPG, GIF. Máximo ${MAX_IMAGENES} imágenes, ${LIMITE_MB_POR_ARCHIVO} MB por archivo.`
-            : `Formatos: PNG, JPG, GIF — Máximo ${MAX_IMAGENES} imágenes, ${LIMITE_MB_POR_ARCHIVO} MB por archivo.`;
+        ayudaInput.textContent = "";
     }
 }
 
