@@ -38,6 +38,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from db import AuthSession, Cliente, ClienteDraft, Foto, FotoTamano, ImageStorageSetting, MarcoDiseno, User, db
 from auth import auth_bp, current_user_role, login_required, role_required
+try:
+    from order_age_blueprint import order_age_bp, enrich_order_age_payload
+except ImportError:
+    from .order_age_blueprint import order_age_bp, enrich_order_age_payload
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
@@ -1225,6 +1229,7 @@ def _start_db_backup_worker():
 
 db.init_app(app)
 app.register_blueprint(auth_bp)
+app.register_blueprint(order_age_bp)
 
 # Crea las tablas si no existen + migraciÃ³n ligera
 with app.app_context():
@@ -1244,6 +1249,10 @@ with app.app_context():
         conn.execute(db.text(
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ"))
         conn.execute(db.text(
+            "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()"))
+        conn.execute(db.text(
+            "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"))
+        conn.execute(db.text(
             "UPDATE clientes SET estado='pendiente' WHERE estado IS NULL"))
         conn.execute(db.text(
             "UPDATE clientes SET estado='listo_retiro' "
@@ -1252,6 +1261,14 @@ with app.app_context():
             "UPDATE clientes SET pagado=FALSE WHERE pagado IS NULL"))
         conn.execute(db.text(
             "UPDATE clientes SET cancelled_at=NOW() WHERE estado='cancelado' AND cancelled_at IS NULL"))
+        conn.execute(db.text(
+            "UPDATE clientes SET created_at=NOW() WHERE created_at IS NULL"))
+        conn.execute(db.text(
+            "UPDATE clientes SET updated_at=NOW() WHERE updated_at IS NULL"))
+        conn.execute(db.text(
+            "ALTER TABLE clientes ALTER COLUMN created_at SET NOT NULL"))
+        conn.execute(db.text(
+            "ALTER TABLE clientes ALTER COLUMN updated_at SET NOT NULL"))
         # Permite multiples pedidos por correo: elimina cualquier UNIQUE legado en clientes.correo.
         conn.execute(db.text(
             "DO $$ "
@@ -1879,27 +1896,36 @@ def crear_clientes():
         )
         # Calcular total de copias sumando cantidades de todas las fotos del cliente
         total_copias = sum(f.cantidad or 1 for f in existe.fotos)
+        estado_normalizado = _normalizar_estado_pedido(existe.estado)
+        cliente_payload = {
+            "id": existe.id,
+            "nombre": existe.nombre,
+            "apellido": existe.apellido,
+            "correo": existe.correo,
+            "telefono": existe.telefono,
+            "fechaRegistro": existe.fecha_registro,
+            "tamano": existe.tamano,
+            "papel": existe.papel,
+            "estado": estado_normalizado,
+            "cancelledAt": existe.cancelled_at.isoformat() if existe.cancelled_at else None,
+            "pagado": bool(existe.pagado),
+            "numFotos": len(fotos_guardadas),
+            "fotos": fotos_guardadas,
+            "thumbnails": thumbnails_guardadas,
+            "precioTotal": calcular_precio_total(
+                existe.tamano_keys, total_copias, existe.tamano)
+        }
+        enrich_order_age_payload(
+            cliente_payload,
+            fecha_registro=existe.fecha_registro,
+            estado=estado_normalizado,
+            created_at=existe.created_at,
+            cancelled_at=existe.cancelled_at,
+        )
         respuesta = {
             "mensaje": "Fotos agregadas al pedido existente" if not fallos_upload else "Algunas imágenes no se pudieron agregar.",
             "operacion": "append_existing",
-            "cliente": {
-                "id": existe.id,
-                "nombre": existe.nombre,
-                "apellido": existe.apellido,
-                "correo": existe.correo,
-                "telefono": existe.telefono,
-                "fechaRegistro": existe.fecha_registro,
-                "tamano": existe.tamano,
-                "papel": existe.papel,
-                "estado": _normalizar_estado_pedido(existe.estado),
-                "cancelledAt": existe.cancelled_at.isoformat() if existe.cancelled_at else None,
-                "pagado": bool(existe.pagado),
-                "numFotos": len(fotos_guardadas),
-                "fotos": fotos_guardadas,
-                "thumbnails": thumbnails_guardadas,
-                "precioTotal": calcular_precio_total(
-                    existe.tamano_keys, total_copias, existe.tamano)
-            },
+            "cliente": cliente_payload,
             "pedidoActivo": {
                 "id": existe.id,
                 "modo": "append_existing",
@@ -2052,29 +2078,38 @@ def crear_clientes():
         num_fotos=len(fotos_guardadas),
     )
     total_copias = sum(cantidades_guardadas) if cantidades_guardadas else len(fotos_guardadas)
+    estado_normalizado = _normalizar_estado_pedido(nuevo_cliente.estado)
+    cliente_payload = {
+        "id": nuevo_cliente.id,
+        "nombre": nuevo_cliente.nombre,
+        "apellido": nuevo_cliente.apellido,
+        "correo": nuevo_cliente.correo,
+        "telefono": nuevo_cliente.telefono,
+        "fechaRegistro": nuevo_cliente.fecha_registro,
+        "tamano": nuevo_cliente.tamano,
+        "papel": nuevo_cliente.papel,
+        "estado": estado_normalizado,
+        "cancelledAt": nuevo_cliente.cancelled_at.isoformat() if nuevo_cliente.cancelled_at else None,
+        "pagado": bool(nuevo_cliente.pagado),
+        "numFotos": len(fotos_guardadas),
+        "fotos": fotos_guardadas,
+        "thumbnails": thumbnails_guardadas,
+        "precioTotal": calcular_precio_total(
+            nuevo_cliente.tamano_keys, total_copias,
+            nuevo_cliente.tamano)
+    }
+    enrich_order_age_payload(
+        cliente_payload,
+        fecha_registro=nuevo_cliente.fecha_registro,
+        estado=estado_normalizado,
+        created_at=nuevo_cliente.created_at,
+        cancelled_at=nuevo_cliente.cancelled_at,
+    )
 
     respuesta = {
         "mensaje": "Pedido guardado correctamente" if not fallos_upload else "Pedido guardado parcialmente. Algunas imágenes fallaron.",
         "operacion": "create_new",
-        "cliente": {
-            "id": nuevo_cliente.id,
-            "nombre": nuevo_cliente.nombre,
-            "apellido": nuevo_cliente.apellido,
-            "correo": nuevo_cliente.correo,
-            "telefono": nuevo_cliente.telefono,
-            "fechaRegistro": nuevo_cliente.fecha_registro,
-            "tamano": nuevo_cliente.tamano,
-            "papel": nuevo_cliente.papel,
-            "estado": _normalizar_estado_pedido(nuevo_cliente.estado),
-            "cancelledAt": nuevo_cliente.cancelled_at.isoformat() if nuevo_cliente.cancelled_at else None,
-            "pagado": bool(nuevo_cliente.pagado),
-            "numFotos": len(fotos_guardadas),
-            "fotos": fotos_guardadas,
-            "thumbnails": thumbnails_guardadas,
-            "precioTotal": calcular_precio_total(
-                nuevo_cliente.tamano_keys, total_copias,
-                nuevo_cliente.tamano)
-        },
+        "cliente": cliente_payload,
         "pedidoActivo": {
             "id": nuevo_cliente.id,
             "modo": "create_new",
@@ -2088,26 +2123,39 @@ def crear_clientes():
 @role_required('admin', 'operador', 'cajero')
 def obtener_clientes():
     clientes = Cliente.query.order_by(Cliente.id.desc()).all()
-    return jsonify([{
-        "id":             c.id,
-        "nombre":         c.nombre,
-        "apellido":       c.apellido,
-        "correo":         c.correo,
-        "telefono":       c.telefono,
-        "fechaRegistro":  c.fecha_registro,
-        "tamano":         c.tamano or "",
-        "papel":          c.papel or "",
-        "estado":         _normalizar_estado_pedido(c.estado),
-        "cancelledAt":    c.cancelled_at.isoformat() if c.cancelled_at else None,
-        "pagado":         bool(c.pagado),
-        "numFotos":       len(c.fotos),
-        "totalCopias":    sum(f.cantidad or 1 for f in c.fotos),
-        "fotos":          [f.filename for f in c.fotos],
-        "cantidades":     [f.cantidad or 1 for f in c.fotos],
-        "thumbnails":     [_thumbnail_url(f.public_id, f.filename) for f in c.fotos],
-        "precioTotal":    calcular_precio_total(
-            c.tamano_keys, sum(f.cantidad or 1 for f in c.fotos), c.tamano)
-    } for c in clientes]), 200
+    respuesta = []
+    for c in clientes:
+        estado_normalizado = _normalizar_estado_pedido(c.estado)
+        payload_cliente = {
+            "id": c.id,
+            "nombre": c.nombre,
+            "apellido": c.apellido,
+            "correo": c.correo,
+            "telefono": c.telefono,
+            "fechaRegistro": c.fecha_registro,
+            "tamano": c.tamano or "",
+            "papel": c.papel or "",
+            "estado": estado_normalizado,
+            "cancelledAt": c.cancelled_at.isoformat() if c.cancelled_at else None,
+            "pagado": bool(c.pagado),
+            "numFotos": len(c.fotos),
+            "totalCopias": sum(f.cantidad or 1 for f in c.fotos),
+            "fotos": [f.filename for f in c.fotos],
+            "cantidades": [f.cantidad or 1 for f in c.fotos],
+            "thumbnails": [_thumbnail_url(f.public_id, f.filename) for f in c.fotos],
+            "precioTotal": calcular_precio_total(
+                c.tamano_keys, sum(f.cantidad or 1 for f in c.fotos), c.tamano)
+        }
+        enrich_order_age_payload(
+            payload_cliente,
+            fecha_registro=c.fecha_registro,
+            estado=estado_normalizado,
+            created_at=c.created_at,
+            cancelled_at=c.cancelled_at,
+        )
+        respuesta.append(payload_cliente)
+
+    return jsonify(respuesta), 200
 
 
 @app.route('/api/realtime/pedidos/stream', methods=['GET'])
@@ -2512,24 +2560,32 @@ def api_seguimiento_cliente(cliente_id):
     detalle = _detalle_pedido(cliente.tamano_keys, cliente.tamano, total_copias)
     total = calcular_precio_total(cliente.tamano_keys, total_copias, cliente.tamano)
 
-    return jsonify({
-        "pedido": {
-            "id": cliente.id,
-            "nombre": cliente.nombre,
-            "apellido": cliente.apellido,
-            "correo": cliente.correo,
-            "telefono": cliente.telefono,
-            "fechaRegistro": cliente.fecha_registro,
-            "estado": _normalizar_estado_pedido(cliente.estado),
-            "cancelledAt": cliente.cancelled_at.isoformat() if cliente.cancelled_at else None,
-            "pagado": bool(cliente.pagado),
-            "papel": cliente.papel or "No especificado",
-            "numFotos": len(cliente.fotos),
-            "totalCopias": total_copias,
-            "detalle": detalle,
-            "total": round(total, 2),
-        }
-    }), 200
+    estado_normalizado = _normalizar_estado_pedido(cliente.estado)
+    pedido_payload = {
+        "id": cliente.id,
+        "nombre": cliente.nombre,
+        "apellido": cliente.apellido,
+        "correo": cliente.correo,
+        "telefono": cliente.telefono,
+        "fechaRegistro": cliente.fecha_registro,
+        "estado": estado_normalizado,
+        "cancelledAt": cliente.cancelled_at.isoformat() if cliente.cancelled_at else None,
+        "pagado": bool(cliente.pagado),
+        "papel": cliente.papel or "No especificado",
+        "numFotos": len(cliente.fotos),
+        "totalCopias": total_copias,
+        "detalle": detalle,
+        "total": round(total, 2),
+    }
+    enrich_order_age_payload(
+        pedido_payload,
+        fecha_registro=cliente.fecha_registro,
+        estado=estado_normalizado,
+        created_at=cliente.created_at,
+        cancelled_at=cliente.cancelled_at,
+    )
+
+    return jsonify({"pedido": pedido_payload}), 200
 
 
 @app.route('/api/mis-pedidos', methods=['POST'])
@@ -2563,15 +2619,16 @@ def api_mis_pedidos():
         total_copias_pedido = sum(f.cantidad or 1 for f in pedido.fotos)
         detalle = _detalle_pedido(pedido.tamano_keys, pedido.tamano, total_copias_pedido)
         total = calcular_precio_total(pedido.tamano_keys, total_copias_pedido, pedido.tamano)
-        
-        resultado.append({
+        estado_normalizado = _normalizar_estado_pedido(pedido.estado)
+
+        pedido_payload = {
             "id": pedido.id,
             "nombre": pedido.nombre,
             "apellido": pedido.apellido,
             "correo": pedido.correo,
             "telefono": pedido.telefono,
             "fechaRegistro": pedido.fecha_registro,
-            "estado": _normalizar_estado_pedido(pedido.estado),
+            "estado": estado_normalizado,
             "cancelledAt": pedido.cancelled_at.isoformat() if pedido.cancelled_at else None,
             "pagado": bool(pedido.pagado),
             "papel": pedido.papel or "No especificado",
@@ -2579,7 +2636,15 @@ def api_mis_pedidos():
             "totalCopias": total_copias_pedido,
             "detalle": detalle,
             "total": round(total, 2),
-        })
+        }
+        enrich_order_age_payload(
+            pedido_payload,
+            fecha_registro=pedido.fecha_registro,
+            estado=estado_normalizado,
+            created_at=pedido.created_at,
+            cancelled_at=pedido.cancelled_at,
+        )
+        resultado.append(pedido_payload)
     
     return jsonify({
         "pedidos": resultado,

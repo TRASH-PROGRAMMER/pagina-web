@@ -46,6 +46,11 @@ let confirmDialogResolver = null;
 let adminToastTimer = null;
 let storageSearchDebounceTimer = null;
 const liveMessageState = { status: "", alert: "" };
+let isTodayOrdersMode = false;
+let todayOrdersMidnightTimerId = null;
+const ORDER_AGE_NOTIFICATION_STORAGE_KEY = "admin_order_age_notifications_v1";
+let orderAgeSnapshotById = new Map();
+let orderAgeNotificationCache = loadOrderAgeNotificationCache();
 
 function compactAdminMessage(text, isError = false) {
     const raw = String(text || "").replace(/\s+/g, " ").trim();
@@ -77,6 +82,307 @@ function compactAdminMessage(text, isError = false) {
     if (!corte) return isError ? "Ocurrio un error. Reintenta." : "Operacion completada.";
     if (isError) return `${corte}. Reintenta.`;
     return corte;
+}
+
+function loadOrderAgeNotificationCache() {
+    try {
+        const raw = window.sessionStorage.getItem(ORDER_AGE_NOTIFICATION_STORAGE_KEY);
+        if (!raw) return new Set();
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return new Set();
+        return new Set(parsed.map(function(item) {
+            return String(item || "");
+        }).filter(Boolean));
+    } catch (_error) {
+        return new Set();
+    }
+}
+
+function persistOrderAgeNotificationCache() {
+    try {
+        window.sessionStorage.setItem(
+            ORDER_AGE_NOTIFICATION_STORAGE_KEY,
+            JSON.stringify(Array.from(orderAgeNotificationCache.values()))
+        );
+    } catch (_error) {
+        // Ignorar storage bloqueado.
+    }
+}
+
+function escapeHtml(value) {
+    return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function parseFechaRegistroAdmin(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+
+    const isoCandidate = /^\d{4}-\d{2}-\d{2}/.test(raw) || raw.includes("T")
+        ? new Date(raw)
+        : null;
+    if (isoCandidate && !Number.isNaN(isoCandidate.getTime())) {
+        return isoCandidate;
+    }
+
+    const isoDate = toISODate(raw);
+    if (isoDate) {
+        const fromIsoDate = new Date(`${isoDate}T00:00:00`);
+        if (!Number.isNaN(fromIsoDate.getTime())) return fromIsoDate;
+    }
+
+    const match = raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (match) {
+        const day = Number(match[1]);
+        const month = Number(match[2]);
+        const year = Number(match[3].length === 2 ? `20${match[3]}` : match[3]);
+        const d = new Date(year, month - 1, day);
+        if (!Number.isNaN(d.getTime())) return d;
+    }
+
+    return null;
+}
+
+function formatAgeDuration(ageDays) {
+    const days = Math.max(0, Number(ageDays) || 0);
+    if (days >= 365) {
+        const years = Math.floor(days / 365);
+        const restDays = days % 365;
+        const months = Math.floor(restDays / 30);
+        if (months > 0) {
+            return `${years} ano${years !== 1 ? "s" : ""} ${months} mes${months !== 1 ? "es" : ""}`;
+        }
+        return `${years} ano${years !== 1 ? "s" : ""}`;
+    }
+    if (days >= 30) {
+        const months = Math.floor(days / 30);
+        return `${months} mes${months !== 1 ? "es" : ""}`;
+    }
+    return `${days} dia${days !== 1 ? "s" : ""}`;
+}
+
+function orderAgeContextForState(estado, ageDays) {
+    const estadoNorm = normalizarEstadoPedido(estado);
+    if (estadoNorm === "cancelado") return "archivado";
+    if (estadoNorm === "entregado" && ageDays >= 365) return "archivado";
+    if (estadoNorm === "entregado") return "entregado";
+    return "activo";
+}
+
+function orderAgeMessage(ageDays, context) {
+    const passed1Year = ageDays >= 365;
+    const passed1Month = ageDays >= 30;
+
+    if (passed1Year) {
+        if (context === "activo") return "Tu pedido tiene mas de 1 ano. Sigue activo y requiere seguimiento.";
+        if (context === "entregado") return "Tu pedido tiene mas de 1 ano. Ya fue entregado.";
+        return "Tu pedido tiene mas de 1 ano. Se considera archivado en historial.";
+    }
+
+    if (passed1Month) {
+        if (context === "activo") return "Tu pedido tiene mas de 1 mes. Sigue en flujo activo.";
+        if (context === "entregado") return "Tu pedido tiene mas de 1 mes. Ya fue entregado.";
+        return "Tu pedido tiene mas de 1 mes. Figura como archivado en historial.";
+    }
+
+    return "Pedido reciente. Aun no alcanza hitos de antiguedad.";
+}
+
+function buildOrderAgeRecords(clientes) {
+    const nowMs = Date.now();
+    const records = [];
+    const nextSnapshot = new Map();
+
+    (Array.isArray(clientes) ? clientes : []).forEach(function(cliente) {
+        const id = Number(cliente && cliente.id);
+        if (!Number.isFinite(id) || id <= 0) return;
+
+        const edadBackend = (cliente && typeof cliente.antiguedad === "object" && cliente.antiguedad)
+            ? cliente.antiguedad
+            : null;
+        const backendAgeDays = Number(edadBackend && edadBackend.ageDays);
+
+        let ageDays = null;
+        let passed1Month = false;
+        let passed1Year = false;
+        let context = "activo";
+        let message = "";
+        let ageDuration = "";
+        let milestone = "";
+
+        if (Number.isFinite(backendAgeDays) && backendAgeDays >= 0) {
+            ageDays = Math.floor(backendAgeDays);
+            passed1Month = Boolean(edadBackend && edadBackend.passed1Month);
+            passed1Year = Boolean(edadBackend && edadBackend.passed1Year);
+            context = String(edadBackend && edadBackend.contextoEstado || "activo");
+            message = String(edadBackend && edadBackend.mensaje || "");
+            ageDuration = String(edadBackend && edadBackend.etiqueta || "");
+            milestone = (edadBackend && (edadBackend.hitoActual === "1m" || edadBackend.hitoActual === "1y"))
+                ? edadBackend.hitoActual
+                : (passed1Year ? "1y" : (passed1Month ? "1m" : ""));
+        } else {
+            const parsedDate = parseFechaRegistroAdmin(cliente && cliente.fechaRegistro);
+            if (!parsedDate) return;
+
+            ageDays = Math.max(0, Math.floor((nowMs - parsedDate.getTime()) / 86400000));
+            passed1Month = ageDays >= 30;
+            passed1Year = ageDays >= 365;
+            context = orderAgeContextForState(cliente && cliente.estado, ageDays);
+            message = orderAgeMessage(ageDays, context);
+            ageDuration = formatAgeDuration(ageDays);
+            milestone = passed1Year ? "1y" : (passed1Month ? "1m" : "");
+        }
+
+        const estadoNorm = normalizarEstadoPedido(cliente && cliente.estado);
+        const estadoLabel = etiquetaEstadoPedido(estadoNorm);
+
+        records.push({
+            id,
+            idPadded: String(id).padStart(4, "0"),
+            nombre: `${String(cliente && cliente.nombre || "").trim()} ${String(cliente && cliente.apellido || "").trim()}`.trim() || "Cliente",
+            estadoLabel,
+            fechaRegistro: String(cliente && cliente.fechaRegistro || "-"),
+            ageDays,
+            ageDuration: ageDuration || formatAgeDuration(ageDays),
+            passed1Month,
+            passed1Year,
+            milestone,
+            context,
+            message: message || orderAgeMessage(ageDays, context),
+        });
+
+        nextSnapshot.set(String(id), {
+            passed1Month,
+            passed1Year,
+            ageDays,
+        });
+    });
+
+    records.sort(function(a, b) {
+        return b.ageDays - a.ageDays;
+    });
+
+    return {
+        records,
+        nextSnapshot,
+    };
+}
+
+function notifyOrderAgeMilestones(events) {
+    const list = Array.isArray(events) ? events : [];
+    if (!list.length) return;
+
+    const nuevos = [];
+    list.forEach(function(ev) {
+        const cacheKey = `${ev.id}:${ev.milestone}`;
+        if (orderAgeNotificationCache.has(cacheKey)) return;
+        orderAgeNotificationCache.add(cacheKey);
+        nuevos.push(ev);
+    });
+
+    if (!nuevos.length) return;
+    persistOrderAgeNotificationCache();
+
+    const maxNotify = 2;
+    nuevos.slice(0, maxNotify).forEach(function(ev) {
+        const milestoneLabel = ev.milestone === "1y" ? "1 ano" : "1 mes";
+        announceAdminStatus(`Pedido #${String(ev.id).padStart(4, "0")} alcanzo ${milestoneLabel} de antiguedad.`);
+        notifyDesktopAdmin("milestone_reached", {
+            order_id: ev.id,
+            milestone: ev.milestone,
+            context: ev.context,
+        }, `milestone-${ev.id}-${ev.milestone}`);
+    });
+
+    if (nuevos.length > maxNotify) {
+        announceAdminStatus(`Se detectaron ${nuevos.length} hitos de antiguedad.`);
+    }
+}
+
+function renderOrderAgeMilestones(clientes, options = {}) {
+    const panel = document.getElementById("orderAgePanel");
+    if (!panel) return;
+
+    const countMonthEl = document.getElementById("orderAgeCountMonth");
+    const countYearEl = document.getElementById("orderAgeCountYear");
+    const countActiveEl = document.getElementById("orderAgeCountActiveMilestones");
+    const oldestEl = document.getElementById("orderAgeOldest");
+    const subtitleEl = document.getElementById("orderAgeSubtitle");
+    const listEl = document.getElementById("orderAgeList");
+
+    const detectTransitions = !!options.detectTransitions;
+    const previousSnapshot = orderAgeSnapshotById;
+
+    const result = buildOrderAgeRecords(clientes);
+    const records = result.records;
+    orderAgeSnapshotById = result.nextSnapshot;
+
+    const withMonth = records.filter(function(r) { return r.passed1Month; });
+    const withYear = records.filter(function(r) { return r.passed1Year; });
+    const activeWithMilestone = records.filter(function(r) {
+        return r.context === "activo" && !!r.milestone;
+    });
+    const oldest = records[0] || null;
+
+    if (countMonthEl) countMonthEl.textContent = String(withMonth.length);
+    if (countYearEl) countYearEl.textContent = String(withYear.length);
+    if (countActiveEl) countActiveEl.textContent = String(activeWithMilestone.length);
+    if (oldestEl) oldestEl.textContent = oldest ? oldest.ageDuration : "—";
+
+    if (subtitleEl) {
+        subtitleEl.textContent = withMonth.length
+            ? `Se detectaron ${withMonth.length} pedido(s) con 1 mes o mas y ${withYear.length} con 1 ano o mas.`
+            : "No hay pedidos que hayan alcanzado hitos de 1 mes o 1 ano.";
+    }
+
+    if (listEl) {
+        const toRender = records.filter(function(r) { return !!r.milestone; }).slice(0, 8);
+        if (!toRender.length) {
+            listEl.innerHTML = '<li class="order-age-empty">Aun no hay pedidos con hitos de antiguedad.</li>';
+        } else {
+            listEl.innerHTML = toRender.map(function(r) {
+                const milestoneLabel = r.milestone === "1y" ? "1 ano" : "1 mes";
+                const contextLabel = r.context === "activo"
+                    ? "Activo"
+                    : (r.context === "entregado" ? "Entregado" : "Archivado");
+                return `
+                    <li class="order-age-item">
+                        <div class="order-age-item__top">
+                            <div>
+                                <div class="order-age-item__title">Pedido #${escapeHtml(r.idPadded)} - ${escapeHtml(r.nombre)}</div>
+                                <div class="order-age-item__meta">Estado: ${escapeHtml(r.estadoLabel)}</div>
+                            </div>
+                            <div class="order-age-item__chips">
+                                <span class="order-age-chip order-age-chip--${escapeHtml(r.milestone)}">${escapeHtml(milestoneLabel)}</span>
+                                <span class="order-age-chip order-age-chip--${escapeHtml(r.context)}">${escapeHtml(contextLabel)}</span>
+                            </div>
+                        </div>
+                        <p class="order-age-item__message">${escapeHtml(r.message)}</p>
+                        <p class="order-age-item__foot">Fecha: ${escapeHtml(r.fechaRegistro)} · Antiguedad: ${escapeHtml(r.ageDuration)}</p>
+                    </li>
+                `;
+            }).join("");
+        }
+    }
+
+    if (detectTransitions) {
+        const events = [];
+        records.forEach(function(r) {
+            const prev = previousSnapshot.get(String(r.id));
+            if (!prev) return;
+            if (!prev.passed1Month && r.passed1Month) {
+                events.push({ id: r.id, milestone: "1m", context: r.context });
+            }
+            if (!prev.passed1Year && r.passed1Year) {
+                events.push({ id: r.id, milestone: "1y", context: r.context });
+            }
+        });
+        notifyOrderAgeMilestones(events);
+    }
 }
 
 function setLiveText(elementId, text, channel) {
@@ -399,6 +705,7 @@ function setActiveNav(navId) {
 
 function setAdminMainView(view) {
     const dashboardBlocks = document.querySelectorAll(".dashboard-only");
+    const ordersSection = document.getElementById("ordersTableCard");
     const clientesSection = document.getElementById("clientesCardsContainer");
     const opcionesSection = document.getElementById("panelOpciones");
     const title = document.querySelector(".topbar-title");
@@ -415,6 +722,13 @@ function setAdminMainView(view) {
         if (opcionesSection) opcionesSection.hidden = false;
         if (title) title.innerHTML = "<span>Configuración</span> / Opciones";
         setActiveNav("navOpciones");
+    } else if (view === "pedidos") {
+        dashboardBlocks.forEach(function(el) { el.classList.add("dashboard-hidden"); });
+        if (ordersSection) ordersSection.classList.remove("dashboard-hidden");
+        if (clientesSection) clientesSection.hidden = true;
+        if (opcionesSection) opcionesSection.hidden = true;
+        if (title) title.innerHTML = "<span>Pedidos</span> / Tabla";
+        setActiveNav("navPedidos");
     } else {
         dashboardBlocks.forEach(function(el) { el.classList.remove("dashboard-hidden"); });
         if (clientesSection) clientesSection.hidden = true;
@@ -1248,6 +1562,117 @@ function toISODate(value) {
     return `${year}-${month}-${day}`;
 }
 
+function localTodayISO() {
+    const now = new Date();
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function syncTodayOrdersUIState() {
+    const cardHoy = document.getElementById("statCardPedidosHoy");
+    const btnVolver = document.getElementById("btnVolverVistaGeneral");
+    const indicator = document.getElementById("todayOrdersIndicator");
+    const tableCard = document.getElementById("ordersTableCard");
+    const statCard = document.getElementById("statCardPedidosHoy");
+    const title = document.querySelector(".topbar-title");
+    const navPedidos = document.getElementById("navPedidos");
+
+    if (cardHoy) {
+        cardHoy.setAttribute("aria-pressed", isTodayOrdersMode ? "true" : "false");
+    }
+    if (btnVolver) {
+        btnVolver.hidden = !isTodayOrdersMode;
+    }
+    if (indicator) {
+        indicator.hidden = !isTodayOrdersMode;
+    }
+    if (tableCard) {
+        tableCard.classList.toggle("today-focus-active", isTodayOrdersMode);
+    }
+    if (statCard) {
+        statCard.classList.toggle("today-card-active", isTodayOrdersMode);
+    }
+    if (title && navPedidos && navPedidos.classList.contains("active")) {
+        title.innerHTML = isTodayOrdersMode
+            ? "<span>Pedidos</span> / Hoy"
+            : "<span>Pedidos</span> / Tabla";
+    }
+}
+
+function clearTodayOrdersMidnightTimer() {
+    if (todayOrdersMidnightTimerId) {
+        window.clearTimeout(todayOrdersMidnightTimerId);
+        todayOrdersMidnightTimerId = null;
+    }
+}
+
+function scheduleTodayOrdersMidnightRefresh() {
+    clearTodayOrdersMidnightTimer();
+    if (!isTodayOrdersMode) return;
+
+    const now = new Date();
+    const next = new Date(now.getTime());
+    next.setHours(24, 0, 0, 200);
+    const waitMs = Math.max(1000, next.getTime() - now.getTime());
+
+    todayOrdersMidnightTimerId = window.setTimeout(function() {
+        if (!isTodayOrdersMode) return;
+        const fechaInput = document.getElementById("filterFecha");
+        if (fechaInput) fechaInput.value = localTodayISO();
+        filterTable(true);
+        announceAdminStatus("Filtro actualizado al nuevo dia para mostrar pedidos de hoy.");
+        scheduleTodayOrdersMidnightRefresh();
+    }, waitMs);
+}
+
+function focusOrdersTableCard() {
+    const tableCard = document.getElementById("ordersTableCard");
+    if (!tableCard) return;
+    tableCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.setTimeout(function() {
+        if (typeof tableCard.focus === "function") {
+            tableCard.focus({ preventScroll: true });
+        }
+    }, 140);
+}
+
+function activarPedidosDeHoy(options = {}) {
+    const fechaInput = document.getElementById("filterFecha");
+    isTodayOrdersMode = true;
+    setAdminMainView("pedidos");
+    if (fechaInput) fechaInput.value = localTodayISO();
+
+    syncTodayOrdersUIState();
+    filterTable(true);
+    scheduleTodayOrdersMidnightRefresh();
+
+    if (options.scrollToTable !== false) {
+        focusOrdersTableCard();
+    }
+    if (!options.silent) {
+        announceAdminStatus("Mostrando pedidos de hoy.");
+    }
+}
+
+function desactivarPedidosDeHoy(options = {}) {
+    const fechaInput = document.getElementById("filterFecha");
+    isTodayOrdersMode = false;
+    if (fechaInput) fechaInput.value = "";
+
+    syncTodayOrdersUIState();
+    filterTable(true);
+    clearTodayOrdersMidnightTimer();
+
+    if (options.scrollToTable) {
+        focusOrdersTableCard();
+    }
+    if (!options.silent) {
+        announceAdminStatus("Vista general de pedidos restaurada.");
+    }
+}
+
 // â”€â”€â”€ Filtrar tabla por bÃºsqueda + rango alfabÃ©tico + fecha/estado/precio â”€â”€â”€â”€
 function renderOrdersTablePagination(totalPages, totalResults) {
     const pagination = document.getElementById("ordersTablePagination");
@@ -1305,7 +1730,10 @@ function renderOrdersTablePagination(totalPages, totalResults) {
 
 function filterTable(resetPage = true) {
     const searchValue = document.getElementById("searchInput").value.toLowerCase();
-    const fechaFiltro = document.getElementById("filterFecha")?.value || "";
+    const fechaInput = document.getElementById("filterFecha");
+    const fechaFiltro = isTodayOrdersMode
+        ? localTodayISO()
+        : (fechaInput?.value || "");
     const estadoFiltro = (document.getElementById("filterEstado")?.value || "").toLowerCase();
     const imagenesFiltro = (document.getElementById("filterImagenes")?.value || "").toLowerCase();
     const precioMinRaw = document.getElementById("filterPrecioMin")?.value;
@@ -1316,6 +1744,10 @@ function filterTable(resetPage = true) {
     const tbody = document.getElementById("tableBody");
     const emptyRow = document.getElementById("ordersTableEmptyRow");
     const filtrados = [];
+
+    if (isTodayOrdersMode && fechaInput && fechaInput.value !== fechaFiltro) {
+        fechaInput.value = fechaFiltro;
+    }
 
     if (emptyRow) emptyRow.remove();
 
@@ -1656,6 +2088,10 @@ function aplicarClientesCacheEnUI(resetPage = false) {
     if (!document.getElementById("clientesCardsContainer")?.hidden) {
         renderClientesCards(clientesCache);
     }
+
+    renderOrderAgeMilestones(clientesCache, {
+        detectTransitions: !resetPage,
+    });
 }
 
 function setAdminRealtimeBadge(text, online = false) {
@@ -1740,6 +2176,13 @@ function notifyDesktopAdmin(eventName, payload, eventId) {
     } else if (eventName === "payment_confirmed") {
         title = "Pago confirmado";
         body = safeId ? `El pedido #${String(safeId).padStart(4, "0")} fue marcado como pagado.` : "Se confirmo un pago.";
+    } else if (eventName === "milestone_reached") {
+        const milestone = String(payload && payload.milestone || "").toLowerCase();
+        const milestoneLabel = milestone === "1y" ? "1 ano" : "1 mes";
+        title = "Hito de antiguedad";
+        body = safeId
+            ? `El pedido #${String(safeId).padStart(4, "0")} supero ${milestoneLabel}.`
+            : `Se alcanzo un hito de ${milestoneLabel}.`;
     }
 
     const notice = new Notification(title, {
@@ -1930,6 +2373,7 @@ function iniciarSincronizacionClientes() {
 
     window.addEventListener("beforeunload", function() {
         closeAdminRealtimeSource();
+        clearTodayOrdersMidnightTimer();
     });
 }
 
@@ -2376,10 +2820,55 @@ document.addEventListener("DOMContentLoaded", async function() {
     const navPedidos = document.getElementById("navPedidos");
     const navClientes = document.getElementById("navClientes");
     const navOpciones = document.getElementById("navOpciones");
+    const statCardPedidosHoy = document.getElementById("statCardPedidosHoy");
+    const btnVolverVistaGeneral = document.getElementById("btnVolverVistaGeneral");
+    const fechaFiltroInput = document.getElementById("filterFecha");
+
+    syncTodayOrdersUIState();
+
+    if (statCardPedidosHoy) {
+        statCardPedidosHoy.addEventListener("click", function() {
+            if (isTodayOrdersMode) {
+                desactivarPedidosDeHoy({ scrollToTable: true });
+                return;
+            }
+            activarPedidosDeHoy({ scrollToTable: true });
+        });
+
+        statCardPedidosHoy.addEventListener("keydown", function(e) {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            if (isTodayOrdersMode) {
+                desactivarPedidosDeHoy({ scrollToTable: true });
+                return;
+            }
+            activarPedidosDeHoy({ scrollToTable: true });
+        });
+    }
+
+    if (btnVolverVistaGeneral) {
+        btnVolverVistaGeneral.addEventListener("click", function() {
+            desactivarPedidosDeHoy();
+        });
+    }
+
+    if (fechaFiltroInput) {
+        fechaFiltroInput.addEventListener("change", function() {
+            if (!isTodayOrdersMode) return;
+            if ((fechaFiltroInput.value || "") !== localTodayISO()) {
+                isTodayOrdersMode = false;
+                syncTodayOrdersUIState();
+                clearTodayOrdersMidnightTimer();
+            }
+        });
+    }
 
     if (navDashboard) {
         navDashboard.addEventListener("click", function(e) {
             e.preventDefault();
+            if (isTodayOrdersMode) {
+                desactivarPedidosDeHoy({ silent: true });
+            }
             setAdminMainView("dashboard");
         });
     }
@@ -2387,14 +2876,20 @@ document.addEventListener("DOMContentLoaded", async function() {
     if (navPedidos) {
         navPedidos.addEventListener("click", function(e) {
             e.preventDefault();
-            setAdminMainView("dashboard");
-            setActiveNav("navPedidos");
+            if (isTodayOrdersMode) {
+                desactivarPedidosDeHoy({ silent: true });
+            }
+            setAdminMainView("pedidos");
+            focusOrdersTableCard();
         });
     }
 
     if (navClientes) {
         navClientes.addEventListener("click", async function(e) {
             e.preventDefault();
+            if (isTodayOrdersMode) {
+                desactivarPedidosDeHoy({ silent: true });
+            }
             setAdminMainView("clientes");
             if (clientesCache.length === 0) {
                 await cargarClientesCards();
@@ -2407,6 +2902,9 @@ document.addEventListener("DOMContentLoaded", async function() {
     if (navOpciones) {
         navOpciones.addEventListener("click", async function(e) {
             e.preventDefault();
+            if (isTodayOrdersMode) {
+                desactivarPedidosDeHoy({ silent: true });
+            }
             setAdminMainView("opciones");
             await cargarStorageSettingsAdmin();
             storageImagesCurrentPage = 1;

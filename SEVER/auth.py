@@ -6,7 +6,10 @@ from datetime import datetime, timedelta, timezone
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
-from db import AuthSession, User, db
+try:
+    from db import AuthSession, User, db
+except ImportError:
+    from .db import AuthSession, User, db
 
 
 auth_bp = Blueprint("auth", __name__)

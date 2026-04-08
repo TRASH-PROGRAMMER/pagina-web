@@ -19,6 +19,10 @@ class Cliente(db.Model):
     estado         = db.Column(db.String(20),  nullable=False, default='pendiente')
     pagado         = db.Column(db.Boolean, nullable=False, default=False)
     cancelled_at   = db.Column(db.DateTime(timezone=True), nullable=True)
+    created_at     = db.Column(db.DateTime(timezone=True), nullable=False,
+                               server_default=func.now())
+    updated_at     = db.Column(db.DateTime(timezone=True), nullable=False,
+                               server_default=func.now(), onupdate=func.now())
     fotos          = db.relationship('Foto', backref='cliente',
                                      cascade='all, delete-orphan', lazy=True)
 
