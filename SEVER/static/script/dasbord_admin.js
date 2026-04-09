@@ -47,10 +47,67 @@ let adminToastTimer = null;
 let storageSearchDebounceTimer = null;
 const liveMessageState = { status: "", alert: "" };
 let isTodayOrdersMode = false;
+let activeOrdersFilterMode = "all";
+let hasCustomOrdersFilters = false;
 let todayOrdersMidnightTimerId = null;
 const ORDER_AGE_NOTIFICATION_STORAGE_KEY = "admin_order_age_notifications_v1";
 let orderAgeSnapshotById = new Map();
 let orderAgeNotificationCache = loadOrderAgeNotificationCache();
+
+function setOrdersFilterMode(mode) {
+    const normalized = String(mode || "").toLowerCase() === "today" ? "today" : "all";
+    activeOrdersFilterMode = normalized;
+    isTodayOrdersMode = normalized === "today";
+}
+
+function getOrdersFilterContextText() {
+    if (activeOrdersFilterMode === "today") {
+        return "Viendo: Pedidos de hoy";
+    }
+    if (hasCustomOrdersFilters) {
+        return "Viendo: Pedidos filtrados";
+    }
+    return "Viendo: Todos los pedidos";
+}
+
+function getOrdersFilterContextType() {
+    if (activeOrdersFilterMode === "today") return "today";
+    if (hasCustomOrdersFilters) return "filtered";
+    return "all";
+}
+
+function updateOrdersFilterContextState(context) {
+    const normalized = String(context || "").toLowerCase();
+    hasCustomOrdersFilters = normalized === "filtered";
+    syncTodayOrdersUIState();
+}
+
+function resetOrdersFilterContextState() {
+    updateOrdersFilterContextState("all");
+}
+
+function updateOrdersFilterContextByActiveFilters(filterSnapshot) {
+    if (activeOrdersFilterMode === "today") {
+        updateOrdersFilterContextState("today");
+        return;
+    }
+
+    const snapshot = filterSnapshot || {};
+    const hasSearch = !!String(snapshot.searchValue || "").trim();
+    const hasFecha = !!String(snapshot.fechaFiltro || "").trim();
+    const hasEstado = !!String(snapshot.estadoFiltro || "").trim();
+    const hasImagenes = !!String(snapshot.imagenesFiltro || "").trim();
+    const hasPrecioMin = snapshot.precioMin != null;
+    const hasPrecioMax = snapshot.precioMax != null;
+    const hasAlpha = String(currentAlphaRange || "todos") !== "todos";
+
+    if (hasSearch || hasFecha || hasEstado || hasImagenes || hasPrecioMin || hasPrecioMax || hasAlpha) {
+        updateOrdersFilterContextState("filtered");
+        return;
+    }
+
+    resetOrdersFilterContextState();
+}
 
 function compactAdminMessage(text, isError = false) {
     const raw = String(text || "").replace(/\s+/g, " ").trim();
@@ -1586,7 +1643,12 @@ function syncTodayOrdersUIState() {
         btnVolver.hidden = !isTodayOrdersMode;
     }
     if (indicator) {
-        indicator.hidden = !isTodayOrdersMode;
+        indicator.hidden = false;
+        indicator.textContent = getOrdersFilterContextText();
+        const contextType = getOrdersFilterContextType();
+        indicator.classList.toggle("is-today", contextType === "today");
+        indicator.classList.toggle("is-filtered", contextType === "filtered");
+        indicator.classList.toggle("is-all", contextType === "all");
     }
     if (tableCard) {
         tableCard.classList.toggle("today-focus-active", isTodayOrdersMode);
@@ -1640,7 +1702,8 @@ function focusOrdersTableCard() {
 
 function activarPedidosDeHoy(options = {}) {
     const fechaInput = document.getElementById("filterFecha");
-    isTodayOrdersMode = true;
+    setOrdersFilterMode("today");
+    resetOrdersFilterContextState();
     setAdminMainView("pedidos");
     if (fechaInput) fechaInput.value = localTodayISO();
 
@@ -1658,7 +1721,8 @@ function activarPedidosDeHoy(options = {}) {
 
 function desactivarPedidosDeHoy(options = {}) {
     const fechaInput = document.getElementById("filterFecha");
-    isTodayOrdersMode = false;
+    setOrdersFilterMode("all");
+    resetOrdersFilterContextState();
     if (fechaInput) fechaInput.value = "";
 
     syncTodayOrdersUIState();
@@ -1731,7 +1795,7 @@ function renderOrdersTablePagination(totalPages, totalResults) {
 function filterTable(resetPage = true) {
     const searchValue = document.getElementById("searchInput").value.toLowerCase();
     const fechaInput = document.getElementById("filterFecha");
-    const fechaFiltro = isTodayOrdersMode
+    const fechaFiltro = activeOrdersFilterMode === "today"
         ? localTodayISO()
         : (fechaInput?.value || "");
     const estadoFiltro = (document.getElementById("filterEstado")?.value || "").toLowerCase();
@@ -1774,6 +1838,15 @@ function filterTable(resetPage = true) {
 
         const matches = matchesSearch && matchesAlpha && matchesFecha && matchesEstado && matchesPrecioMin && matchesPrecioMax && matchesImagenes;
         if (matches) filtrados.push(row);
+    });
+
+    updateOrdersFilterContextByActiveFilters({
+        searchValue,
+        fechaFiltro,
+        estadoFiltro,
+        imagenesFiltro,
+        precioMin,
+        precioMax,
     });
 
     const totalPages = Math.max(1, Math.ceil(filtrados.length / TABLE_PAGE_SIZE));
@@ -2856,7 +2929,7 @@ document.addEventListener("DOMContentLoaded", async function() {
         fechaFiltroInput.addEventListener("change", function() {
             if (!isTodayOrdersMode) return;
             if ((fechaFiltroInput.value || "") !== localTodayISO()) {
-                isTodayOrdersMode = false;
+                setOrdersFilterMode("all");
                 syncTodayOrdersUIState();
                 clearTodayOrdersMidnightTimer();
             }

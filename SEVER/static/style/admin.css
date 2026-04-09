@@ -577,13 +577,32 @@ body {
     display: inline-flex;
     align-items: center;
     border-radius: 999px;
-    border: 1px solid rgba(244, 247, 54, 0.55);
-    background: rgba(244, 247, 54, 0.14);
-    color: #f4f736;
+    border: 1px solid rgba(112, 125, 168, 0.45);
+    background: rgba(112, 125, 168, 0.12);
+    color: #c8d3f0;
     padding: 4px 10px;
     font-size: 11px;
     font-family: 'Space Mono', monospace;
     letter-spacing: 0.03em;
+    transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.today-focus-indicator.is-today {
+    border-color: rgba(244, 247, 54, 0.55);
+    background: rgba(244, 247, 54, 0.14);
+    color: #f4f736;
+}
+
+.today-focus-indicator.is-filtered {
+    border-color: rgba(96, 171, 255, 0.5);
+    background: rgba(96, 171, 255, 0.13);
+    color: #9cd0ff;
+}
+
+.today-focus-indicator.is-all {
+    border-color: rgba(112, 125, 168, 0.45);
+    background: rgba(112, 125, 168, 0.12);
+    color: #c8d3f0;
 }
 
 .btn-today-reset {
