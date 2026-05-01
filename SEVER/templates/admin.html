@@ -121,41 +121,6 @@
       </div>
     </div>
 
-    <section class="order-age-panel dashboard-only" id="orderAgePanel" role="region" aria-labelledby="orderAgeTitle">
-      <div class="section-header order-age-panel__header">
-        <div class="section-title" id="orderAgeTitle">Tiempo desde tu pedido</div>
-        <span class="order-age-panel__hint">Hitos: 1 mes y 1 ano</span>
-      </div>
-      <p class="order-age-panel__subtitle" id="orderAgeSubtitle">
-        Historial de antiguedad del pedido para mejorar seguimiento y gestion.
-      </p>
-
-      <div class="order-age-summary" id="orderAgeSummary" role="status" aria-live="polite" aria-atomic="true">
-        <article class="order-age-kpi">
-          <span class="order-age-kpi__label">Pedidos > 1 mes</span>
-          <strong class="order-age-kpi__value" id="orderAgeCountMonth">0</strong>
-        </article>
-        <article class="order-age-kpi">
-          <span class="order-age-kpi__label">Pedidos > 1 ano</span>
-          <strong class="order-age-kpi__value" id="orderAgeCountYear">0</strong>
-        </article>
-        <article class="order-age-kpi">
-          <span class="order-age-kpi__label">Activos con hito</span>
-          <strong class="order-age-kpi__value" id="orderAgeCountActiveMilestones">0</strong>
-        </article>
-        <article class="order-age-kpi">
-          <span class="order-age-kpi__label">Max. antiguedad</span>
-          <strong class="order-age-kpi__value" id="orderAgeOldest">—</strong>
-        </article>
-      </div>
-
-      <div class="order-age-list-wrap">
-        <ul class="order-age-list" id="orderAgeList" aria-live="polite" aria-label="Historial de antiguedad del pedido">
-          <li class="order-age-empty">Aun no hay pedidos con hitos de antiguedad.</li>
-        </ul>
-      </div>
-    </section>
-
     <!-- ORDERS TABLE -->
     <div class="table-card dashboard-only" id="ordersTableCard" tabindex="-1">
       <div class="table-toolbar">
@@ -397,6 +362,49 @@
                 <tbody id="marcosBody"></tbody>
               </table>
             </div>
+          </div>
+        </section>
+
+        <section class="opciones-accordion-item">
+          <button type="button" class="opciones-accordion-trigger" aria-expanded="false" aria-controls="opcionesPanelAntiguedad">
+            <span>Vista de antigüedad de pedidos</span>
+            <span class="opciones-accordion-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div class="opciones-accordion-panel" id="opcionesPanelAntiguedad" hidden>
+            <section class="order-age-panel" id="orderAgePanel" role="region" aria-labelledby="orderAgeTitle">
+              <div class="section-header order-age-panel__header">
+                <div class="section-title" id="orderAgeTitle">Tiempo desde tu pedido</div>
+                <span class="order-age-panel__hint">Hitos: 1 mes y 1 ano</span>
+              </div>
+              <p class="order-age-panel__subtitle" id="orderAgeSubtitle">
+                Historial de antiguedad del pedido para mejorar seguimiento y gestion.
+              </p>
+
+              <div class="order-age-summary" id="orderAgeSummary" role="status" aria-live="polite" aria-atomic="true">
+                <article class="order-age-kpi">
+                  <span class="order-age-kpi__label">Pedidos > 1 mes</span>
+                  <strong class="order-age-kpi__value" id="orderAgeCountMonth">0</strong>
+                </article>
+                <article class="order-age-kpi">
+                  <span class="order-age-kpi__label">Pedidos > 1 ano</span>
+                  <strong class="order-age-kpi__value" id="orderAgeCountYear">0</strong>
+                </article>
+                <article class="order-age-kpi">
+                  <span class="order-age-kpi__label">Activos con hito</span>
+                  <strong class="order-age-kpi__value" id="orderAgeCountActiveMilestones">0</strong>
+                </article>
+                <article class="order-age-kpi">
+                  <span class="order-age-kpi__label">Max. antiguedad</span>
+                  <strong class="order-age-kpi__value" id="orderAgeOldest">—</strong>
+                </article>
+              </div>
+
+              <div class="order-age-list-wrap">
+                <ul class="order-age-list" id="orderAgeList" aria-live="polite" aria-label="Historial de antiguedad del pedido">
+                  <li class="order-age-empty">Aun no hay pedidos con hitos de antiguedad.</li>
+                </ul>
+              </div>
+            </section>
           </div>
         </section>
 

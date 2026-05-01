@@ -573,6 +573,84 @@ body {
     justify-content: flex-end;
 }
 
+.admin-kpi-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.admin-kpi-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid #2b3550;
+    background: rgba(76, 119, 200, 0.1);
+    color: #d7e6ff;
+    padding: 4px 9px;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 0.02em;
+}
+
+.admin-kpi-chip.kpi-pass {
+    border-color: rgba(34, 197, 94, 0.5);
+    background: rgba(34, 197, 94, 0.16);
+    color: #bbf7d0;
+}
+
+.admin-kpi-chip.kpi-fail {
+    border-color: rgba(239, 68, 68, 0.5);
+    background: rgba(239, 68, 68, 0.15);
+    color: #fecaca;
+}
+
+.admin-kpi-chip.kpi-neutral {
+    border-color: #2b3550;
+    background: rgba(76, 119, 200, 0.1);
+    color: #d7e6ff;
+}
+
+.admin-kpi-rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 6px;
+    border-radius: 8px;
+    border: 1px solid #2a2a3a;
+    background: #111723;
+}
+
+.admin-kpi-rating-label {
+    font-size: 11px;
+    color: #9fb2da;
+    font-family: 'DM Sans', sans-serif;
+}
+
+.admin-kpi-rate-btn {
+    min-width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: 1px solid #2f3b5e;
+    background: #1b2437;
+    color: #d7e6ff;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.admin-kpi-rate-btn:hover,
+.admin-kpi-rate-btn:focus-visible {
+    background: #273556;
+    border-color: #4c77c8;
+    outline: none;
+}
+
+.admin-kpi-rate-btn:active {
+    transform: translateY(1px);
+}
+
 .today-focus-indicator {
     display: inline-flex;
     align-items: center;
@@ -603,6 +681,12 @@ body {
     border-color: rgba(112, 125, 168, 0.45);
     background: rgba(112, 125, 168, 0.12);
     color: #c8d3f0;
+}
+
+@media (max-width: 980px) {
+    .admin-kpi-rating-label {
+        display: none;
+    }
 }
 
 .btn-today-reset {

@@ -51,8 +51,243 @@ let activeOrdersFilterMode = "all";
 let hasCustomOrdersFilters = false;
 let todayOrdersMidnightTimerId = null;
 const ORDER_AGE_NOTIFICATION_STORAGE_KEY = "admin_order_age_notifications_v1";
+const ADMIN_KPI_STORAGE_KEY = "admin_kpi_metrics_v1";
+const ADMIN_KPI_TARGET_TASK_MS = 2 * 60 * 1000;
+const ADMIN_KPI_TARGET_ERROR_RATE = 5;
+const ADMIN_KPI_TARGET_SATISFACTION = 4;
 let orderAgeSnapshotById = new Map();
 let orderAgeNotificationCache = loadOrderAgeNotificationCache();
+let adminKpiState = loadAdminKpiState();
+
+function createDefaultAdminKpiState() {
+    return {
+        tasksCompleted: 0,
+        tasksUnder2m: 0,
+        taskDurationTotalMs: 0,
+        operationsTotal: 0,
+        operationsError: 0,
+        ratingsCount: 0,
+        ratingsTotal: 0,
+        updatedAt: null,
+    };
+}
+
+function sanitizeAdminKpiState(rawState) {
+    const defaults = createDefaultAdminKpiState();
+    const merged = Object.assign({}, defaults, rawState || {});
+
+    function toSafeNumber(value) {
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed) || parsed < 0) return 0;
+        return parsed;
+    }
+
+    merged.tasksCompleted = Math.trunc(toSafeNumber(merged.tasksCompleted));
+    merged.tasksUnder2m = Math.min(merged.tasksCompleted, Math.trunc(toSafeNumber(merged.tasksUnder2m)));
+    merged.taskDurationTotalMs = toSafeNumber(merged.taskDurationTotalMs);
+    merged.operationsTotal = Math.trunc(toSafeNumber(merged.operationsTotal));
+    merged.operationsError = Math.min(merged.operationsTotal, Math.trunc(toSafeNumber(merged.operationsError)));
+    merged.ratingsCount = Math.trunc(toSafeNumber(merged.ratingsCount));
+    merged.ratingsTotal = toSafeNumber(merged.ratingsTotal);
+    merged.updatedAt = merged.updatedAt ? String(merged.updatedAt) : null;
+
+    return merged;
+}
+
+function loadAdminKpiState() {
+    try {
+        const raw = window.localStorage.getItem(ADMIN_KPI_STORAGE_KEY);
+        if (!raw) return createDefaultAdminKpiState();
+        const parsed = JSON.parse(raw);
+        return sanitizeAdminKpiState(parsed);
+    } catch (_error) {
+        return createDefaultAdminKpiState();
+    }
+}
+
+function persistAdminKpiState() {
+    try {
+        window.localStorage.setItem(ADMIN_KPI_STORAGE_KEY, JSON.stringify(adminKpiState));
+    } catch (_error) {
+        // Ignorar storage bloqueado.
+    }
+}
+
+function formatAdminKpiDuration(ms) {
+    const value = Number(ms);
+    if (!Number.isFinite(value) || value <= 0) return "—";
+    if (value < 1000) return `${Math.round(value)}ms`;
+    if (value < 60000) return `${(value / 1000).toFixed(1)}s`;
+    return `${(value / 60000).toFixed(2)}min`;
+}
+
+function adminKpiPercent(part, total) {
+    const p = Number(part);
+    const t = Number(total);
+    if (!Number.isFinite(p) || !Number.isFinite(t) || t <= 0) return null;
+    return (p / t) * 100;
+}
+
+function setAdminKpiChipValue(elementId, text, tone) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove("kpi-pass", "kpi-fail", "kpi-neutral");
+    el.classList.add(tone || "kpi-neutral");
+}
+
+function renderAdminKpiSummary() {
+    const tasksCompleted = Number(adminKpiState.tasksCompleted || 0);
+    const taskDurationTotalMs = Number(adminKpiState.taskDurationTotalMs || 0);
+    const avgTaskMs = tasksCompleted > 0 ? (taskDurationTotalMs / tasksCompleted) : null;
+    const tasksUnder2m = Number(adminKpiState.tasksUnder2m || 0);
+    const under2mRate = adminKpiPercent(tasksUnder2m, tasksCompleted);
+
+    if (avgTaskMs == null) {
+        setAdminKpiChipValue("kpiTaskTimeValue", "Tiempo <2m: —", "kpi-neutral");
+    } else {
+        const passTaskTime = avgTaskMs < ADMIN_KPI_TARGET_TASK_MS;
+        const rateText = under2mRate == null ? "—" : `${under2mRate.toFixed(0)}%`;
+        setAdminKpiChipValue(
+            "kpiTaskTimeValue",
+            `Tiempo <2m: ${formatAdminKpiDuration(avgTaskMs)} (${rateText})`,
+            passTaskTime ? "kpi-pass" : "kpi-fail"
+        );
+    }
+
+    const operationsTotal = Number(adminKpiState.operationsTotal || 0);
+    const operationsError = Number(adminKpiState.operationsError || 0);
+    const errorRate = adminKpiPercent(operationsError, operationsTotal);
+    if (errorRate == null) {
+        setAdminKpiChipValue("kpiErrorRateValue", "Tasa error <5%: —", "kpi-neutral");
+    } else {
+        const passErrorRate = errorRate < ADMIN_KPI_TARGET_ERROR_RATE;
+        setAdminKpiChipValue(
+            "kpiErrorRateValue",
+            `Tasa error <5%: ${errorRate.toFixed(1)}%`,
+            passErrorRate ? "kpi-pass" : "kpi-fail"
+        );
+    }
+
+    const ratingsCount = Number(adminKpiState.ratingsCount || 0);
+    const ratingsTotal = Number(adminKpiState.ratingsTotal || 0);
+    const satAvg = ratingsCount > 0 ? (ratingsTotal / ratingsCount) : null;
+    if (satAvg == null) {
+        setAdminKpiChipValue("kpiSatisfactionValue", "Satisfacción >=4/5: —", "kpi-neutral");
+    } else {
+        const passSatisfaction = satAvg >= ADMIN_KPI_TARGET_SATISFACTION;
+        setAdminKpiChipValue(
+            "kpiSatisfactionValue",
+            `Satisfacción >=4/5: ${satAvg.toFixed(1)}/5`,
+            passSatisfaction ? "kpi-pass" : "kpi-fail"
+        );
+    }
+}
+
+function recordAdminKpiOperation(durationMs, ok) {
+    adminKpiState.operationsTotal = Number(adminKpiState.operationsTotal || 0) + 1;
+    if (!ok) {
+        adminKpiState.operationsError = Number(adminKpiState.operationsError || 0) + 1;
+    } else {
+        const duration = Math.max(0, Number(durationMs) || 0);
+        adminKpiState.tasksCompleted = Number(adminKpiState.tasksCompleted || 0) + 1;
+        adminKpiState.taskDurationTotalMs = Number(adminKpiState.taskDurationTotalMs || 0) + duration;
+        if (duration < ADMIN_KPI_TARGET_TASK_MS) {
+            adminKpiState.tasksUnder2m = Number(adminKpiState.tasksUnder2m || 0) + 1;
+        }
+    }
+
+    adminKpiState.updatedAt = new Date().toISOString();
+    adminKpiState = sanitizeAdminKpiState(adminKpiState);
+    persistAdminKpiState();
+    renderAdminKpiSummary();
+}
+
+function isTrackedAdminMutation(url, method) {
+    const m = String(method || "GET").toUpperCase();
+    if (m === "GET" || m === "HEAD" || m === "OPTIONS") return false;
+    const urlText = String(url || "");
+    return /\/api\//.test(urlText);
+}
+
+function extractFetchMeta(resource, init) {
+    let url = "";
+    let method = "GET";
+
+    if (typeof resource === "string") {
+        url = resource;
+    } else if (resource && typeof resource.url === "string") {
+        url = resource.url;
+    }
+
+    if (init && init.method) {
+        method = String(init.method);
+    } else if (resource && resource.method) {
+        method = String(resource.method);
+    }
+
+    return {
+        url,
+        method: method.toUpperCase(),
+    };
+}
+
+function installAdminKpiFetchInstrumentation() {
+    if (window.__adminKpiFetchInstrumented) return;
+    if (typeof window.fetch !== "function") return;
+
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = async function(resource, init) {
+        const meta = extractFetchMeta(resource, init);
+        const trackOperation = isTrackedAdminMutation(meta.url, meta.method);
+        const startedAt = trackOperation ? performance.now() : 0;
+
+        try {
+            const response = await nativeFetch(resource, init);
+            if (trackOperation) {
+                const elapsed = Math.max(0, performance.now() - startedAt);
+                recordAdminKpiOperation(elapsed, response.ok);
+            }
+            return response;
+        } catch (error) {
+            if (trackOperation) {
+                const elapsed = Math.max(0, performance.now() - startedAt);
+                recordAdminKpiOperation(elapsed, false);
+            }
+            throw error;
+        }
+    };
+
+    window.__adminKpiFetchInstrumented = true;
+}
+
+function recordAdminKpiSatisfaction(score) {
+    const value = Math.trunc(Number(score));
+    if (!Number.isFinite(value) || value < 1 || value > 5) return;
+
+    adminKpiState.ratingsCount = Number(adminKpiState.ratingsCount || 0) + 1;
+    adminKpiState.ratingsTotal = Number(adminKpiState.ratingsTotal || 0) + value;
+    adminKpiState.updatedAt = new Date().toISOString();
+    adminKpiState = sanitizeAdminKpiState(adminKpiState);
+    persistAdminKpiState();
+    renderAdminKpiSummary();
+    announceAdminStatus(`Gracias por tu valoración de ${value}/5.`);
+}
+
+function initAdminKpiPanel() {
+    renderAdminKpiSummary();
+
+    const ratingBox = document.getElementById("adminKpiRating");
+    if (!ratingBox) return;
+
+    const buttons = ratingBox.querySelectorAll(".admin-kpi-rate-btn[data-kpi-rating]");
+    buttons.forEach(function(btn) {
+        btn.addEventListener("click", function() {
+            const score = btn.getAttribute("data-kpi-rating");
+            recordAdminKpiSatisfaction(score);
+        });
+    });
+}
 
 function setOrdersFilterMode(mode) {
     const normalized = String(mode || "").toLowerCase() === "today" ? "today" : "all";
@@ -2868,7 +3103,11 @@ function renderClienteRow(cliente, applyFilters = true) {
 }
 
 // â”€â”€â”€ Cargar pedidos desde la API Flask al cargar la pÃ¡gina â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+installAdminKpiFetchInstrumentation();
+
 document.addEventListener("DOMContentLoaded", async function() {
+    initAdminKpiPanel();
+
     try {
         const res = await fetch("/api/clientes");
         if (res.status === 401 || res.status === 403) {

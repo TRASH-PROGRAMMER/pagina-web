@@ -82,6 +82,8 @@ Panel admin incluye:
 - uso de almacenamiento Cloudinary
 - CRUD de tamanos
 - gestion de marcos
+- vista de antiguedad de pedidos dentro de Configuración - Opciones
+- indicadores internos de calidad de flujo (tiempo, error y satisfaccion) sin exposicion visual en el panel
 
 ## 3) Autenticacion y autorizacion
 
@@ -394,4 +396,7 @@ pagina-web/
 
 La aplicacion esta enfocada en la operacion real de pedidos:
 
--
+- el panel admin organiza la vista de antiguedad dentro de Configuración - Opciones
+- la card Pedidos hoy activa una vista enfocada de tabla con contexto dinamico sincronizado
+- las metricas de calidad del flujo se registran de forma interna para analisis operativo
+- el seguimiento publico, el autosave y la limpieza automatica de Cloudinary siguen activos
