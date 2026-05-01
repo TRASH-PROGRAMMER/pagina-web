@@ -82,8 +82,10 @@
         role="button"
         tabindex="0"
         aria-label="Ver pedidos de hoy en la tabla"
+        aria-keyshortcuts="Enter Space Esc"
         aria-controls="ordersTable"
         aria-pressed="false"
+        title="Mostrar pedidos de hoy"
       >
         <div class="stat-icon">📦</div>
         <div class="stat-label">Pedidos hoy</div>
@@ -129,18 +131,9 @@
           <span class="today-focus-indicator" id="todayOrdersIndicator" role="status" aria-live="polite">
             Viendo: Todos los pedidos
           </span>
-          <button
-            type="button"
-            class="btn btn-ghost btn-today-reset"
-            id="btnVolverVistaGeneral"
-            aria-label="Quitar filtro de pedidos de hoy"
-            hidden
-          >
-            Ver todos
-          </button>
           <div class="search-box">
             <span style="color:var(--muted)">⌕</span>
-            <input type="text" placeholder="Buscar cliente o pedido…" id="searchInput" oninput="filterTable()">
+            <input type="text" placeholder="Buscar cliente o pedido…" id="searchInput" oninput="filterTable()" aria-label="Buscar cliente o pedido" title="Buscar cliente o pedido" aria-keyshortcuts="Slash Control+K">
           </div>
         </div>
       </div>
@@ -158,11 +151,11 @@
       <div class="advanced-filters" role="group" aria-label="Filtros de fecha, estado, precio e imagenes">
         <label>
           Fecha
-          <input type="date" id="filterFecha" oninput="filterTable()">
+          <input type="date" id="filterFecha" oninput="filterTable()" aria-label="Filtrar por fecha" title="Filtrar por fecha">
         </label>
         <label>
           Estado
-          <select id="filterEstado" onchange="filterTable()">
+          <select id="filterEstado" onchange="filterTable()" aria-label="Filtrar por estado" title="Filtrar por estado">
             <option value="">Todos</option>
             <option value="pendiente">Pendiente</option>
             <option value="procesando">Procesando</option>
@@ -173,15 +166,15 @@
         </label>
         <label>
           Precio min
-          <input type="number" id="filterPrecioMin" min="0" step="0.01" placeholder="0.00" oninput="filterTable()">
+          <input type="number" id="filterPrecioMin" min="0" step="0.01" placeholder="0.00" oninput="filterTable()" aria-label="Precio mínimo" title="Precio mínimo">
         </label>
         <label>
           Precio max
-          <input type="number" id="filterPrecioMax" min="0" step="0.01" placeholder="999.99" oninput="filterTable()">
+          <input type="number" id="filterPrecioMax" min="0" step="0.01" placeholder="999.99" oninput="filterTable()" aria-label="Precio máximo" title="Precio máximo">
         </label>
         <label>
           Imagenes
-          <select id="filterImagenes" onchange="filterTable()">
+          <select id="filterImagenes" onchange="filterTable()" aria-label="Filtrar por imágenes" title="Filtrar por imágenes">
             <option value="">Todas</option>
             <option value="con">Con imagenes</option>
             <option value="sin">Sin imagenes</option>

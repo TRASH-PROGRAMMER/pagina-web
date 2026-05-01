@@ -1864,7 +1864,6 @@ function localTodayISO() {
 
 function syncTodayOrdersUIState() {
     const cardHoy = document.getElementById("statCardPedidosHoy");
-    const btnVolver = document.getElementById("btnVolverVistaGeneral");
     const indicator = document.getElementById("todayOrdersIndicator");
     const tableCard = document.getElementById("ordersTableCard");
     const statCard = document.getElementById("statCardPedidosHoy");
@@ -1873,9 +1872,6 @@ function syncTodayOrdersUIState() {
 
     if (cardHoy) {
         cardHoy.setAttribute("aria-pressed", isTodayOrdersMode ? "true" : "false");
-    }
-    if (btnVolver) {
-        btnVolver.hidden = !isTodayOrdersMode;
     }
     if (indicator) {
         indicator.hidden = false;
@@ -1935,6 +1931,15 @@ function focusOrdersTableCard() {
     }, 140);
 }
 
+function focusAdminSearch() {
+    const searchInput = document.getElementById("searchInput");
+    if (!searchInput) return;
+    searchInput.focus({ preventScroll: true });
+    if (typeof searchInput.select === "function") {
+        searchInput.select();
+    }
+}
+
 function activarPedidosDeHoy(options = {}) {
     const fechaInput = document.getElementById("filterFecha");
     setOrdersFilterMode("today");
@@ -1952,6 +1957,36 @@ function activarPedidosDeHoy(options = {}) {
     if (!options.silent) {
         announceAdminStatus("Mostrando pedidos de hoy.");
     }
+}
+
+function handleAdminGlobalKeydown(event) {
+    const activeTag = (document.activeElement && document.activeElement.tagName || "").toLowerCase();
+    const isTypingField = ["input", "textarea", "select"].includes(activeTag) || document.activeElement?.isContentEditable;
+
+    if ((event.key === "/" || (event.key.toLowerCase() === "k" && event.ctrlKey)) && !isTypingField) {
+        event.preventDefault();
+        focusAdminSearch();
+        announceAdminStatus("Buscador enfocado.");
+        return;
+    }
+
+    if (event.altKey && event.key.toLowerCase() === "t" && !isTypingField) {
+        event.preventDefault();
+        if (isTodayOrdersMode) {
+            desactivarPedidosDeHoy({ scrollToTable: true });
+        } else {
+            activarPedidosDeHoy({ scrollToTable: true });
+        }
+        return;
+    }
+
+    if (event.key !== "Escape") return;
+    if (!isTodayOrdersMode) return;
+
+    if (isTypingField) return;
+
+    event.preventDefault();
+    desactivarPedidosDeHoy({ scrollToTable: true });
 }
 
 function desactivarPedidosDeHoy(options = {}) {
@@ -3133,10 +3168,10 @@ document.addEventListener("DOMContentLoaded", async function() {
     const navClientes = document.getElementById("navClientes");
     const navOpciones = document.getElementById("navOpciones");
     const statCardPedidosHoy = document.getElementById("statCardPedidosHoy");
-    const btnVolverVistaGeneral = document.getElementById("btnVolverVistaGeneral");
     const fechaFiltroInput = document.getElementById("filterFecha");
 
     syncTodayOrdersUIState();
+    document.addEventListener("keydown", handleAdminGlobalKeydown);
 
     if (statCardPedidosHoy) {
         statCardPedidosHoy.addEventListener("click", function() {
@@ -3155,12 +3190,6 @@ document.addEventListener("DOMContentLoaded", async function() {
                 return;
             }
             activarPedidosDeHoy({ scrollToTable: true });
-        });
-    }
-
-    if (btnVolverVistaGeneral) {
-        btnVolverVistaGeneral.addEventListener("click", function() {
-            desactivarPedidosDeHoy();
         });
     }
 
@@ -3545,13 +3574,13 @@ async function cargarEstadisticas() {
         const fmt = n => n.toLocaleString('es-MX');
 
         document.getElementById('statPedidosHoy').textContent = fmt(d.pedidos_hoy);
-        const flecha = d.cambio_pct >= 0 ? 'â†‘' : 'â†“';
+        const flecha = d.cambio_pct >= 0 ? '↑' : '↓';
         const elCambioPct = document.getElementById('statCambioPct');
         if (elCambioPct) { elCambioPct.textContent = `${flecha} ${Math.abs(d.cambio_pct)}% vs ayer`; elCambioPct.removeAttribute('aria-busy'); }
 
         document.getElementById('statTotalFotos').textContent = fmt(d.total_fotos);
         actualizarBadgeImagenes(d.total_fotos);
-        document.getElementById('statFotosSemana').textContent = `â†‘ ${fmt(d.fotos_semana)} esta semana`;
+        document.getElementById('statFotosSemana').textContent = `↑ ${fmt(d.fotos_semana)} esta semana`;
 
         document.getElementById('statClientesActivos').textContent = fmt(d.clientes_activos);
         const elNuevosHoy = document.getElementById('statNuevosHoy');
