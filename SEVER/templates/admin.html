@@ -110,7 +110,14 @@
         <div class="stat-value" id="statPendientes" style="color:var(--warning)">—</div>
         <div class="stat-sub" id="statPendientesSub" aria-live="polite">—</div>
       </div>
-      <div class="stat-card cloudinary-wide-card">
+      <div
+        class="stat-card stat-card-clickable cloudinary-wide-card"
+        id="cloudinaryStorageCard"
+        role="button"
+        tabindex="0"
+        aria-label="Ir a configuración de almacenamiento de imágenes"
+        title="Abrir configuración de almacenamiento de imágenes"
+      >
         <div class="stat-icon">☁️</div>
         <div class="stat-label"> Almacenamiento de Imágenes</div>
         <div class="stat-value" id="cloudinaryStorageValue" style="color:var(--accent2)">—</div>

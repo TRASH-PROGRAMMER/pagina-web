@@ -1940,6 +1940,31 @@ function focusAdminSearch() {
     }
 }
 
+function focusStorageConfigurationPanel() {
+    const trigger = document.querySelector('[aria-controls="opcionesPanelStorage"]');
+    const panel = document.getElementById("opcionesPanelStorage");
+    const item = trigger ? trigger.closest(".opciones-accordion-item") : null;
+
+    if (item && !item.classList.contains("is-open")) {
+        item.classList.add("is-open");
+        if (trigger) trigger.setAttribute("aria-expanded", "true");
+        if (panel) panel.hidden = false;
+    }
+
+    if (trigger && typeof trigger.scrollIntoView === "function") {
+        trigger.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else if (panel && typeof panel.scrollIntoView === "function") {
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    window.setTimeout(function() {
+        const searchInput = document.getElementById("storageImagesSearch");
+        if (searchInput) {
+            searchInput.focus({ preventScroll: true });
+        }
+    }, 160);
+}
+
 function activarPedidosDeHoy(options = {}) {
     const fechaInput = document.getElementById("filterFecha");
     setOrdersFilterMode("today");
@@ -3168,6 +3193,7 @@ document.addEventListener("DOMContentLoaded", async function() {
     const navClientes = document.getElementById("navClientes");
     const navOpciones = document.getElementById("navOpciones");
     const statCardPedidosHoy = document.getElementById("statCardPedidosHoy");
+    const cloudinaryStorageCard = document.getElementById("cloudinaryStorageCard");
     const fechaFiltroInput = document.getElementById("filterFecha");
 
     syncTodayOrdersUIState();
@@ -3250,6 +3276,29 @@ document.addEventListener("DOMContentLoaded", async function() {
             await cargarStorageSettingsAdmin();
             storageImagesCurrentPage = 1;
             await cargarStorageImagesAdmin(1);
+        });
+    }
+
+    if (cloudinaryStorageCard) {
+        const openStorageView = async function() {
+            if (isTodayOrdersMode) {
+                desactivarPedidosDeHoy({ silent: true });
+            }
+            setAdminMainView("opciones");
+            await cargarStorageSettingsAdmin();
+            storageImagesCurrentPage = 1;
+            await cargarStorageImagesAdmin(1);
+            focusStorageConfigurationPanel();
+        };
+
+        cloudinaryStorageCard.addEventListener("click", function() {
+            openStorageView();
+        });
+
+        cloudinaryStorageCard.addEventListener("keydown", function(e) {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            openStorageView();
         });
     }
 
