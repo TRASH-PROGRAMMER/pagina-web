@@ -327,6 +327,11 @@ body {
     cursor: pointer;
 }
 
+.stat-card-active {
+    border-color: rgba(39, 245, 97, 0.7);
+    box-shadow: 0 0 0 1px rgba(39, 245, 97, 0.35);
+}
+
 .stat-card-clickable:focus-visible {
     outline: 2px solid rgba(244, 247, 54, 0.9);
     outline-offset: 2px;
@@ -557,6 +562,16 @@ body {
     overflow: hidden;
 }
 
+.table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll table {
+    min-width: 720px;
+}
+
 .table-toolbar {
     display: flex;
     align-items: center;
@@ -695,12 +710,12 @@ body {
 }
 
 .table-card.today-focus-active {
-    border-color: rgba(244, 247, 54, 0.72);
-    box-shadow: 0 0 0 1px rgba(244, 247, 54, 0.4);
+    border-color: #2a2a3a;
+    box-shadow: none;
 }
 
 .table-card.today-focus-active .section-title {
-    color: #fff59d;
+    color: #e8e8f0;
 }
 
 #statCardPedidosHoy.today-card-active {

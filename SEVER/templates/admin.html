@@ -98,7 +98,16 @@
         <div class="stat-value" id="statTotalFotos" style="color:var(--accent2)">—</div>
         <div class="stat-sub" id="statFotosSemana" aria-live="polite" aria-busy="true">—</div>
       </div>
-      <div class="stat-card">
+      <div
+        class="stat-card stat-card-clickable"
+        id="statCardClientesActivos"
+        role="button"
+        tabindex="0"
+        aria-label="Ver tabla de clientes activos"
+        aria-controls="activeClientsTable"
+        aria-pressed="false"
+        title="Mostrar clientes activos"
+      >
         <div class="stat-icon">👥</div>
         <div class="stat-label">Clientes activos</div>
         <div class="stat-value" id="statClientesActivos" style="color:var(--accent3)">—</div>
@@ -207,6 +216,47 @@
         </tbody>
       </table>
       <nav class="orders-table-pagination" id="ordersTablePagination" aria-label="Paginacion de pedidos"></nav>
+    </div>
+
+    <!-- ACTIVE CLIENTS TABLE -->
+    <div class="table-card dashboard-only dashboard-hidden" id="activeClientsTableCard" tabindex="-1">
+      <div class="table-toolbar">
+        <div class="section-title">Clientes activos</div>
+        <div class="table-toolbar-actions">
+          <span class="today-focus-indicator" id="activeClientsStatus" role="status" aria-live="polite">
+            Activos: —
+          </span>
+          <div class="search-box">
+            <span style="color:var(--muted)">⌕</span>
+            <input
+              type="text"
+              placeholder="Buscar cliente o correo…"
+              id="activeClientsSearch"
+              aria-label="Buscar clientes activos"
+              title="Buscar clientes activos"
+            >
+          </div>
+          <button type="button" class="btn btn-ghost btn-today-reset" id="activeClientsBackBtn">Volver al dashboard</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table id="activeClientsTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Cliente</th>
+              <th>Correo</th>
+              <th>Estado</th>
+              <th>Fotos</th>
+              <th>Fecha</th>
+            </tr>
+          </thead>
+          <tbody id="activeClientsTableBody">
+            <tr><td colspan="6" class="orders-table-empty">Cargando clientes activos…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <nav class="orders-table-pagination" id="activeClientsPagination" aria-label="Paginacion de clientes activos"></nav>
     </div>
 
     <!-- BOTTOM PANELS -->

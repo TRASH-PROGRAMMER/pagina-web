@@ -29,6 +29,7 @@ let storageImagesAdmin = [];
 let storageImagesCurrentPage = 1;
 let storageImagesTotalPages = 1;
 const STORAGE_IMAGES_PAGE_SIZE = 10;
+const ACTIVE_CLIENTS_PAGE_SIZE = 10;
 let tamanoEditandoId = null;
 let clientesCache = [];
 let fotosModalActuales = [];
@@ -45,11 +46,21 @@ let lastFocusedElementBeforeConfirm = null;
 let confirmDialogResolver = null;
 let adminToastTimer = null;
 let storageSearchDebounceTimer = null;
+let activeClientsSearchDebounceTimer = null;
 const liveMessageState = { status: "", alert: "" };
 let isTodayOrdersMode = false;
 let activeOrdersFilterMode = "all";
 let hasCustomOrdersFilters = false;
 let todayOrdersMidnightTimerId = null;
+let activeClientsState = {
+    items: [],
+    loading: false,
+    error: "",
+    page: 1,
+    totalPages: 1,
+    total: 0,
+    search: "",
+};
 const ORDER_AGE_NOTIFICATION_STORAGE_KEY = "admin_order_age_notifications_v1";
 const ADMIN_KPI_STORAGE_KEY = "admin_kpi_metrics_v1";
 const ADMIN_KPI_TARGET_TASK_MS = 2 * 60 * 1000;
@@ -1000,6 +1011,7 @@ function setAdminMainView(view) {
     const ordersSection = document.getElementById("ordersTableCard");
     const clientesSection = document.getElementById("clientesCardsContainer");
     const opcionesSection = document.getElementById("panelOpciones");
+    const activeClientsTable = document.getElementById("activeClientsTableCard");
     const title = document.querySelector(".topbar-title");
 
     if (view === "clientes") {
@@ -1025,6 +1037,9 @@ function setAdminMainView(view) {
         dashboardBlocks.forEach(function(el) { el.classList.remove("dashboard-hidden"); });
         if (clientesSection) clientesSection.hidden = true;
         if (opcionesSection) opcionesSection.hidden = true;
+        if (activeClientsTable && DashboardContent.currentView !== "active-clients") {
+            activeClientsTable.classList.add("dashboard-hidden");
+        }
         if (title) title.innerHTML = "<span>Dashboard</span> / Vista general";
         setActiveNav("navDashboard");
     }
@@ -1939,6 +1954,246 @@ function focusAdminSearch() {
         searchInput.select();
     }
 }
+
+const DashboardContent = {
+    currentView: "default",
+    resetActiveClientsView: function() {
+        const activeClientsCard = document.getElementById("statCardClientesActivos");
+        const activeClientsTable = document.getElementById("activeClientsTableCard");
+
+        this.currentView = "default";
+        if (activeClientsTable) activeClientsTable.classList.add("dashboard-hidden");
+        if (activeClientsCard) {
+            activeClientsCard.classList.remove("stat-card-active");
+            activeClientsCard.setAttribute("aria-pressed", "false");
+        }
+    },
+    setView: function(view) {
+        const blocks = document.querySelectorAll(".dashboard-only");
+        const activeClientsCard = document.getElementById("statCardClientesActivos");
+        const activeClientsTable = document.getElementById("activeClientsTableCard");
+        const title = document.querySelector(".topbar-title");
+        const nextView = view === "active-clients" ? "active-clients" : "default";
+
+        this.currentView = nextView;
+
+        if (nextView === "active-clients") {
+            blocks.forEach(function(el) { el.classList.add("dashboard-hidden"); });
+            if (activeClientsTable) activeClientsTable.classList.remove("dashboard-hidden");
+            if (title) title.innerHTML = "<span>Dashboard</span> / Clientes activos";
+            if (activeClientsCard) {
+                activeClientsCard.classList.add("stat-card-active");
+                activeClientsCard.setAttribute("aria-pressed", "true");
+            }
+        } else {
+            blocks.forEach(function(el) { el.classList.remove("dashboard-hidden"); });
+            if (title) title.innerHTML = "<span>Dashboard</span> / Vista general";
+            DashboardContent.resetActiveClientsView();
+        }
+    }
+};
+
+const ActiveClientsTable = {
+    setState: function(partial) {
+        activeClientsState = Object.assign({}, activeClientsState, partial || {});
+        this.render();
+    },
+    load: async function(page, options) {
+        const opts = options || {};
+        const query = String(opts.search != null ? opts.search : activeClientsState.search || "").trim();
+        const nextPage = Math.max(1, Number(page) || activeClientsState.page || 1);
+        const params = new URLSearchParams();
+        params.set("page", String(nextPage));
+        params.set("page_size", String(ACTIVE_CLIENTS_PAGE_SIZE));
+        if (query) params.set("q", query);
+
+        this.setState({ loading: true, error: "", search: query, page: nextPage });
+
+        try {
+            const res = await fetch(`/api/admin/active-clients?${params.toString()}`, { cache: "no-store" });
+            if (res.status === 401 || res.status === 403) {
+                window.location.href = "/login";
+                return;
+            }
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "No se pudieron cargar clientes activos");
+
+            this.setState({
+                items: Array.isArray(data.clientes) ? data.clientes : [],
+                loading: false,
+                error: "",
+                page: Math.max(1, Number(data.page) || nextPage),
+                totalPages: Math.max(1, Number(data.totalPages) || 1),
+                total: Math.max(0, Number(data.total) || 0),
+            });
+        } catch (error) {
+            console.error("Error cargando clientes activos:", error);
+            this.setState({
+                items: [],
+                loading: false,
+                error: error.message || "No se pudieron cargar clientes activos",
+                total: 0,
+                totalPages: 1,
+            });
+        }
+    },
+    render: function() {
+        const tbody = document.getElementById("activeClientsTableBody");
+        const status = document.getElementById("activeClientsStatus");
+        if (!tbody) return;
+
+        const state = activeClientsState;
+        tbody.innerHTML = "";
+
+        if (status) {
+            if (state.loading) {
+                status.textContent = "Cargando...";
+            } else if (state.error) {
+                status.textContent = "Error al cargar";
+            } else {
+                status.textContent = `Activos: ${state.total}`;
+            }
+        }
+
+        if (state.loading) {
+            tbody.innerHTML = '<tr><td colspan="6" class="orders-table-empty">Cargando clientes activos…</td></tr>';
+            this.renderPagination();
+            return;
+        }
+
+        if (state.error) {
+            tbody.innerHTML = `<tr><td colspan="6" class="orders-table-empty">${escapeHtml(state.error)}</td></tr>`;
+            this.renderPagination();
+            return;
+        }
+
+        if (!state.items.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="orders-table-empty">No hay clientes activos</td></tr>';
+            this.renderPagination();
+            return;
+        }
+
+        state.items.forEach(function(c) {
+            const tr = document.createElement("tr");
+            const estado = normalizarEstadoPedido(c.estado);
+            const estadoLabel = etiquetaEstadoPedido(estado);
+            const estadoClass = claseEstadoPedido(estado);
+            const nombre = `${String(c.nombre || "").trim()} ${String(c.apellido || "").trim()}`.trim() || "Cliente";
+            const correo = String(c.correo || "-").trim() || "-";
+            const fecha = String(c.fechaRegistro || "-").trim() || "-";
+            const fotos = Number(c.numFotos || 0);
+
+            tr.innerHTML = `
+                <td>${escapeHtml(String(c.id || "-"))}</td>
+                <td>
+                    <div class="client-name">${escapeHtml(nombre)}</div>
+                    <div class="client-email">${escapeHtml(String(c.telefono || "-"))}</div>
+                </td>
+                <td>${escapeHtml(correo)}</td>
+                <td><span class="status ${escapeHtml(estadoClass)}">${escapeHtml(estadoLabel)}</span></td>
+                <td>${escapeHtml(String(fotos))}</td>
+                <td>${escapeHtml(fecha)}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        this.renderPagination();
+    },
+    renderPagination: function() {
+        const nav = document.getElementById("activeClientsPagination");
+        if (!nav) return;
+
+        const state = activeClientsState;
+        nav.innerHTML = "";
+        if (!Number.isFinite(state.total) || state.total <= 0) {
+            nav.hidden = true;
+            return;
+        }
+
+        nav.hidden = false;
+
+        const info = document.createElement("span");
+        info.className = "orders-page-info";
+        info.textContent = `${state.total} resultado${state.total === 1 ? "" : "s"} - Pagina ${state.page} de ${state.totalPages}`;
+        nav.appendChild(info);
+
+        const prevBtn = document.createElement("button");
+        prevBtn.type = "button";
+        prevBtn.className = "orders-page-btn";
+        prevBtn.textContent = "Anterior";
+        prevBtn.disabled = state.page <= 1;
+        prevBtn.addEventListener("click", function() {
+            if (state.page > 1) {
+                ActiveClientsTable.load(state.page - 1, { search: state.search });
+            }
+        });
+        nav.appendChild(prevBtn);
+
+        const maxButtons = 7;
+        let start = Math.max(1, state.page - Math.floor(maxButtons / 2));
+        let end = Math.min(state.totalPages, start + maxButtons - 1);
+        start = Math.max(1, end - maxButtons + 1);
+
+        for (let p = start; p <= end; p += 1) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "orders-page-btn";
+            btn.textContent = String(p);
+            if (p === state.page) {
+                btn.classList.add("active");
+                btn.setAttribute("aria-current", "page");
+            }
+            btn.addEventListener("click", function() {
+                if (p !== state.page) {
+                    ActiveClientsTable.load(p, { search: state.search });
+                }
+            });
+            nav.appendChild(btn);
+        }
+
+        const nextBtn = document.createElement("button");
+        nextBtn.type = "button";
+        nextBtn.className = "orders-page-btn";
+        nextBtn.textContent = "Siguiente";
+        nextBtn.disabled = state.page >= state.totalPages;
+        nextBtn.addEventListener("click", function() {
+            if (state.page < state.totalPages) {
+                ActiveClientsTable.load(state.page + 1, { search: state.search });
+            }
+        });
+        nav.appendChild(nextBtn);
+    }
+};
+
+const ActiveClientsCard = {
+    init: function() {
+        const card = document.getElementById("statCardClientesActivos");
+        if (!card) return;
+
+        const toggleView = function() {
+            if (DashboardContent.currentView === "active-clients") {
+                DashboardContent.setView("default");
+                return;
+            }
+            if (isTodayOrdersMode) {
+                desactivarPedidosDeHoy({ silent: true });
+            }
+            setAdminMainView("dashboard");
+            DashboardContent.setView("active-clients");
+            ActiveClientsTable.load(1, { search: activeClientsState.search });
+        };
+
+        card.addEventListener("click", function() {
+            toggleView();
+        });
+
+        card.addEventListener("keydown", function(e) {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            toggleView();
+        });
+    }
+};
 
 function focusStorageConfigurationPanel() {
     const trigger = document.querySelector('[aria-controls="opcionesPanelStorage"]');
@@ -3194,10 +3449,13 @@ document.addEventListener("DOMContentLoaded", async function() {
     const navOpciones = document.getElementById("navOpciones");
     const statCardPedidosHoy = document.getElementById("statCardPedidosHoy");
     const cloudinaryStorageCard = document.getElementById("cloudinaryStorageCard");
+    const activeClientsBackBtn = document.getElementById("activeClientsBackBtn");
+    const activeClientsSearch = document.getElementById("activeClientsSearch");
     const fechaFiltroInput = document.getElementById("filterFecha");
 
     syncTodayOrdersUIState();
     document.addEventListener("keydown", handleAdminGlobalKeydown);
+    ActiveClientsCard.init();
 
     if (statCardPedidosHoy) {
         statCardPedidosHoy.addEventListener("click", function() {
@@ -3237,6 +3495,7 @@ document.addEventListener("DOMContentLoaded", async function() {
                 desactivarPedidosDeHoy({ silent: true });
             }
             setAdminMainView("dashboard");
+            DashboardContent.setView("default");
         });
     }
 
@@ -3247,6 +3506,7 @@ document.addEventListener("DOMContentLoaded", async function() {
                 desactivarPedidosDeHoy({ silent: true });
             }
             setAdminMainView("pedidos");
+            DashboardContent.resetActiveClientsView();
             focusOrdersTableCard();
         });
     }
@@ -3258,6 +3518,7 @@ document.addEventListener("DOMContentLoaded", async function() {
                 desactivarPedidosDeHoy({ silent: true });
             }
             setAdminMainView("clientes");
+            DashboardContent.resetActiveClientsView();
             if (clientesCache.length === 0) {
                 await cargarClientesCards();
             } else {
@@ -3273,9 +3534,28 @@ document.addEventListener("DOMContentLoaded", async function() {
                 desactivarPedidosDeHoy({ silent: true });
             }
             setAdminMainView("opciones");
+            DashboardContent.resetActiveClientsView();
             await cargarStorageSettingsAdmin();
             storageImagesCurrentPage = 1;
             await cargarStorageImagesAdmin(1);
+        });
+    }
+
+    if (activeClientsBackBtn) {
+        activeClientsBackBtn.addEventListener("click", function() {
+            DashboardContent.setView("default");
+        });
+    }
+
+    if (activeClientsSearch) {
+        activeClientsSearch.addEventListener("input", function() {
+            if (activeClientsSearchDebounceTimer) {
+                clearTimeout(activeClientsSearchDebounceTimer);
+                activeClientsSearchDebounceTimer = null;
+            }
+            activeClientsSearchDebounceTimer = window.setTimeout(function() {
+                ActiveClientsTable.load(1, { search: activeClientsSearch.value || "" });
+            }, 260);
         });
     }
 

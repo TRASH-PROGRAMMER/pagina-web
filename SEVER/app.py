@@ -36,6 +36,7 @@ from werkzeug.utils import secure_filename
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
+from sqlalchemy.orm import selectinload
 from db import AuthSession, Cliente, ClienteDraft, Foto, FotoTamano, ImageStorageSetting, MarcoDiseno, User, db
 from auth import auth_bp, current_user_role, login_required, role_required
 try:
@@ -2247,17 +2248,27 @@ def eliminar_cliente(id):
     cliente = db.session.get(Cliente, id)
     if not cliente:
         return jsonify({"error": "Cliente no encontrado"}), 404
-    # Eliminar fotos de Cloudinary
-    for foto in cliente.fotos:
-        if foto.public_id:
-            try:
-                cloudinary.uploader.destroy(foto.public_id)
-            except Exception as e:
-                print(f"Error eliminando de Cloudinary: {e}")
+    # Eliminar fotos de Cloudinary (y limpiar referencias en storage)
+    eliminadas = 0
+    fallos = 0
+    for foto in list(cliente.fotos or []):
+        public_id = (foto.public_id or "").strip() or _infer_public_id_from_url(foto.filename)
+        if not public_id:
+            fallos += 1
+            continue
+
+        if _destroy_cloudinary_image(public_id):
+            eliminadas += 1
+        else:
+            fallos += 1
     db.session.delete(cliente)
     db.session.commit()
     _emit_realtime_event("order_deleted", order_id=id)
-    return jsonify({"mensaje": "Cliente eliminado correctamente"}), 200
+    return jsonify({
+        "mensaje": "Cliente eliminado correctamente",
+        "imagenes_eliminadas": eliminadas,
+        "imagenes_fallidas": fallos,
+    }), 200
 
 
 @app.route('/api/clientes/<int:id>/estado', methods=['PATCH'])
@@ -3021,6 +3032,78 @@ def admin_storage_images_list():
         "page": page,
         "pageSize": page_size,
         "total": int(filtered_total),
+        "totalPages": int(total_pages),
+        "hasNext": page < total_pages,
+        "hasPrev": page > 1,
+    }), 200
+
+
+@app.route('/api/admin/active-clients', methods=['GET'])
+@login_required
+@role_required('admin')
+def admin_active_clients_list():
+    try:
+        page = int(request.args.get("page", "1"))
+    except (TypeError, ValueError):
+        page = 1
+    page = max(1, page)
+
+    try:
+        page_size = int(request.args.get("page_size", request.args.get("pageSize", "10")))
+    except (TypeError, ValueError):
+        page_size = 10
+    page_size = max(1, min(page_size, 50))
+
+    search = str(request.args.get("q", "") or "").strip().lower()
+    active_states = {"pendiente", "procesando", "listo_retiro"}
+
+    query = Cliente.query.options(selectinload(Cliente.fotos))
+    query = query.filter(db.func.lower(Cliente.estado).in_(active_states))
+
+    if search:
+        pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                db.func.lower(Cliente.nombre).like(pattern),
+                db.func.lower(Cliente.apellido).like(pattern),
+                db.func.lower(Cliente.correo).like(pattern),
+            )
+        )
+
+    total = query.count()
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    offset = (page - 1) * page_size
+
+    rows = (
+        query
+        .order_by(Cliente.id.desc())
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+
+    clientes = []
+    for cliente in rows:
+        fotos = list(cliente.fotos or [])
+        total_copias = sum((f.cantidad or 1) for f in fotos) if fotos else 0
+        clientes.append({
+            "id": cliente.id,
+            "nombre": cliente.nombre,
+            "apellido": cliente.apellido,
+            "correo": cliente.correo,
+            "telefono": cliente.telefono,
+            "estado": _normalizar_estado_pedido(cliente.estado),
+            "fechaRegistro": cliente.fecha_registro,
+            "numFotos": len(fotos),
+            "totalCopias": total_copias,
+        })
+
+    return jsonify({
+        "clientes": clientes,
+        "page": page,
+        "pageSize": page_size,
+        "total": int(total),
         "totalPages": int(total_pages),
         "hasNext": page < total_pages,
         "hasPrev": page > 1,
