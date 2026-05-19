@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>Login - Image Manager</title>
   <style>
     :root {
@@ -101,6 +102,7 @@
 </head>
 <body>
   <form class="card" method="post" autocomplete="off" id="loginForm" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <h1>Iniciar sesion</h1>
     <p>Accede segun tu rol: admin, operador o cajero.</p>
 
@@ -172,11 +174,13 @@
         setSubmittingState(true);
 
         try {
+          const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
           const res = await fetch("/api/auth/login", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "Accept": "application/json"
+              "Accept": "application/json",
+              "X-CSRF-Token": csrfToken
             },
             body: JSON.stringify({ username, password })
           });

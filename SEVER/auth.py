@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 try:
     from db import AuthSession, User, db
@@ -13,6 +15,20 @@ except ImportError:
 
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def _login_rate_limit_key():
+    username = ""
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        username = (payload.get("username") or "").strip().lower()
+    else:
+        username = (request.form.get("username") or "").strip().lower()
+    ip = get_remote_address()
+    return f"{ip}:{username}" if username else ip
+
+
+limiter = Limiter(key_func=_login_rate_limit_key, default_limits=[])
 
 TOKEN_TTL_HOURS = 12
 
@@ -25,7 +41,29 @@ def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _ensure_csrf_token() -> str:
+    token = session.get("csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+    return token
+
+
+def _validate_csrf_token(token: str | None) -> bool:
+    if not token:
+        return False
+    return secrets.compare_digest(session.get("csrf_token", ""), token)
+
+
+def _csrf_required() -> bool:
+    return bool(session.get("csrf_token"))
+
+
 def _extract_bearer_token() -> str | None:
+    token_arg = (request.args.get("access_token") or request.args.get("token") or "").strip()
+    if token_arg:
+        return token_arg
+
     auth_header = (request.headers.get("Authorization") or "").strip()
     if not auth_header:
         return None
@@ -145,19 +183,25 @@ def role_required(*allowed_roles):
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("5 per minute; 20 per hour", methods=["POST"])
 def login():
     if request.method == "POST":
+        csrf_token = request.form.get("csrf_token")
+        if not _validate_csrf_token(csrf_token):
+            flash("Solicitud invalida", "error")
+            return render_template("login.html", csrf_token=_ensure_csrf_token()), 400
+
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
 
         if not username or not password:
             flash("Ingresa usuario y contrasena", "error")
-            return render_template("login.html"), 400
+            return render_template("login.html", csrf_token=_ensure_csrf_token()), 400
 
         user = User.query.filter_by(username=username).first()
         if not user or not user.activo or not check_password_hash(user.password_hash, password):
             flash("Credenciales invalidas", "error")
-            return render_template("login.html"), 401
+            return render_template("login.html", csrf_token=_ensure_csrf_token()), 401
 
         session.clear()
         session["user_id"] = user.id
@@ -166,11 +210,18 @@ def login():
 
         return redirect(url_for("auth.redirect_by_role"))
 
-    return render_template("login.html")
+    return render_template("login.html", csrf_token=_ensure_csrf_token())
 
 
 @auth_bp.route("/api/auth/login", methods=["POST"])
+@limiter.limit("5 per minute; 20 per hour", methods=["POST"])
 def api_login_tab_scoped():
+    csrf_token = request.headers.get("X-CSRF-Token") or (request.get_json(silent=True) or {}).get("csrf_token")
+    if _csrf_required() and not _validate_csrf_token(csrf_token):
+        return jsonify({"error": "Solicitud invalida"}), 400
+    if not session.get("csrf_token"):
+        _ensure_csrf_token()
+
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     password = data.get("password") or ""

@@ -2745,6 +2745,17 @@ function getStoredRealtimeLastEventId() {
     }
 }
 
+function getRealtimeAuthToken() {
+    try {
+        if (window.AuthSessionClient && typeof window.AuthSessionClient.getToken === "function") {
+            return window.AuthSessionClient.getToken() || "";
+        }
+        return window.sessionStorage.getItem("im.auth.token") || "";
+    } catch (_error) {
+        return "";
+    }
+}
+
 function setStoredRealtimeLastEventId(lastEventId) {
     const n = Number(lastEventId);
     if (!Number.isFinite(n) || n < 0) return;
@@ -2924,8 +2935,12 @@ function conectarAdminRealtime() {
     const streamUrl = storedLastId > 0
         ? `/api/realtime/pedidos/stream?lastEventId=${storedLastId}`
         : "/api/realtime/pedidos/stream";
+    const token = getRealtimeAuthToken();
+    const streamUrlWithToken = token
+        ? `${streamUrl}${streamUrl.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(token)}`
+        : streamUrl;
 
-    const source = new EventSource(streamUrl, { withCredentials: true });
+    const source = new EventSource(streamUrlWithToken, { withCredentials: true });
     realtimeSource = source;
 
     source.onopen = function() {

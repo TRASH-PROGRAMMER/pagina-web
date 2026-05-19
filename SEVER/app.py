@@ -30,6 +30,7 @@ for env_candidate in [
 
 from flask import Flask, Response, render_template, request, jsonify, session, redirect, stream_with_context, url_for
 from flask_session import Session
+from flask_talisman import Talisman
 from werkzeug.security import generate_password_hash
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
@@ -38,7 +39,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 from db import AuthSession, Cliente, ClienteDraft, Foto, FotoTamano, ImageStorageSetting, MarcoDiseno, User, db
-from auth import auth_bp, current_user_role, login_required, role_required
+from auth import auth_bp, current_user_role, login_required, role_required, limiter
 try:
     from order_age_blueprint import order_age_bp, enrich_order_age_payload
 except ImportError:
@@ -72,6 +73,22 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
 
 Session(app)
+
+limiter.init_app(app)
+
+_force_https = os.environ.get("FLASK_ENV") == "production"
+_csp = {
+    "default-src": "'self'",
+    "img-src": "'self' data: https: http:",
+    "style-src": "'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src": "'self' https://fonts.gstatic.com data:",
+    "script-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+    "connect-src": "'self'",
+    "base-uri": "'self'",
+    "form-action": "'self'",
+    "frame-ancestors": "'none'",
+}
+Talisman(app, content_security_policy=_csp, force_https=_force_https)
 
 
 @app.errorhandler(RequestEntityTooLarge)

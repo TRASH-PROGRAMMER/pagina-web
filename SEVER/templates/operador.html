@@ -961,8 +961,14 @@
             const streamUrl = storedLastId > 0
                 ? `/api/realtime/pedidos/stream?lastEventId=${storedLastId}`
                 : "/api/realtime/pedidos/stream";
+            const token = (window.AuthSessionClient && window.AuthSessionClient.getToken)
+                ? (window.AuthSessionClient.getToken() || "")
+                : (window.sessionStorage.getItem("im.auth.token") || "");
+            const streamUrlWithToken = token
+                ? `${streamUrl}${streamUrl.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(token)}`
+                : streamUrl;
 
-            const source = new EventSource(streamUrl, { withCredentials: true });
+            const source = new EventSource(streamUrlWithToken, { withCredentials: true });
             realtimeSource = source;
 
             source.onopen = function() {
