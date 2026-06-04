@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style/admin.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style/resposive_admin.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   
 </head>
 <body data-auth-roles="admin">
@@ -66,7 +67,7 @@
     </h1>
     <div class="topbar-actions">
       <span id="realtimeBadge" class="realtime-badge offline" role="status" aria-live="polite">Sin conexion</span>
-      <button class="btn btn-ghost" onclick="exportCSV()">↓ Exportar CSV</button>
+      <button class="btn btn-ghost" onclick="exportToExcel()" title="Exportar pedidos a Excel">↓ Excel</button>
       <a class="btn btn-ghost" href="{{ url_for('auth.logout') }}" data-auth-logout="tab">Salir</a>
     </div>
   </div>
@@ -74,68 +75,105 @@
   <!-- CONTENT -->
   <div class="content">
 
-    <!-- STATS -->
-    <div class="stats-grid dashboard-only">
-      <div
-        class="stat-card stat-card-clickable"
-        id="statCardPedidosHoy"
-        role="button"
-        tabindex="0"
-        aria-label="Ver pedidos de hoy en la tabla"
-        aria-keyshortcuts="Enter Space Esc"
-        aria-controls="ordersTable"
-        aria-pressed="false"
-        title="Mostrar pedidos de hoy"
-      >
-        <div class="stat-icon">📦</div>
-        <div class="stat-label">Pedidos hoy</div>
-        <div class="stat-value" id="statPedidosHoy" style="color:var(--accent)">—</div>
-        <div class="stat-sub" id="statCambioPct" aria-live="polite" aria-busy="true">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon">🖼️</div>
-        <div class="stat-label">Imágenes cargadas</div>
-        <div class="stat-value" id="statTotalFotos" style="color:var(--accent2)">—</div>
-        <div class="stat-sub" id="statFotosSemana" aria-live="polite" aria-busy="true">—</div>
-      </div>
-      <div
-        class="stat-card stat-card-clickable"
-        id="statCardClientesActivos"
-        role="button"
-        tabindex="0"
-        aria-label="Ver tabla de clientes activos"
-        aria-controls="activeClientsTable"
-        aria-pressed="false"
-        title="Mostrar clientes activos"
-      >
-        <div class="stat-icon">👥</div>
-        <div class="stat-label">Clientes activos</div>
-        <div class="stat-value" id="statClientesActivos" style="color:var(--accent3)">—</div>
-        <div class="stat-sub" id="statNuevosHoy" aria-live="polite" aria-busy="true">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon">⏳</div>
-        <div class="stat-label"> Pedidos pendientes</div>
-        <div class="stat-value" id="statPendientes" style="color:var(--warning)">—</div>
-        <div class="stat-sub" id="statPendientesSub" aria-live="polite">—</div>
-      </div>
-      <div
-        class="stat-card stat-card-clickable cloudinary-wide-card"
-        id="cloudinaryStorageCard"
-        role="button"
-        tabindex="0"
-        aria-label="Ir a configuración de almacenamiento de imágenes"
-        title="Abrir configuración de almacenamiento de imágenes"
-      >
-        <div class="stat-icon">☁️</div>
-        <div class="stat-label"> Almacenamiento de Imágenes</div>
-        <div class="stat-value" id="cloudinaryStorageValue" style="color:var(--accent2)">—</div>
-        <div class="cloudinary-progress-wrap" style="margin-top: 12px;">
-          <div class="cloudinary-progress" style="background: var(--input-bg); border-radius: 4px; height: 6px; overflow: hidden;">
-            <div id="cloudinaryStorageBar" style="height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); width: 0%; transition: width 0.3s ease;"></div>
-          </div>
-          <div id="cloudinaryStorageText" style="font-size: 11px; color: var(--muted); margin-top: 6px;" aria-live="polite" aria-label="Almacenamiento usado sobre límite del plan">—</div>
+    <!-- MÉTRICAS UNIFICADAS -->
+    <div class="unified-metrics dashboard-only" id="kpiBusinessSection">
+      <!-- Alertas KPI -->
+      <div class="kpi-alerts" id="kpiAlerts" role="region" aria-label="Alertas de desempeño KPI" aria-live="polite" aria-atomic="false"></div>
+
+      <div class="metrics-header">
+        <div class="section-title">Resumen</div>
+        <div class="kpi-time-range" role="group" aria-label="Rango de tiempo KPI">
+          <button class="kpi-range-btn active" data-range="today" onclick="updateKPIRange('today')">Hoy</button>
+          <button class="kpi-range-btn" data-range="week" onclick="updateKPIRange('week')">Semana</button>
+          <button class="kpi-range-btn" data-range="month" onclick="updateKPIRange('month')">Mes</button>
         </div>
+      </div>
+
+      <div class="metrics-grid">
+        <!-- KPI Cards -->
+        <div class="metric-card">
+          <div class="metric-top">
+            <span class="metric-icon">💰</span>
+            <div class="metric-label">Ingresos</div>
+          </div>
+          <div class="metric-value" id="kpiIngresos" aria-live="polite">—</div>
+          <div class="kpi-compare" id="kpiIngresosCompare" aria-live="polite">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-top">
+            <span class="metric-icon">✓</span>
+            <div class="metric-label">Tasa Entrega</div>
+          </div>
+          <div class="metric-value" id="kpiTasaEntrega" aria-live="polite">—</div>
+          <div class="kpi-compare" id="kpiTasaEntregaCompare" aria-live="polite">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-top">
+            <span class="metric-icon">⏱</span>
+            <div class="metric-label">T. Promedio</div>
+          </div>
+          <div class="metric-value" id="kpiTiempoPromedio" aria-live="polite">—</div>
+          <div class="kpi-compare" id="kpiTiempoPromedioCompare" aria-live="polite">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-top">
+            <span class="metric-icon">📈</span>
+            <div class="metric-label">Conversión</div>
+          </div>
+          <div class="metric-value" id="kpiConversion" aria-live="polite">—</div>
+          <div class="kpi-compare" id="kpiConversionCompare" aria-live="polite">—</div>
+        </div>
+
+        <!-- Stat Cards -->
+        <div class="metric-card metric-card-clickable" id="statCardPedidosHoy" role="button" tabindex="0"
+          aria-label="Ver pedidos de hoy en la tabla" aria-keyshortcuts="Enter Space Esc"
+          aria-controls="ordersTable" aria-pressed="false" title="Mostrar pedidos de hoy">
+          <div class="metric-top">
+            <span class="metric-icon">📦</span>
+            <div class="metric-label">Pedidos hoy</div>
+          </div>
+          <div class="metric-value accent-yellow" id="statPedidosHoy">—</div>
+          <div class="stat-sub" id="statCambioPct" aria-live="polite" aria-busy="true">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-top">
+            <span class="metric-icon">🖼️</span>
+            <div class="metric-label">Imágenes</div>
+          </div>
+          <div class="metric-value accent-blue" id="statTotalFotos">—</div>
+          <div class="stat-sub" id="statFotosSemana" aria-live="polite" aria-busy="true">—</div>
+        </div>
+        <div class="metric-card metric-card-clickable" id="statCardClientesActivos" role="button" tabindex="0"
+          aria-label="Ver tabla de clientes activos" aria-controls="activeClientsTable"
+          aria-pressed="false" title="Mostrar clientes activos">
+          <div class="metric-top">
+            <span class="metric-icon">👥</span>
+            <div class="metric-label">Clientes activos</div>
+          </div>
+          <div class="metric-value accent-green" id="statClientesActivos">—</div>
+          <div class="stat-sub" id="statNuevosHoy" aria-live="polite" aria-busy="true">—</div>
+        </div>
+        <div class="metric-card metric-card-clickable" id="cloudinaryStorageCard" role="button" tabindex="0"
+          aria-label="Ir a configuración de almacenamiento de imágenes"
+          title="Abrir configuración de almacenamiento de imágenes">
+          <div class="metric-top">
+            <span class="metric-icon">☁️</span>
+            <div class="metric-label">Almacenamiento</div>
+          </div>
+          <div class="metric-value accent-cyan" id="cloudinaryStorageValue">—</div>
+          <div class="cloudinary-bar-mini">
+            <div id="cloudinaryStorageBar" class="cloudinary-bar-fill"></div>
+          </div>
+          <div id="cloudinaryStorageText" class="stat-sub" aria-live="polite" aria-label="Almacenamiento usado sobre límite del plan">—</div>
+        </div>
+      </div>
+
+      <!-- Pedidos pendientes badge -->
+      <div class="pending-strip" id="pendingStripWrap">
+        <span class="pending-strip-icon">⏳</span>
+        <span class="pending-strip-label">Pendientes</span>
+        <strong class="pending-strip-value" id="statPendientes">—</strong>
+        <span class="pending-strip-sub" id="statPendientesSub">—</span>
       </div>
     </div>
 
@@ -149,8 +187,9 @@
           </span>
           <div class="search-box">
             <span style="color:var(--muted)">⌕</span>
-            <input type="text" placeholder="Buscar cliente o pedido…" id="searchInput" oninput="filterTable()" aria-label="Buscar cliente o pedido" title="Buscar cliente o pedido" aria-keyshortcuts="Slash Control+K">
+            <input type="text" placeholder="Buscar cliente o pedido…" id="searchInput" oninput="onSearchInput()" aria-label="Buscar cliente o pedido" title="Buscar cliente o pedido" aria-keyshortcuts="Slash Control+K">
           </div>
+          <button class="btn btn-secondary" id="btnClearFilters" onclick="clearAllFilters()" aria-label="Limpiar todos los filtros" title="Restaurar todos los filtros a su estado inicial">↺ Limpiar</button>
         </div>
       </div>
       <div class="alpha-filters" id="alphaFilters" role="group" aria-label="Filtrar por inicial del nombre">
@@ -165,13 +204,13 @@
         <button class="alpha-btn" onclick="filterByAlpha('VWZ')"   data-range="VWZ">V–Z</button>
       </div>
       <div class="advanced-filters" role="group" aria-label="Filtros de fecha, estado, precio e imagenes">
-        <label>
+        <label for="filterFecha">
           Fecha
-          <input type="date" id="filterFecha" oninput="filterTable()" aria-label="Filtrar por fecha" title="Filtrar por fecha">
+          <input type="date" id="filterFecha" oninput="filterTable()" title="Filtrar por fecha">
         </label>
-        <label>
+        <label for="filterEstado">
           Estado
-          <select id="filterEstado" onchange="filterTable()" aria-label="Filtrar por estado" title="Filtrar por estado">
+          <select id="filterEstado" onchange="filterTable()" title="Filtrar por estado">
             <option value="">Todos</option>
             <option value="pendiente">Pendiente</option>
             <option value="procesando">Procesando</option>
@@ -180,41 +219,41 @@
             <option value="cancelado">Cancelado</option>
           </select>
         </label>
-        <label>
+        <label for="filterPrecioMin">
           Precio min
-          <input type="number" id="filterPrecioMin" min="0" step="0.01" placeholder="0.00" oninput="filterTable()" aria-label="Precio mínimo" title="Precio mínimo">
+          <input type="number" id="filterPrecioMin" min="0" step="0.01" placeholder="0.00" oninput="filterTable()" title="Precio mínimo">
         </label>
-        <label>
+        <label for="filterPrecioMax">
           Precio max
-          <input type="number" id="filterPrecioMax" min="0" step="0.01" placeholder="999.99" oninput="filterTable()" aria-label="Precio máximo" title="Precio máximo">
+          <input type="number" id="filterPrecioMax" min="0" step="0.01" placeholder="999.99" oninput="filterTable()" title="Precio máximo">
         </label>
-        <label>
+        <label for="filterImagenes">
           Imagenes
-          <select id="filterImagenes" onchange="filterTable()" aria-label="Filtrar por imágenes" title="Filtrar por imágenes">
+          <select id="filterImagenes" onchange="filterTable()" title="Filtrar por imágenes">
             <option value="">Todas</option>
             <option value="con">Con imagenes</option>
             <option value="sin">Sin imagenes</option>
           </select>
         </label>
       </div>
-      <table id="ordersTable">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Cliente</th>
-            <th>Imágenes</th>
-            <th>Tamaño</th>
-            <th>Papel</th>
-            <th>Precio</th>
-            <th>Estado</th>
-            <th>Fecha</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="tableBody">
-          <!-- Se llena dinámicamente desde la API -->
-        </tbody>
-      </table>
+      <div class="table-scroll">
+        <table id="ordersTable" class="orders-table-compact">
+          <thead>
+            <tr>
+              <th scope="col" class="col-expand">▾</th>
+              <th scope="col">#</th>
+              <th scope="col">Cliente</th>
+              <th scope="col">Estado</th>
+              <th scope="col">Precio</th>
+              <th scope="col">Fecha</th>
+              <th scope="col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <!-- Se llena dinámicamente desde la API -->
+          </tbody>
+        </table>
+      </div>
       <nav class="orders-table-pagination" id="ordersTablePagination" aria-label="Paginacion de pedidos"></nav>
     </div>
 
@@ -243,12 +282,12 @@
         <table id="activeClientsTable">
           <thead>
             <tr>
-              <th>#</th>
-              <th>Cliente</th>
-              <th>Correo</th>
-              <th>Estado</th>
-              <th>Fotos</th>
-              <th>Fecha</th>
+              <th scope="col">#</th>
+              <th scope="col">Cliente</th>
+              <th scope="col">Correo</th>
+              <th scope="col">Estado</th>
+              <th scope="col">Fotos</th>
+              <th scope="col">Fecha</th>
             </tr>
           </thead>
           <tbody id="activeClientsTableBody">
@@ -348,11 +387,11 @@
               <table id="tamanosTable" class="tamanos-table">
                 <thead>
                   <tr>
-                    <th>Clave</th>
-                    <th>Nombre</th>
-                    <th>Precio base</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
+                    <th scope="col">Clave</th>
+                    <th scope="col">Nombre</th>
+                    <th scope="col">Precio base</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col">Acciones</th>
                   </tr>
                 </thead>
                 <tbody id="tamanosBody"></tbody>
@@ -402,11 +441,11 @@
               <table id="marcosTable" class="tamanos-table">
                 <thead>
                   <tr>
-                    <th>Vista</th>
-                    <th>Diseño</th>
-                    <th>Formato</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
+                    <th scope="col">Vista</th>
+                    <th scope="col">Diseño</th>
+                    <th scope="col">Formato</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col">Acciones</th>
                   </tr>
                 </thead>
                 <tbody id="marcosBody"></tbody>
@@ -545,12 +584,12 @@
               <table id="storageImagesTable" class="tamanos-table">
                 <thead>
                   <tr>
-                    <th>ID</th>
-                    <th>Cliente</th>
-                    <th>Expira en</th>
-                    <th>Expira el</th>
-                    <th>Estado</th>
-                    <th>Exclusión</th>
+                    <th scope="col">ID</th>
+                    <th scope="col">Cliente</th>
+                    <th scope="col">Expira en</th>
+                    <th scope="col">Expira el</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col">Exclusión</th>
                   </tr>
                 </thead>
                 <tbody id="storageImagesBody"></tbody>
@@ -1352,6 +1391,7 @@
     }
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='script/session_auth_client.js') }}"></script>
 <script src="{{ url_for('static', filename='script/dasbord_admin.js', v='20260404a') }}"></script>

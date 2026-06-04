@@ -22,6 +22,67 @@ clienteChannel.onmessage = function(event) {
     }
 };
 
+// --- ACCESIBILIDAD FASE 1: Focus Trap y ESC ---
+function setupModalFocusTrap(modal) {
+    if (!modal) return;
+    const focusableElements = modal.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusableElements.length === 0) return;
+    
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+    
+    const trapHandler = (e) => {
+        if (e.key !== 'Tab') return;
+        if (e.shiftKey) {
+            if (document.activeElement === firstElement) {
+                lastElement.focus();
+                e.preventDefault();
+            }
+        } else {
+            if (document.activeElement === lastElement) {
+                firstElement.focus();
+                e.preventDefault();
+            }
+        }
+    };
+    
+    modal._focusTrapHandler = trapHandler;
+    modal.addEventListener('keydown', trapHandler);
+}
+
+function setupModalEscapeHandler(modal, closeCallback) {
+    if (!modal) return;
+    const escHandler = (e) => {
+        if (e.key === 'Escape') {
+            closeCallback();
+            e.preventDefault();
+        }
+    };
+    modal._escapeHandler = escHandler;
+    modal.addEventListener('keydown', escHandler);
+}
+
+function initializeModalAccessibility(modalId, closeCallback) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    setupModalFocusTrap(modal);
+    setupModalEscapeHandler(modal, closeCallback);
+}
+
+function cleanupModalAccessibility(modal) {
+    if (!modal) return;
+    if (modal._focusTrapHandler) {
+        modal.removeEventListener('keydown', modal._focusTrapHandler);
+        delete modal._focusTrapHandler;
+    }
+    if (modal._escapeHandler) {
+        modal.removeEventListener('keydown', modal._escapeHandler);
+        delete modal._escapeHandler;
+    }
+}
+
 let tamanosAdmin = [];
 let marcosAdmin = [];
 let storageConfigAdmin = null;
@@ -45,8 +106,17 @@ let lastFocusedElementBeforeModal = null;
 let lastFocusedElementBeforeConfirm = null;
 let confirmDialogResolver = null;
 let adminToastTimer = null;
-let storageSearchDebounceTimer = null;
-let activeClientsSearchDebounceTimer = null;
+let searchInputDebounceTimer = null;
+let kpiCurrentRange = 'today';
+const KPI_ALERT_STORAGE_KEY = 'admin_kpi_alerts_v1';
+const KPI_THRESHOLDS = {
+    ingresos: { decrease: -20 },        // Alerta si cae más del 20%
+    tasaEntrega: { decrease: -10 },     // Alerta si cae más del 10%
+    conversion: { decrease: -5 },       // Alerta si cae más del 5%
+    tiempoPromedio: { increase: 2 }     // Alerta si sube más de 2 días
+};
+let kpiLastValues = {};
+let kpiAlerts = [];
 const liveMessageState = { status: "", alert: "" };
 let isTodayOrdersMode = false;
 let activeOrdersFilterMode = "all";
@@ -69,6 +139,317 @@ const ADMIN_KPI_TARGET_SATISFACTION = 4;
 let orderAgeSnapshotById = new Map();
 let orderAgeNotificationCache = loadOrderAgeNotificationCache();
 let adminKpiState = loadAdminKpiState();
+
+// --- FASE 3: VALOR - Cálculos KPI y Comparativas ---
+
+function getDateRange(range) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let start, compareStart, compareEnd;
+    
+    switch(range) {
+        case 'today':
+            start = new Date(today);
+            compareStart = new Date(today);
+            compareStart.setDate(compareStart.getDate() - 1);
+            compareEnd = new Date(compareStart);
+            compareEnd.setDate(compareEnd.getDate() + 1);
+            break;
+        case 'week':
+            start = new Date(today);
+            start.setDate(start.getDate() - today.getDay());
+            compareStart = new Date(start);
+            compareStart.setDate(compareStart.getDate() - 7);
+            compareEnd = new Date(start);
+            break;
+        case 'month':
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+            compareStart = new Date(start);
+            compareStart.setMonth(compareStart.getMonth() - 1);
+            compareEnd = new Date(start);
+            break;
+        default:
+            start = today;
+            compareStart = new Date(today);
+            compareStart.setDate(compareStart.getDate() - 1);
+            compareEnd = new Date(compareStart);
+            compareEnd.setDate(compareEnd.getDate() + 1);
+    }
+    
+    return { start, compareStart, compareEnd };
+}
+
+function filterClientesByDateRange(clientes, start, end) {
+    return (clientes || []).filter(c => {
+        const fecha = new Date(c.fechaRegistro);
+        return fecha >= start && fecha < end;
+    });
+}
+
+function calcularKPIs() {
+    const range = getDateRange(kpiCurrentRange);
+    
+    // Datos período actual
+    const clientesEnPeriodo = filterClientesByDateRange(clientesCache, range.start, new Date());
+    const clientesEnComparacion = filterClientesByDateRange(clientesCache, range.compareStart, range.compareEnd);
+    
+    // KPI 1: Ingresos
+    const ingresosPeriodo = clientesEnPeriodo
+        .filter(c => c.pagado)
+        .reduce((sum, c) => sum + (parseFloat(c.precioTotal) || 0), 0);
+    
+    const ingresosComparacion = clientesEnComparacion
+        .filter(c => c.pagado)
+        .reduce((sum, c) => sum + (parseFloat(c.precioTotal) || 0), 0);
+    
+    const changePct = ingresosComparacion !== 0 
+        ? ((ingresosPeriodo - ingresosComparacion) / ingresosComparacion * 100).toFixed(1)
+        : '—';
+    
+    // KPI 2: Tasa de Entrega
+    const totalPeriodo = clientesEnPeriodo.length;
+    const entregadosPeriodo = clientesEnPeriodo.filter(c => c.estado === 'entregado').length;
+    const tasaEntrega = totalPeriodo > 0 ? ((entregadosPeriodo / totalPeriodo) * 100).toFixed(1) : 0;
+    
+    const totalComparacion = clientesEnComparacion.length;
+    const entregadosComparacion = clientesEnComparacion.filter(c => c.estado === 'entregado').length;
+    const tasaEntregaComparacion = totalComparacion > 0 ? ((entregadosComparacion / totalComparacion) * 100) : 0;
+    const tasaChange = tasaEntregaComparacion !== 0 
+        ? (tasaEntrega - tasaEntregaComparacion).toFixed(1)
+        : '—';
+    
+    // KPI 3: Tiempo Promedio de Entrega
+    const entregados = clientesEnPeriodo.filter(c => c.estado === 'entregado');
+    let tiempoPromedio = '—';
+    if (entregados.length > 0) {
+        const tiempos = entregados.map(c => {
+            const created = new Date(c.created_at || c.fechaRegistro);
+            const updated = new Date(c.updated_at || new Date());
+            return (updated - created) / (1000 * 60 * 60 * 24);
+        });
+        const promedio = tiempos.reduce((a, b) => a + b, 0) / tiempos.length;
+        tiempoPromedio = promedio.toFixed(1) + ' días';
+    }
+    
+    // KPI 4: Conversión (clientes con entrega / total clientes)
+    const clientesConEntrega = new Set(clientesCache.filter(c => c.estado === 'entregado').map(c => c.correo)).size;
+    const totalClientesUnicos = new Set(clientesCache.map(c => c.correo)).size;
+    const conversion = totalClientesUnicos > 0 ? ((clientesConEntrega / totalClientesUnicos) * 100).toFixed(1) : 0;
+    
+    const clientesConEntregaComparacion = new Set(clientesEnComparacion.filter(c => c.estado === 'entregado').map(c => c.correo)).size;
+    const totalClientesComparacion = new Set(clientesEnComparacion.map(c => c.correo)).size;
+    const conversionComparacion = totalClientesComparacion > 0 ? ((clientesConEntregaComparacion / totalClientesComparacion) * 100) : 0;
+    const conversionChange = conversionComparacion !== 0 
+        ? (conversion - conversionComparacion).toFixed(1)
+        : '—';
+    
+    // Actualizar UI
+    document.getElementById('kpiIngresos').textContent = `$${ingresosPeriodo.toFixed(2)}`;
+    const ingresosCompareEl = document.getElementById('kpiIngresosCompare');
+    ingresosCompareEl.textContent = changePct !== '—' 
+        ? `${changePct > 0 ? '↑' : '↓'} ${Math.abs(changePct)}% vs período anterior`
+        : 'Sin comparación';
+    ingresosCompareEl.className = `kpi-compare ${changePct > 0 ? 'positive' : changePct < 0 ? 'negative' : ''}`;
+    
+    document.getElementById('kpiTasaEntrega').textContent = `${tasaEntrega}%`;
+    const tasaCompareEl = document.getElementById('kpiTasaEntregaCompare');
+    tasaCompareEl.textContent = tasaChange !== '—'
+        ? `${tasaChange > 0 ? '↑' : '↓'} ${Math.abs(tasaChange)}%`
+        : 'Sin comparación';
+    tasaCompareEl.className = `kpi-compare ${tasaChange > 0 ? 'positive' : tasaChange < 0 ? 'negative' : ''}`;
+    
+    document.getElementById('kpiTiempoPromedio').textContent = tiempoPromedio;
+    document.getElementById('kpiTiempoPromedioCompare').textContent = '—';
+    
+    document.getElementById('kpiConversion').textContent = `${conversion}%`;
+    const conversionCompareEl = document.getElementById('kpiConversionCompare');
+    conversionCompareEl.textContent = conversionChange !== '—'
+        ? `${conversionChange > 0 ? '↑' : '↓'} ${Math.abs(conversionChange)}%`
+        : 'Sin comparación';
+    conversionCompareEl.className = `kpi-compare ${conversionChange > 0 ? 'positive' : conversionChange < 0 ? 'negative' : ''}`;
+    
+    // Evaluar y mostrar alertas
+    const tiempoNumerico = parseFloat(tiempoPromedio.split(' ')[0]) || 0;
+    const alerts = evaluateKPIAlerts(ingresosPeriodo, parseFloat(tasaEntrega), tiempoNumerico, parseFloat(conversion));
+    displayKPIAlerts(alerts);
+    updateKPILastValues(ingresosPeriodo, parseFloat(tasaEntrega), tiempoNumerico, parseFloat(conversion));
+}
+
+function evaluateKPIAlerts(ingresos, tasaEntrega, tiempoPromedio, conversion) {
+    const alerts = [];
+    
+    // No evaluar si no hay valores previos
+    if (Object.keys(kpiLastValues).length === 0) {
+        return alerts;
+    }
+    
+    // Verificar desviaciones vs período anterior
+    if (kpiLastValues.ingresos !== undefined && ingresos < kpiLastValues.ingresos) {
+        const changePct = kpiLastValues.ingresos > 0 
+            ? ((ingresos - kpiLastValues.ingresos) / kpiLastValues.ingresos) * 100
+            : 0;
+        if (changePct < KPI_THRESHOLDS.ingresos.decrease) {
+            alerts.push({
+                type: 'error',
+                title: '⚠️ Ingresos por debajo',
+                message: `Ingresos cayeron ${Math.abs(changePct.toFixed(1))}% vs período anterior`,
+                id: 'ingresos-down'
+            });
+        }
+    }
+    
+    if (kpiLastValues.tasaEntrega !== undefined && tasaEntrega < kpiLastValues.tasaEntrega) {
+        const changePct = tasaEntrega - kpiLastValues.tasaEntrega;
+        if (changePct < KPI_THRESHOLDS.tasaEntrega.decrease) {
+            alerts.push({
+                type: 'error',
+                title: '⚠️ Tasa de entrega baja',
+                message: `Tasa de entrega cayó ${Math.abs(changePct.toFixed(1))}pp vs período anterior`,
+                id: 'tasa-entrega-down'
+            });
+        }
+    }
+    
+    if (kpiLastValues.conversion !== undefined && conversion < kpiLastValues.conversion) {
+        const changePct = conversion - kpiLastValues.conversion;
+        if (changePct < KPI_THRESHOLDS.conversion.decrease) {
+            alerts.push({
+                type: 'warning',
+                title: '🔔 Conversión en descenso',
+                message: `Conversión cayó ${Math.abs(changePct.toFixed(1))}pp vs período anterior`,
+                id: 'conversion-down'
+            });
+        }
+    }
+    
+    const tiempoActual = parseFloat(tiempoPromedio) || 0;
+    if (kpiLastValues.tiempoPromedio !== undefined && kpiLastValues.tiempoPromedio > 0 && tiempoActual > kpiLastValues.tiempoPromedio) {
+        const cambio = (tiempoActual - kpiLastValues.tiempoPromedio).toFixed(1);
+        if (cambio > KPI_THRESHOLDS.tiempoPromedio.increase) {
+            alerts.push({
+                type: 'warning',
+                title: '📈 Tiempo promedio incrementado',
+                message: `Tiempo de entrega aumentó ${cambio} días vs período anterior`,
+                id: 'tiempo-up'
+            });
+        }
+    }
+    
+    return alerts;
+}
+
+function displayKPIAlerts(alerts) {
+    const container = document.getElementById('kpiAlerts');
+    if (!container) return;
+    
+    kpiAlerts = alerts;
+    
+    if (alerts.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.innerHTML = alerts.map(alert => `
+        <div class="kpi-alert ${alert.type}" role="alert" data-alert-id="${alert.id}">
+            <div class="kpi-alert-icon">${alert.type === 'error' ? '❌' : '⚠️'}</div>
+            <div class="kpi-alert-content">
+                <div class="kpi-alert-title">${alert.title}</div>
+                <div class="kpi-alert-message">${alert.message}</div>
+            </div>
+            <button class="kpi-alert-close" onclick="dismissKPIAlert('${alert.id}')" aria-label="Descartar alerta">✕</button>
+        </div>
+    `).join('');
+}
+
+function dismissKPIAlert(alertId) {
+    kpiAlerts = kpiAlerts.filter(a => a.id !== alertId);
+    const alertEl = document.querySelector(`[data-alert-id="${alertId}"]`);
+    if (alertEl) {
+        alertEl.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => alertEl.remove(), 300);
+    }
+}
+
+function updateKPILastValues(ingresos, tasaEntrega, tiempoPromedio, conversion) {
+    kpiLastValues = {
+        ingresos,
+        tasaEntrega,
+        tiempoPromedio: parseFloat(tiempoPromedio) || 0,
+        conversion
+    };
+}
+
+function updateKPIRange(range) {
+    kpiCurrentRange = range;
+    document.querySelectorAll('.kpi-range-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector(`[data-range="${range}"]`).classList.add('active');
+    calcularKPIs();
+}
+
+// --- FASE 2: USABILIDAD - Debounce y Limpiar Filtros ---
+function debounce(func, delay) {
+    let timeoutId;
+    return function(...args) {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => func(...args), delay);
+    };
+}
+
+const debouncedFilter = debounce(() => filterTable(), 300);
+
+function onSearchInput() {
+    debouncedFilter();
+}
+
+function clearAllFilters() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('filterFecha').value = '';
+    document.getElementById('filterEstado').value = '';
+    document.getElementById('filterPrecioMin').value = '';
+    document.getElementById('filterPrecioMax').value = '';
+    document.getElementById('filterImagenes').value = '';
+    filterByAlpha('todos');
+    notifyAdmin('Filtros limpios', 'success', 3000);
+    filterTable();
+}
+
+function notifyAdmin(message, type = 'info', duration = 5000) {
+    const toast = document.createElement('div');
+    toast.className = `admin-toast toast-${type}`;
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10);
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
+// Expandir/Contraer filas en tabla
+function toggleOrderRowExpanded(rowElement) {
+    const detailRow = rowElement.nextElementSibling;
+    if (!detailRow || !detailRow.classList.contains('order-detail')) {
+        return;
+    }
+    
+    const isExpanded = rowElement.classList.contains('expanded');
+    rowElement.classList.toggle('expanded');
+    detailRow.classList.toggle('expanded');
+    
+    const expandBtn = rowElement.querySelector('.col-expand');
+    if (expandBtn) {
+        expandBtn.textContent = isExpanded ? '▶' : '▼';
+    }
+}
 
 function createDefaultAdminKpiState() {
     return {
@@ -782,6 +1163,7 @@ function openFotoModal() {
     }
     modal.classList.add("active");
     modal.setAttribute("aria-hidden", "false");
+    initializeModalAccessibility("fotoModal", cerrarModal);
     const closeBtn = modal.querySelector(".foto-modal-close");
     if (closeBtn instanceof HTMLElement) {
         closeBtn.focus();
@@ -813,6 +1195,8 @@ function closeAdminConfirmDialog(confirmed) {
         return;
     }
 
+    cleanupModalAccessibility(dialog);
+    
     // Move focus OUT of the dialog before hiding it,
     // so the browser does not block inert/hidden on a focused descendant.
     try {
@@ -870,6 +1254,8 @@ function showAdminConfirmDialog(options) {
     dialog.removeAttribute("hidden");
     dialog.inert = false;
     dialog.removeAttribute("inert");
+
+    initializeModalAccessibility("adminConfirmDialog", () => closeAdminConfirmDialog(false));
 
     // Reasignar handlers por seguridad en cada apertura.
     cancelBtn.onclick = onConfirmDialogCancelClick;
@@ -1794,12 +2180,14 @@ function abrirModalEditarTamano(tamano) {
     nombreInput.value = tamano.nombre || "";
     precioInput.value = formatearPrecio(tamano.precio_base);
     modal.classList.add("active");
+    initializeModalAccessibility("editTamanoModal", cerrarModalEditarTamano);
+    nombreInput.focus();
 }
 
 function cerrarModalEditarTamano() {
     const modal = document.getElementById("editTamanoModal");
     if (!modal) return;
-
+    cleanupModalAccessibility(modal);
     modal.classList.remove("active");
     tamanoEditandoId = null;
 }
@@ -2511,7 +2899,7 @@ function claseEstadoPedido(estado) {
 async function changeStatus(btn) {
     const row = btn.closest("tr");
     if (!row) return;
-    const badge = row.querySelector(".status");
+    const badge = row.querySelector(".state-badge-compact");
     if (!badge) return;
 
     const estadoActual = normalizarEstadoPedido(row.dataset.estado);
@@ -2520,6 +2908,7 @@ async function changeStatus(btn) {
     const nuevoIndex = (currentIndex + 1) % ESTADOS_ORDEN.length;
     const nuevoEstado = ESTADOS_ORDEN[nuevoIndex];
     const nuevoEstadoLabel = etiquetaEstadoPedido(nuevoEstado);
+    const nuevoEstadoIcono = estadoIconoCompacto(nuevoEstado);
 
     try {
         const id = Number(row.dataset.id);
@@ -2537,8 +2926,8 @@ async function changeStatus(btn) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "No se pudo cambiar el estado");
 
-        badge.className = `status ${claseEstadoPedido(nuevoEstado)}`;
-        badge.textContent = nuevoEstadoLabel;
+        badge.className = `state-badge-compact ${nuevoEstado}`;
+        badge.textContent = `${nuevoEstadoIcono} ${nuevoEstadoLabel}`;
         row.dataset.estado = nuevoEstado;
         announceAdminStatus(`Estado cambiado a ${nuevoEstadoLabel.toLowerCase()}`);
         
@@ -2580,6 +2969,66 @@ function exportCSV() {
     link.download = "pedidos.csv";
     link.click();
     URL.revokeObjectURL(url);
+}
+
+// --- FASE 3: Exportar a Excel con SheetJS ---
+function exportToExcel() {
+    if (typeof XLSX === 'undefined') {
+        notifyAdmin('Librería Excel no disponible', 'error', 3000);
+        return;
+    }
+    
+    const wb = XLSX.utils.book_new();
+    
+    // Hoja 1: Pedidos
+    const pedidosData = clientesCache.map(c => ({
+        'ID': c.id,
+        'Cliente': `${c.nombre} ${c.apellido}`,
+        'Correo': c.correo,
+        'Teléfono': c.telefono,
+        'Estado': c.estado || 'pendiente',
+        'Imágenes': c.numFotos || 0,
+        'Tamaño': c.tamano || '—',
+        'Papel': c.papel || '—',
+        'Precio': c.precioTotal || 0,
+        'Pagado': c.pagado ? 'Sí' : 'No',
+        'Fecha': c.fechaRegistro || '—'
+    }));
+    
+    const wsOrders = XLSX.utils.json_to_sheet(pedidosData);
+    XLSX.utils.book_append_sheet(wb, wsOrders, 'Pedidos');
+    
+    // Hoja 2: Resumen KPIs
+    const range = getDateRange(kpiCurrentRange);
+    const kpiRangeLabel = { 'today': 'Hoy', 'week': 'Esta Semana', 'month': 'Este Mes' }[kpiCurrentRange] || 'Período';
+    
+    const clientesEnPeriodo = filterClientesByDateRange(clientesCache, range.start, new Date());
+    const totalPeriodo = clientesEnPeriodo.length;
+    const entregadosPeriodo = clientesEnPeriodo.filter(c => c.estado === 'entregado').length;
+    const ingresosPeriodo = clientesEnPeriodo.filter(c => c.pagado).reduce((sum, c) => sum + (parseFloat(c.precioTotal) || 0), 0);
+    
+    const kpiData = [
+        { Métrica: 'Período Reportado', Valor: kpiRangeLabel },
+        { Métrica: 'Total Pedidos', Valor: totalPeriodo },
+        { Métrica: 'Entregados', Valor: entregadosPeriodo },
+        { Métrica: 'Tasa Entrega %', Valor: totalPeriodo > 0 ? ((entregadosPeriodo / totalPeriodo) * 100).toFixed(2) : 0 },
+        { Métrica: 'Ingresos', Valor: `$${ingresosPeriodo.toFixed(2)}` },
+        { Métrica: 'Clientes Únicos', Valor: new Set(clientesEnPeriodo.map(c => c.correo)).size },
+    ];
+    
+    const wsKPI = XLSX.utils.json_to_sheet(kpiData);
+    XLSX.utils.book_append_sheet(wb, wsKPI, 'Resumen KPI');
+    
+    // Generar archivo
+    const timestamp = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `pedidos_${timestamp}.xlsx`);
+    
+    notifyAdmin('Reporte exportado a Excel', 'success', 3000);
+}
+
+// â"€â"€â"€ Badge Pedidos â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+function getBadge() {
+    return document.getElementById("badgePedidos");
 }
 
 // â”€â”€â”€ Badge Pedidos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -2715,6 +3164,9 @@ function aplicarClientesCacheEnUI(resetPage = false) {
     renderOrderAgeMilestones(clientesCache, {
         detectTransitions: !resetPage,
     });
+    
+    // Actualizar KPIs de negocio
+    calcularKPIs();
 }
 
 function setAdminRealtimeBadge(text, online = false) {
@@ -3215,6 +3667,7 @@ function cerrarModal() {
     if (meta) meta.textContent = "";
     const modal = document.getElementById("fotoModal");
     if (!modal) return;
+    cleanupModalAccessibility(modal);
     modal.classList.remove("active");
     modal.setAttribute("aria-hidden", "true");
     if (lastFocusedElementBeforeModal && document.contains(lastFocusedElementBeforeModal)) {
@@ -3270,22 +3723,55 @@ async function descargarListaFotos(fotos, nombreBase, btn) {
         return;
     }
 
+    if (typeof JSZip === 'undefined') {
+        announceAdminAlert("Error: La biblioteca JSZip no esta disponible.");
+        return;
+    }
+
     const textoOriginal = btn ? btn.textContent : "descargar";
     if (btn) {
         btn.disabled = true;
-        btn.textContent = "Descargando...";
+        btn.textContent = "Comprimiendo...";
     }
-    announceAdminStatus("Descarga iniciada");
+    announceAdminStatus("Iniciando descarga de imagenes...");
 
     const base = normalizarNombreArchivoBase(nombreBase);
+    const zip = new JSZip();
 
     try {
-        for (let i = 0; i < fotos.length; i += 1) {
-            const ext = extensionDesdeUrl(fotos[i]);
+        const promises = fotos.map(async function(url, i) {
+            const ext = extensionDesdeUrl(url);
             const nombre = `${base}_${String(i + 1).padStart(2, "0")}${ext}`;
-            await descargarImagenComoArchivo(fotos[i], nombre);
-            await new Promise(function(resolve) { setTimeout(resolve, 120); });
-        }
+            try {
+                const response = await fetch(url, { mode: "cors" });
+                if (response.ok) {
+                    const blob = await response.blob();
+                    zip.file(nombre, blob);
+                } else {
+                    console.warn(`No se pudo descargar ${url}`);
+                }
+            } catch (err) {
+                console.warn(`Error al descargar ${url}:`, err);
+            }
+        });
+
+        await Promise.all(promises);
+
+        announceAdminStatus("Generando archivo comprimido...");
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        
+        const blobUrl = URL.createObjectURL(zipBlob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = `${base}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(blobUrl);
+
+    } catch (error) {
+        console.error("Error creando el archivo zip:", error);
+        announceAdminAlert("Ocurrio un error al comprimir las imagenes.");
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -3377,8 +3863,11 @@ if (editTamanoModal) {
 // â”€â”€â”€ Render fila de pedido â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderClienteRow(cliente, applyFilters = true) {
     const tbody = document.getElementById("tableBody");
-    const tr = document.createElement("tr");
-    tr.dataset.id = cliente.id;
+    
+    // Fila principal (comprimida)
+    const trMain = document.createElement("tr");
+    trMain.dataset.id = cliente.id;
+    trMain.classList.add("order-row");
 
     const fotos = cliente.fotos || [];
     const fotosJSON = JSON.stringify(fotos).replace(/'/g, "\\'").replace(/"/g, "&quot;");
@@ -3388,48 +3877,92 @@ function renderClienteRow(cliente, applyFilters = true) {
     const numFotos = Number(cliente.numFotos || fotos.length || 0);
     const totalCopias = Number(cliente.totalCopias || numFotos || 0);
     const precioNum = cliente.precioTotal != null ? Number(cliente.precioTotal) : null;
-    const precio = precioNum != null ? `$${precioNum.toFixed(2)}` : "\u2014";
+    const precio = precioNum != null ? `$${precioNum.toFixed(2)}` : "—";
 
     const estadoRaw = normalizarEstadoPedido(cliente.estado || "pendiente");
     const estadoLabel = etiquetaEstadoPedido(estadoRaw);
-    const estadoClass = claseEstadoPedido(estadoRaw);
+    const estadoIcono = estadoIconoCompacto(estadoRaw);
 
-    tr.dataset.estado = estadoRaw;
-    tr.dataset.fecha = toISODate(cliente.fechaRegistro);
-    tr.dataset.precio = precioNum != null && !Number.isNaN(precioNum) ? String(precioNum) : "";
-    tr.dataset.numFotos = String(numFotos);
+    trMain.dataset.estado = estadoRaw;
+    trMain.dataset.fecha = toISODate(cliente.fechaRegistro);
+    trMain.dataset.precio = precioNum != null && !Number.isNaN(precioNum) ? String(precioNum) : "";
+    trMain.dataset.numFotos = String(numFotos);
 
-    const textoImg = textoImagenesAdmin(cliente);
-
-    tr.innerHTML = `
+    trMain.innerHTML = `
+        <td class="col-expand" onclick="toggleOrderRowExpanded(this.parentElement)">▶</td>
         <td><code style="color:var(--muted);font-family:'Space Mono',monospace;font-size:11px">#${String(cliente.id).padStart(4,"0")}</code></td>
         <td>
             <div class="client-name">${cliente.nombre} ${cliente.apellido}</div>
             <div class="client-email">${cliente.correo}</div>
         </td>
         <td>
-            ${numFotos > 0
-                ? `<span class="fotos-link" onclick="verFotos('${fotosJSON}', '${nombreSeguroOnclick}', ${numFotos}, ${totalCopias}, '${cantidadesJSON}')">${textoImg}</span>`
-                : "\u2014"}
+            <span class="state-badge-compact ${estadoRaw}">${estadoIcono} ${estadoLabel}</span>
         </td>
-        <td>${cliente.tamano || "\u2014"}</td>
-        <td>${cliente.papel || "\u2014"}</td>
         <td style="color:#22c55e;font-weight:600;font-family:'Space Mono',monospace">${precio}</td>
-        <td><span class="status ${estadoClass}">${estadoLabel}</span></td>
-        <td style="color:var(--muted);font-size:12px">${cliente.fechaRegistro}</td>
+        <td style="color:var(--muted);font-size:12px;white-space:nowrap">${cliente.fechaRegistro}</td>
         <td>
             <div class="acciones-pedido">
-                <button class="action-btn" onclick="changeStatus(this)">\u270e Estado</button>
-                <button class="action-btn del" onclick="deleteRow(this)">\u2715</button>
-                <button class="action-btn" onclick="descargarPedido(this)">\u2193 Descargar</button>
+                <button class="action-btn" onclick="changeStatus(this)"  title="Cambiar estado">◎ Estado</button>
+                <button class="action-btn del" onclick="deleteRow(this)" title="Eliminar pedido">✕</button>
+                <button class="action-btn" onclick="descargarPedido(this)" title="Descargar fotos">↓</button>
             </div>
         </td>
     `;
-    tbody.prepend(tr);
+    tbody.prepend(trMain);
+
+    // Fila de detalles (expandible)
+    const trDetail = document.createElement("tr");
+    trDetail.classList.add("order-detail");
+    trDetail.innerHTML = `
+        <td colspan="7">
+            <div class="order-detail-content">
+                <div class="order-detail-grid">
+                    <div class="order-detail-item">
+                        <div class="order-detail-label">Imágenes</div>
+                        <div class="order-detail-value">
+                            ${numFotos > 0
+                                ? `<span class="fotos-link" onclick="verFotos('${fotosJSON}', '${nombreSeguroOnclick}', ${numFotos}, ${totalCopias}, '${cantidadesJSON}')" title="Ver fotos">${numFotos} foto${numFotos !== 1 ? 's' : ''}</span>`
+                                : "—"}
+                        </div>
+                    </div>
+                    <div class="order-detail-item">
+                        <div class="order-detail-label">Tamaño</div>
+                        <div class="order-detail-value">${cliente.tamano || "—"}</div>
+                    </div>
+                    <div class="order-detail-item">
+                        <div class="order-detail-label">Papel</div>
+                        <div class="order-detail-value">${cliente.papel || "—"}</div>
+                    </div>
+                    <div class="order-detail-item">
+                        <div class="order-detail-label">Pagado</div>
+                        <div class="order-detail-value">${cliente.pagado ? "✓ Sí" : "✕ No"}</div>
+                    </div>
+                </div>
+            </div>
+        </td>
+    `;
+    tbody.insertBefore(trDetail, trMain.nextSibling);
+
+    // Agregar event listener a fila principal para expandir
+    trMain.addEventListener('click', function(e) {
+        if (e.target.closest('.acciones-pedido')) return;
+        toggleOrderRowExpanded(this);
+    });
 
     if (applyFilters) {
         filterTable(true);
     }
+}
+
+function estadoIconoCompacto(estado) {
+    const iconos = {
+        'pendiente': '◉',
+        'procesando': '⟳',
+        'listo_retiro': '✓',
+        'entregado': '✓',
+        'cancelado': '✕'
+    };
+    return iconos[estado] || '◎';
 }
 
 // â”€â”€â”€ Cargar pedidos desde la API Flask al cargar la pÃ¡gina â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -3842,6 +4375,7 @@ window.editarTamano  = editarTamano;
 window.desactivarTamano = desactivarTamano;
 window.activarTamano = activarTamano;
 window.cambiarEstadoMarco = cambiarEstadoMarco;
+window.descargarPedido = descargarPedido;
 
 // â”€â”€â”€ Chart.js: Pedidos Ãºltimos 7 dÃ­as (tiempo real) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let pedidosChart = null;

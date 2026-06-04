@@ -96,6 +96,8 @@ Mecanismo:
 - control de acceso con decoradores:
   - `@login_required`
   - `@role_required(...)`
+- proteccion de login con rate limit y CSRF (token en formulario y header)
+- el stream SSE acepta `access_token` via query param
 
 Endpoints clave:
 
@@ -240,6 +242,7 @@ Variables:
 - `GET /api/estadisticas`
 - `GET /api/ultimas-subidas`
 - `GET /api/cloudinary-stats`
+- `GET /api/admin/active-clients`
 
 ### Auth + sesion
 
