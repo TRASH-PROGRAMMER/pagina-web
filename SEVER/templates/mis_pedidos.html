@@ -1380,13 +1380,19 @@
             const nativeDate = new Date(raw);
             if (!Number.isNaN(nativeDate.getTime())) return nativeDate;
 
+            const isoMatch = raw.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
             const localMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
-            if (!localMatch) return null;
-            const [, day, month, year] = localMatch;
-            const localDate = new Date(Number(year), Number(month) - 1, Number(day));
-            return localDate.getFullYear() === Number(year)
-                && localDate.getMonth() === Number(month) - 1
-                && localDate.getDate() === Number(day)
+            const parts = isoMatch
+                ? [Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3])]
+                : localMatch
+                    ? [Number(localMatch[3]), Number(localMatch[2]), Number(localMatch[1])]
+                    : null;
+            if (!parts) return null;
+            const [year, month, day] = parts;
+            const localDate = new Date(year, month - 1, day);
+            return localDate.getFullYear() === year
+                && localDate.getMonth() === month - 1
+                && localDate.getDate() === day
                 ? localDate
                 : null;
         };
