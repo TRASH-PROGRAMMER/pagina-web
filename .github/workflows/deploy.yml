@@ -55,7 +55,7 @@ jobs:
 
             # ── 1. Crear .ENV con secretos ──
             cat > "$APP_DIR/.ENV" <<EOF
-            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            SECRET_KEY=${{ secrets.SECRETO_KEY }}
             CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
             CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}
             CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
