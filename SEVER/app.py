@@ -60,8 +60,13 @@ DB_URL = os.environ.get(
 app.config['SQLALCHEMY_DATABASE_URI'] = DB_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', str(100 * 20 * 1024 * 1024)))
-_default_secret = secrets.token_hex(32)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', _default_secret)
+_secret_key = (os.environ.get('SECRET_KEY') or '').strip()
+if len(_secret_key) < 32:
+    raise RuntimeError(
+        'SECRET_KEY es obligatoria y debe tener al menos 32 caracteres. '
+        'Configura una clave persistente y segura en el entorno.'
+    )
+app.config['SECRET_KEY'] = _secret_key
 app.config['SESSION_TYPE'] = os.environ.get('SESSION_TYPE', 'filesystem')
 app.config['SESSION_FILE_DIR'] = os.environ.get(
     'SESSION_FILE_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), '.flask_session')
@@ -3391,7 +3396,6 @@ def cloudinary_stats():
 if __name__ == '__main__':
     _debug = os.environ.get('FLASK_DEBUG', '0').lower() in ('1', 'true', 'yes')
     app.run(host='0.0.0.0', port=5000, debug=_debug)
-
 
 
 

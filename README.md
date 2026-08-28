@@ -270,7 +270,7 @@ Minimas recomendadas:
 
 ```env
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5434/postgres
-SECRET_KEY=tu_secret_key_fuerte
+SECRET_KEY=genera_una_clave_aleatoria_de_al_menos_32_caracteres
 
 CLOUDINARY_CLOUD_NAME=tu_cloud_name
 CLOUDINARY_API_KEY=tu_api_key
