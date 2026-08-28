@@ -1272,7 +1272,25 @@ app.register_blueprint(order_age_bp)
 with app.app_context():
     db.create_all()
     # Agregar columnas nuevas si la tabla ya existÃ­a sin ellas
-    with db.engine.connect() as conn:
+    class _NoOpMigrationConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, _exc_type, _exc_value, _traceback):
+            return False
+
+        def execute(self, _statement):
+            return None
+
+        def commit(self):
+            return None
+
+    migration_connection = (
+        db.engine.connect()
+        if not _env_bool("TESTING", False)
+        else _NoOpMigrationConnection()
+    )
+    with migration_connection as conn:
         conn.execute(db.text(
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS tamano VARCHAR(200)"))
         conn.execute(db.text(
