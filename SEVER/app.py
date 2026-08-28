@@ -110,6 +110,20 @@ def handle_request_too_large(_error):
         return jsonify({"error": mensaje}), 413
     return mensaje, 413
 
+
+def _parse_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {'true', '1', 'si', 'sí', 'yes', 'on'}:
+            return True
+        if normalized in {'false', '0', 'no', 'off'}:
+            return False
+    return None
+
 # ConfiguraciÃ³n de Cloudinary
 cloudinary.config(
     cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
@@ -2342,7 +2356,11 @@ def actualizar_pago_cliente(id):
     if pagado is None:
         return jsonify({"error": "Campo pagado requerido"}), 400
 
-    cliente.pagado = bool(pagado)
+    pagado_parseado = _parse_bool(pagado)
+    if pagado_parseado is None:
+        return jsonify({"error": "Campo pagado debe ser booleano"}), 400
+
+    cliente.pagado = pagado_parseado
     cliente.estado = _normalizar_estado_pedido(cliente.estado)
     # Si se marca como pagado, cambiar estado a "procesando"
     if cliente.pagado:
@@ -2577,6 +2595,7 @@ def _detalle_pedido(tamano_keys_str, tamano_texto, cantidad_total):
 
 
 @app.route('/api/seguimiento/<int:cliente_id>', methods=['GET'])
+@limiter.limit("10 per minute; 60 per hour")
 def api_seguimiento_cliente(cliente_id):
     correo = (request.args.get('correo') or '').strip().lower()
     if not correo:
@@ -2622,6 +2641,7 @@ def api_seguimiento_cliente(cliente_id):
 
 
 @app.route('/api/mis-pedidos', methods=['POST'])
+@limiter.limit("10 per minute; 60 per hour")
 def api_mis_pedidos():
     """
     Endpoint para obtener todos los pedidos de un usuario por su correo.
