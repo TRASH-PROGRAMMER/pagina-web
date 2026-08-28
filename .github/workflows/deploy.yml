@@ -24,6 +24,18 @@ jobs:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
 
+      - name: Validate deployment secrets
+        shell: bash
+        env:
+          SECRET_KEY: ${{ secrets.SECRETO_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SECRET_KEY" ] || [ "${#SECRET_KEY}" -lt 32 ]; then
+            echo "SECRETO_KEY must contain at least 32 characters."
+            exit 1
+          fi
+          echo "SECRET_KEY validation passed."
+
       - name: Copy project files to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -48,18 +60,23 @@ jobs:
           timeout: 120s
           command_timeout: 20m
           debug: true
+          envs: SECRET_KEY,CLOUDINARY_CLOUD_NAME,CLOUDINARY_API_KEY,CLOUDINARY_API_SECRET
+        env:
+          SECRET_KEY: ${{ secrets.SECRETO_KEY }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
           script: |
             set -e
             APP_DIR="/home/${{ secrets.SERVER_USER }}/pagina-web"
             cd "$APP_DIR"
 
             # ── 1. Crear .ENV con secretos ──
-            cat > "$APP_DIR/.ENV" <<EOF
-            SECRET_KEY=${{ secrets.SECRETO_KEY }}
-            CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
-            CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}
-            CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
-            EOF
+            printf 'SECRET_KEY=%s\nCLOUDINARY_CLOUD_NAME=%s\nCLOUDINARY_API_KEY=%s\nCLOUDINARY_API_SECRET=%s\n' \
+              "$SECRET_KEY" \
+              "$CLOUDINARY_CLOUD_NAME" \
+              "$CLOUDINARY_API_KEY" \
+              "$CLOUDINARY_API_SECRET" > "$APP_DIR/.ENV"
 
             # Quitar espacios en blanco al inicio de cada línea
             sed -i 's/^[[:space:]]*//' "$APP_DIR/.ENV"
