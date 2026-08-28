@@ -236,6 +236,9 @@
             total: p.total != null ? p.total : 0,
             papel: p.papel || '',
             fechaRegistro: p.fechaRegistro || new Date().toISOString(),
+            seguimientoUrl: p.seguimiento_url || p.seguimientoUrl || '',
+            createdBy: p.createdBy || null,
+            updatedBy: p.updatedBy || null,
             fechaActualizacion: new Date().toISOString()
         };
     }
@@ -799,7 +802,8 @@
             totalCopias: datosPedido.totalCopias || datosPedido.numFotos || 0,
             total: datosPedido.total || 0,
             papel: datosPedido.papel || '',
-            fechaRegistro: datosPedido.fechaRegistro || new Date().toISOString()
+            fechaRegistro: datosPedido.fechaRegistro || new Date().toISOString(),
+            seguimientoUrl: datosPedido.seguimiento_url || datosPedido.seguimientoUrl || ''
         };
 
         guardarPedido(pedidoData);

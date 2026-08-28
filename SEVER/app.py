@@ -2754,6 +2754,8 @@ def api_seguimiento_cliente(cliente_id):
         "updatedBy": cliente.updated_by,
         "telefono": cliente.telefono,
         "fechaRegistro": cliente.fecha_registro,
+        "createdAt": cliente.created_at.isoformat() if cliente.created_at else None,
+        "updatedAt": cliente.updated_at.isoformat() if cliente.updated_at else None,
         "estado": estado_normalizado,
         "cancelledAt": cliente.cancelled_at.isoformat() if cliente.cancelled_at else None,
         "pagado": bool(cliente.pagado),
@@ -2771,7 +2773,20 @@ def api_seguimiento_cliente(cliente_id):
         cancelled_at=cliente.cancelled_at,
     )
 
-    return jsonify({"pedido": pedido_payload}), 200
+    historial = OrderEvent.query.filter_by(order_id=cliente.id).order_by(OrderEvent.created_at.asc()).all()
+    return jsonify({
+        "pedido": pedido_payload,
+        "seguimiento_url": _tracking_url(cliente.id),
+        "historial": [
+            {
+                "tipo": event.event_type,
+                "estadoAnterior": event.from_state,
+                "estadoNuevo": event.to_state,
+                "fecha": event.created_at.isoformat() if event.created_at else None,
+            }
+            for event in historial
+        ],
+    }), 200
 
 
 @app.route('/api/seguimiento-firmado', methods=['GET'])
