@@ -1,9 +1,10 @@
 import io
+from urllib.parse import urlsplit
 
 from PIL import Image
 
 from app import app, db
-from db import Cliente, ClienteDraft
+from db import Cliente, ClienteDraft, OrderEvent, OrderNotification
 from conftest import authenticate
 import app as app_module
 
@@ -130,3 +131,47 @@ def test_delete_order_removes_order_and_calls_cloudinary(client, order, monkeypa
 
     with app.app_context():
         assert db.session.get(Cliente, order) is None
+
+
+def test_order_lifecycle_has_signed_access_audit_and_notifications(client):
+    authenticate(client, "admin", "admin")
+    created = client.post(
+        "/api/clientes",
+        json={
+            "nombre": "Ciclo",
+            "apellido": "Cliente",
+            "correo": "ciclo@example.com",
+            "telefono": "0988888888",
+            "fechaRegistro": "28/08/2026",
+            "tamano": "10x15",
+            "tamano_keys": "10x15",
+            "fotosPreCargadas": [
+                {"secure_url": "https://cdn.test/ciclo.jpg", "public_id": "ciclo-1"}
+            ],
+        },
+    )
+    assert created.status_code == 201
+    body = created.get_json()
+    order_id = body["cliente"]["id"]
+    tracking_url = urlsplit(body["seguimiento_url"])
+
+    signed = client.get(tracking_url.path + "?" + tracking_url.query)
+    assert signed.status_code == 200
+    assert signed.get_json()["historial"][0]["tipo"] == "order_created"
+
+    status = client.patch(f"/api/clientes/{order_id}/estado", json={"estado": "procesando"})
+    assert status.status_code == 200
+    payment = client.patch(f"/api/clientes/{order_id}/pago", json={"pagado": True})
+    assert payment.status_code == 200
+
+    history = client.get(f"/api/clientes/{order_id}/historial")
+    assert history.status_code == 200
+    history_body = history.get_json()
+    event_types = [event["tipo"] for event in history_body["eventos"]]
+    assert event_types == ["order_created", "status_changed", "payment_changed"]
+    assert history_body["eventos"][0]["actor"] == "admin"
+    assert len(history_body["notificaciones"]) == 3
+
+    with app.app_context():
+        assert OrderEvent.query.filter_by(order_id=order_id).count() == 3
+        assert OrderNotification.query.filter_by(order_id=order_id, status="sent").count() == 3

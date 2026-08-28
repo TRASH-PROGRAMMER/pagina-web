@@ -33,11 +33,14 @@ from flask_talisman import Talisman
 from werkzeug.security import generate_password_hash
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
-from db import AuthSession, Cliente, ClienteDraft, Foto, FotoTamano, ImageStorageSetting, MarcoDiseno, User, db
+from db import (AuthSession, Cliente, ClienteDraft, Foto, FotoTamano,
+                ImageStorageSetting, MarcoDiseno, OrderEvent,
+                OrderNotification, User, db)
 from auth import auth_bp, current_user_role, login_required, role_required, limiter
 try:
     from order_age_blueprint import order_age_bp, enrich_order_age_payload
@@ -66,6 +69,8 @@ if len(_secret_key) < 32:
         'Configura una clave persistente y segura en el entorno.'
     )
 app.config['SECRET_KEY'] = _secret_key
+TRACKING_TOKEN_MAX_AGE_SECONDS = int(os.environ.get('TRACKING_TOKEN_MAX_AGE_SECONDS', str(7 * 24 * 60 * 60)))
+tracking_serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'], salt='public-order-tracking-v1')
 app.config['SESSION_TYPE'] = os.environ.get('SESSION_TYPE', 'filesystem')
 app.config['SESSION_FILE_DIR'] = os.environ.get(
     'SESSION_FILE_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), '.flask_session')
@@ -93,6 +98,60 @@ _csp = {
     "frame-ancestors": "'none'",
 }
 Talisman(app, content_security_policy=_csp, force_https=_force_https)
+
+
+def _actor_identity():
+    return (
+        session.get('username') or 'public',
+        session.get('role') or 'public',
+    )
+
+
+def _record_order_event(order_id, event_type, from_state=None, to_state=None, details=None):
+    actor_username, actor_role = _actor_identity()
+    event = OrderEvent(
+        order_id=order_id,
+        event_type=event_type,
+        actor_username=actor_username,
+        actor_role=actor_role,
+        from_state=from_state,
+        to_state=to_state,
+        details=details or {},
+    )
+    db.session.add(event)
+    db.session.flush()
+    return event
+
+
+def _record_order_notification(order_id, event, notification_type, recipient, channel='internal'):
+    notification = OrderNotification(
+        order_id=order_id,
+        event_id=event.id if event else None,
+        channel=channel,
+        recipient=recipient,
+        notification_type=notification_type,
+        status='sent',
+        sent_at=datetime.now(timezone.utc),
+    )
+    db.session.add(notification)
+    return notification
+
+
+def _tracking_token(order_id):
+    return tracking_serializer.dumps({'order_id': int(order_id)})
+
+
+def _tracking_url(order_id):
+    return url_for('api_seguimiento_firmado', token=_tracking_token(order_id), _external=True)
+
+
+def _tracking_order_from_token(token):
+    try:
+        payload = tracking_serializer.loads(token, max_age=TRACKING_TOKEN_MAX_AGE_SECONDS)
+        order_id = int(payload.get('order_id'))
+    except (BadSignature, SignatureExpired, TypeError, ValueError, AttributeError):
+        return None
+    return db.session.get(Cliente, order_id)
 
 
 @app.errorhandler(RequestEntityTooLarge)
@@ -1301,6 +1360,10 @@ with app.app_context():
         conn.execute(db.text(
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS pagado BOOLEAN DEFAULT FALSE"))
         conn.execute(db.text(
+            "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS created_by VARCHAR(120)"))
+        conn.execute(db.text(
+            "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS updated_by VARCHAR(120)"))
+        conn.execute(db.text(
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ"))
         conn.execute(db.text(
             "ALTER TABLE clientes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()"))
@@ -1717,6 +1780,7 @@ def upload_temporal():
 @app.route('/api/clientes', methods=['POST'])
 def crear_clientes():
     fotos_precargadas = []
+    actor_username, _ = _actor_identity()
 
     def _normalizar_fotos_precargadas(items):
         if not isinstance(items, list):
@@ -1941,6 +2005,15 @@ def crear_clientes():
                 "fallos": fallos_upload
             }), 502
 
+        existe.updated_by = actor_username
+        event = _record_order_event(
+            existe.id,
+            'photos_appended',
+            from_state=existe.estado,
+            to_state=existe.estado,
+            details={'photos_added': len(fotos_guardadas)},
+        )
+        _record_order_notification(existe.id, event, 'photos_appended', existe.correo)
         db.session.commit()
         _emit_realtime_event(
             "order_updated",
@@ -1956,6 +2029,8 @@ def crear_clientes():
             "nombre": existe.nombre,
             "apellido": existe.apellido,
             "correo": existe.correo,
+            "createdBy": existe.created_by,
+            "updatedBy": existe.updated_by,
             "telefono": existe.telefono,
             "fechaRegistro": existe.fecha_registro,
             "tamano": existe.tamano,
@@ -1986,6 +2061,7 @@ def crear_clientes():
             },
             "fallos": fallos_upload if fallos_upload else None
         }
+        respuesta["seguimiento_url"] = _tracking_url(existe.id)
         return jsonify(respuesta), 200
 
     nuevo_cliente = Cliente(
@@ -1999,6 +2075,8 @@ def crear_clientes():
         papel=data.get("papel", ""),
         estado='pendiente',
         pagado=False,
+        created_by=actor_username,
+        updated_by=actor_username,
     )
 
     db.session.add(nuevo_cliente)
@@ -2122,6 +2200,13 @@ def crear_clientes():
             "fallos": fallos_upload
         }), 502
 
+    event = _record_order_event(
+        nuevo_cliente.id,
+        'order_created',
+        to_state=nuevo_cliente.estado,
+        details={'photos': len(fotos_guardadas)},
+    )
+    _record_order_notification(nuevo_cliente.id, event, 'order_created', nuevo_cliente.correo)
     db.session.commit()
     _emit_realtime_event(
         "new_order",
@@ -2137,6 +2222,8 @@ def crear_clientes():
         "nombre": nuevo_cliente.nombre,
         "apellido": nuevo_cliente.apellido,
         "correo": nuevo_cliente.correo,
+        "createdBy": nuevo_cliente.created_by,
+        "updatedBy": nuevo_cliente.updated_by,
         "telefono": nuevo_cliente.telefono,
         "fechaRegistro": nuevo_cliente.fecha_registro,
         "tamano": nuevo_cliente.tamano,
@@ -2169,6 +2256,7 @@ def crear_clientes():
         },
         "fallos": fallos_upload if fallos_upload else None
     }
+    respuesta["seguimiento_url"] = _tracking_url(nuevo_cliente.id)
     return jsonify(respuesta), 201
 
 @app.route('/api/clientes', methods=['GET'])
@@ -2184,6 +2272,8 @@ def obtener_clientes():
             "nombre": c.nombre,
             "apellido": c.apellido,
             "correo": c.correo,
+            "createdBy": c.created_by,
+            "updatedBy": c.updated_by,
             "telefono": c.telefono,
             "fechaRegistro": c.fecha_registro,
             "tamano": c.tamano or "",
@@ -2313,6 +2403,13 @@ def eliminar_cliente(id):
             eliminadas += 1
         else:
             fallos += 1
+    event = _record_order_event(
+        cliente.id,
+        'order_deleted',
+        from_state=cliente.estado,
+        details={'images_deleted': eliminadas, 'images_failed': fallos},
+    )
+    _record_order_notification(cliente.id, event, 'order_deleted', cliente.correo)
     db.session.delete(cliente)
     db.session.commit()
     _emit_realtime_event("order_deleted", order_id=id)
@@ -2345,6 +2442,15 @@ def actualizar_estado_cliente(id):
         cliente.cancelled_at = None
 
     cliente.estado = estado
+    cliente.updated_by = _actor_identity()[0]
+    event = _record_order_event(
+        cliente.id,
+        'status_changed',
+        from_state=estado_anterior,
+        to_state=estado,
+        details={'cancelled': bool(cliente.cancelled_at)},
+    )
+    _record_order_notification(cliente.id, event, 'status_changed', cliente.correo)
     db.session.commit()
     _emit_realtime_event(
         "status_changed",
@@ -2376,11 +2482,21 @@ def actualizar_pago_cliente(id):
     if pagado_parseado is None:
         return jsonify({"error": "Campo pagado debe ser booleano"}), 400
 
+    pagado_anterior = bool(cliente.pagado)
     cliente.pagado = pagado_parseado
     cliente.estado = _normalizar_estado_pedido(cliente.estado)
     # Si se marca como pagado, cambiar estado a "procesando"
     if cliente.pagado:
         cliente.estado = 'procesando'
+    cliente.updated_by = _actor_identity()[0]
+    event = _record_order_event(
+        cliente.id,
+        'payment_changed',
+        from_state=cliente.estado,
+        to_state=cliente.estado,
+        details={'paid_from': pagado_anterior, 'paid_to': cliente.pagado},
+    )
+    _record_order_notification(cliente.id, event, 'payment_changed', cliente.correo)
     db.session.commit()
     _emit_realtime_event(
         "payment_confirmed" if bool(cliente.pagado) else "payment_reverted",
@@ -2634,6 +2750,8 @@ def api_seguimiento_cliente(cliente_id):
         "nombre": cliente.nombre,
         "apellido": cliente.apellido,
         "correo": cliente.correo,
+        "createdBy": cliente.created_by,
+        "updatedBy": cliente.updated_by,
         "telefono": cliente.telefono,
         "fechaRegistro": cliente.fecha_registro,
         "estado": estado_normalizado,
@@ -2654,6 +2772,73 @@ def api_seguimiento_cliente(cliente_id):
     )
 
     return jsonify({"pedido": pedido_payload}), 200
+
+
+@app.route('/api/seguimiento-firmado', methods=['GET'])
+@limiter.limit("10 per minute; 60 per hour")
+def api_seguimiento_firmado():
+    cliente = _tracking_order_from_token(request.args.get('token', ''))
+    if not cliente:
+        return jsonify({"error": "Enlace de seguimiento invalido o expirado"}), 401
+
+    return jsonify({
+        "pedido": {
+            "id": cliente.id,
+            "nombre": cliente.nombre,
+            "apellido": cliente.apellido,
+            "estado": _normalizar_estado_pedido(cliente.estado),
+            "pagado": bool(cliente.pagado),
+            "fechaRegistro": cliente.fecha_registro,
+            "createdAt": cliente.created_at.isoformat() if cliente.created_at else None,
+            "updatedAt": cliente.updated_at.isoformat() if cliente.updated_at else None,
+        },
+        "historial": [
+            {
+                "tipo": event.event_type,
+                "estadoAnterior": event.from_state,
+                "estadoNuevo": event.to_state,
+                "fecha": event.created_at.isoformat() if event.created_at else None,
+            }
+            for event in OrderEvent.query.filter_by(order_id=cliente.id).order_by(OrderEvent.created_at.asc()).all()
+        ],
+    }), 200
+
+
+@app.route('/api/clientes/<int:id>/historial', methods=['GET'])
+@login_required
+@role_required('admin', 'operador', 'cajero')
+def historial_cliente(id):
+    if not db.session.get(Cliente, id):
+        return jsonify({"error": "Cliente no encontrado"}), 404
+
+    eventos = OrderEvent.query.filter_by(order_id=id).order_by(OrderEvent.created_at.asc()).all()
+    notificaciones = OrderNotification.query.filter_by(order_id=id).order_by(OrderNotification.created_at.asc()).all()
+    return jsonify({
+        "eventos": [
+            {
+                "id": event.id,
+                "tipo": event.event_type,
+                "actor": event.actor_username,
+                "rol": event.actor_role,
+                "estadoAnterior": event.from_state,
+                "estadoNuevo": event.to_state,
+                "detalles": event.details or {},
+                "fecha": event.created_at.isoformat() if event.created_at else None,
+            }
+            for event in eventos
+        ],
+        "notificaciones": [
+            {
+                "id": notification.id,
+                "tipo": notification.notification_type,
+                "canal": notification.channel,
+                "destinatario": notification.recipient,
+                "estado": notification.status,
+                "enviadaEn": notification.sent_at.isoformat() if notification.sent_at else None,
+            }
+            for notification in notificaciones
+        ],
+    }), 200
 
 
 @app.route('/api/mis-pedidos', methods=['POST'])
@@ -2695,6 +2880,8 @@ def api_mis_pedidos():
             "nombre": pedido.nombre,
             "apellido": pedido.apellido,
             "correo": pedido.correo,
+            "createdBy": pedido.created_by,
+            "updatedBy": pedido.updated_by,
             "telefono": pedido.telefono,
             "fechaRegistro": pedido.fecha_registro,
             "estado": estado_normalizado,

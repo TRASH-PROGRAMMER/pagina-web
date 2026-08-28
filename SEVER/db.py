@@ -18,6 +18,8 @@ class Cliente(db.Model):
     papel          = db.Column(db.String(50),  nullable=True)
     estado         = db.Column(db.String(20),  nullable=False, default='pendiente')
     pagado         = db.Column(db.Boolean, nullable=False, default=False)
+    created_by     = db.Column(db.String(120), nullable=True)
+    updated_by     = db.Column(db.String(120), nullable=True)
     cancelled_at   = db.Column(db.DateTime(timezone=True), nullable=True)
     created_at     = db.Column(db.DateTime(timezone=True), nullable=False,
                                server_default=func.now())
@@ -39,6 +41,32 @@ class Foto(db.Model):
                            server_default=func.now())
     cliente_id = db.Column(db.Integer,
                            db.ForeignKey('clientes.id'), nullable=False)
+
+
+class OrderEvent(db.Model):
+    __tablename__ = 'order_events'
+    id              = db.Column(db.Integer, primary_key=True)
+    order_id        = db.Column(db.Integer, db.ForeignKey('clientes.id', ondelete='SET NULL'), nullable=True, index=True)
+    event_type      = db.Column(db.String(50), nullable=False)
+    actor_username  = db.Column(db.String(120), nullable=True)
+    actor_role      = db.Column(db.String(30), nullable=True)
+    from_state      = db.Column(db.String(20), nullable=True)
+    to_state        = db.Column(db.String(20), nullable=True)
+    details         = db.Column(db.JSON, nullable=False, default=dict)
+    created_at      = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class OrderNotification(db.Model):
+    __tablename__ = 'order_notifications'
+    id              = db.Column(db.Integer, primary_key=True)
+    order_id        = db.Column(db.Integer, db.ForeignKey('clientes.id', ondelete='SET NULL'), nullable=True, index=True)
+    event_id        = db.Column(db.Integer, db.ForeignKey('order_events.id', ondelete='SET NULL'), nullable=True)
+    channel         = db.Column(db.String(20), nullable=False, default='internal')
+    recipient       = db.Column(db.String(255), nullable=True)
+    notification_type = db.Column(db.String(50), nullable=False)
+    status          = db.Column(db.String(20), nullable=False, default='queued')
+    sent_at         = db.Column(db.DateTime(timezone=True), nullable=True)
+    created_at      = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class ClienteDraft(db.Model):
