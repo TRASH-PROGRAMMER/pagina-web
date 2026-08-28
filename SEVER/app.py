@@ -17,7 +17,6 @@ import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
 # Cargar variables de entorno desde .ENV
 from dotenv import load_dotenv
-from flask_sqlalchemy import extension
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 for env_candidate in [
     os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.ENV'),
@@ -2098,7 +2097,6 @@ def crear_clientes():
 
     # Añadir las fotos que ya fueron subidas en segundo plano
     if isinstance(fotos_precargadas, list):
-        start_idx = len(resultados_por_idx)
         for pre in fotos_precargadas:
             if not isinstance(pre, dict) or 'secure_url' not in pre or 'public_id' not in pre:
                 continue
