@@ -706,7 +706,13 @@
             const estNorm = normalizarEstado(pedido.estado);
             const estado = ESTADOS_PEDIDO[estNorm] || { label: pedido.estado, icono: '📦' };
             const enCurso = estadoPedidoActivo(estNorm);
-            const fecha = new Date(pedido.fechaRegistro || pedido.fechaGuardado).toLocaleDateString('es-EC', {
+            const fechaRaw = pedido.fechaRegistro || pedido.fechaGuardado;
+            const fechaISO = String(fechaRaw || '').match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+            const fechaDate = new Date(fechaRaw);
+            const fecha = Number.isNaN(fechaDate.getTime()) && fechaISO
+                ? new Date(Number(fechaISO[3]), Number(fechaISO[2]) - 1, Number(fechaISO[1]))
+                : fechaDate;
+            const fechaTexto = Number.isNaN(fecha.getTime()) ? '-' : fecha.toLocaleDateString('es-EC', {
                 day: '2-digit',
                 month: 'short',
                 year: 'numeric'
@@ -729,7 +735,7 @@
                         </div>
                     </div>
                     <div class="pedido-card-detalles">
-                        <div class="pedido-card-fecha">📅 ${fecha}</div>
+                        <div class="pedido-card-fecha">📅 ${fechaTexto}</div>
                         <div class="pedido-card-fotos">${lineaFotosCard}</div>
                     </div>
                     <div class="pedido-card-acciones">
